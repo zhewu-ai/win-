@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ContextMenuProvider from "@/components/ContextMenu";
 
 export const metadata: Metadata = {
   title: "全平台便签",
@@ -13,7 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className="h-screen overflow-hidden">{children}</body>
+      <body className="h-screen overflow-hidden">
+        <ContextMenuProvider>{children}</ContextMenuProvider>
+      </body>
     </html>
   );
 }

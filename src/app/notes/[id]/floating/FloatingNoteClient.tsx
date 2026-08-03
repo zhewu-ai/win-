@@ -7,6 +7,7 @@ import SaveStatus from "@/components/SaveStatus";
 import ChecklistEditor from "@/components/ChecklistEditor";
 import ImageAttachments from "@/components/ImageAttachments";
 import ImageUploadButton from "@/components/ImageUploadButton";
+import AutoGrowTextarea from "@/components/AutoGrowTextarea";
 import { useRouter } from "next/navigation";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import {
@@ -177,7 +178,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
       setAlwaysOnTop(await toggleAlwaysOnTop());
     } catch (e) {
       console.error("toggle_always_on_top failed:", e);
-      alert("窗口置顶操作失败，请确认在桌面壳中运行");
+      alert(`窗口置顶操作失败：${String(e)}`);
     }
   };
 
@@ -223,7 +224,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen max-w-[320px] mx-auto p-3">
+    <div className="flex flex-col h-screen w-full p-2.5 sm:p-3">
       {/* Minimal header */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
@@ -334,7 +335,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
       </div>
 
       {/* Editor body */}
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin space-y-3">
         <input
           type="text"
           value={title}
@@ -346,11 +347,12 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
         <ColorPicker selected={color} onChange={handleColorChange} />
 
         {mode === "text" ? (
-          <textarea
+          <AutoGrowTextarea
             value={content}
-            onChange={(e) => handleContentChange(e.target.value)}
+            onChange={handleContentChange}
             placeholder="开始记录..."
-            className="w-full min-h-[200px] border-none outline-none bg-transparent resize-none text-sm leading-relaxed placeholder:text-[#C7C7CC]"
+            className="w-full border-none outline-none bg-transparent text-sm leading-relaxed placeholder:text-[#C7C7CC]"
+            minHeight={120}
           />
         ) : (
           <div className="text-sm">

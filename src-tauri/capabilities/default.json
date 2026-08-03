@@ -6,6 +6,12 @@
     "main",
     "floating_*"
   ],
+  "remote": {
+    "urls": [
+      "https://notes.hello-mylife.online/*",
+      "http://localhost:3000/*"
+    ]
+  },
   "permissions": [
     "core:default"
   ]

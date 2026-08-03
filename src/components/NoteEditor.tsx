@@ -7,6 +7,7 @@ import SaveStatus from "./SaveStatus";
 import ChecklistEditor from "./ChecklistEditor";
 import ImageAttachments from "./ImageAttachments";
 import ImageUploadButton from "./ImageUploadButton";
+import AutoGrowTextarea from "./AutoGrowTextarea";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import {
   isTauri,
@@ -248,7 +249,7 @@ export default function NoteEditor({
       setWindowAlwaysOnTop(await toggleAlwaysOnTop());
     } catch (e) {
       console.error("toggle_always_on_top failed:", e);
-      alert("窗口置顶操作失败，请确认在桌面壳中运行");
+      alert(`窗口置顶操作失败：${String(e)}`);
     }
   };
 
@@ -322,7 +323,7 @@ export default function NoteEditor({
   return (
     <div className="flex-1 flex flex-col h-full bg-panel-bg">
       {/* Editor toolbar */}
-      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4">
+      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4 flex-wrap">
         {showBackButton && (
           <button
             onClick={onBack}
@@ -381,9 +382,10 @@ export default function NoteEditor({
         <button
           onClick={() => {
             if (isTauri()) {
-              openFloatingNote(currentNoteIdRef.current!)?.catch(() =>
-                alert("打开悬浮窗失败，请确认在桌面壳中运行")
-              );
+              openFloatingNote(currentNoteIdRef.current!)?.catch((e) => {
+                console.error("open_floating_note failed:", e);
+                alert(`打开悬浮窗失败：${String(e)}`);
+              });
             } else {
               window.open(
                 `/notes/${currentNoteIdRef.current}/floating`,
@@ -453,7 +455,7 @@ export default function NoteEditor({
         className="flex-1 overflow-y-auto scrollbar-thin"
         onKeyDown={handleKeyDown}
       >
-        <div className="max-w-paper mx-auto px-6 md:px-12 pt-5 pb-12 space-y-4">
+        <div className="max-w-paper mx-auto px-[clamp(12px,4vw,48px)] pt-5 pb-12 space-y-4">
           <div className="text-center text-[17px] leading-tight font-bold text-ink-muted mb-7">
             {formatEditorDate(note.updatedAt)}
           </div>
@@ -467,11 +469,12 @@ export default function NoteEditor({
           />
 
           {mode === "text" ? (
-            <textarea
+            <AutoGrowTextarea
               value={content}
-              onChange={(e) => handleContentChange(e.target.value)}
+              onChange={handleContentChange}
               placeholder="开始记录..."
-              className="w-full min-h-[360px] border-none outline-none bg-transparent resize-none text-edit-body text-ink placeholder:text-ink-muted/55"
+              className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
+              minHeight={200}
             />
           ) : (
             <ChecklistEditor
