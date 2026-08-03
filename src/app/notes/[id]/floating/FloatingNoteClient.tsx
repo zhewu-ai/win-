@@ -225,7 +225,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   return (
     <div className="flex flex-col min-h-screen max-w-[320px] mx-auto p-3">
       {/* Minimal header */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
           onClick={() => router.push("/")}
           className="p-1 hover:bg-black/[0.04] rounded-btn transition-colors"

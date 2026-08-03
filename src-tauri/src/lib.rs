@@ -34,7 +34,7 @@ fn restore_window_geom(
       }
       let _ = window.set_size(PhysicalSize::new(geom.width, geom.height));
     }
-    let _ = window.set_always_on_top(geom.always_on_top);
+    let _ = window.set_always_on_top(geom.always_on_top.unwrap_or(false));
   }
 }
 
@@ -52,27 +52,47 @@ fn open_floating_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
   let url = format!("{}/notes/{}/floating", app_base_url(), id);
   let parsed = Url::parse(&url).map_err(|e| e.to_string())?;
 
+  // 悬浮窗默认置顶；仅当用户手动取消置顶后才保存 false，下次按保存值恢复
+  let saved = app.state::<WindowStateStore>().get(&label);
+  let effective_aot = saved
+    .as_ref()
+    .and_then(|g| g.always_on_top)
+    .unwrap_or(true);
+
   let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
     .title("便签")
     .inner_size(360.0, 520.0)
-    .min_inner_size(320.0, 360.0)
-    .always_on_top(true)
+    .min_inner_size(260.0, 340.0)
+    .always_on_top(effective_aot)
     .on_navigation(allowed_url);
 
   // 恢复上次的窗口大小、位置与置顶状态
-  let store = app.state::<WindowStateStore>();
-  if let Some(geom) = store.get(&label) {
+  if let Some(geom) = saved {
     if geom.width > 0 && geom.height > 0 {
       builder = builder.inner_size(geom.width as f64, geom.height as f64);
       if geom.x >= 0 && geom.y >= 0 {
         builder = builder.position(geom.x as f64, geom.y as f64);
       }
-      builder = builder.always_on_top(geom.always_on_top);
+      builder = builder.always_on_top(effective_aot);
     }
   }
 
   let w = builder.build().map_err(|e| e.to_string())?;
+  // Windows：builder 的 always_on_top 可能在 WebView2 初始化后丢失，
+  // 这里显式设置一次，并延迟重试确保置顶真正生效
+  let _ = w.set_always_on_top(effective_aot);
   let _ = w.set_focus();
+
+  let app2 = app.clone();
+  let label2 = label.clone();
+  std::thread::spawn(move || {
+    for delay_ms in [400u64, 1200u64] {
+      std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+      if let Some(win) = app2.get_webview_window(&label2) {
+        let _ = win.set_always_on_top(effective_aot);
+      }
+    }
+  });
   Ok(())
 }
 
@@ -104,7 +124,7 @@ pub fn run() {
       )
       .title("全平台便签")
       .inner_size(1100.0, 760.0)
-      .min_inner_size(900.0, 600.0)
+      .min_inner_size(320.0, 480.0)
       .center()
       .on_navigation(allowed_url)
       .build()?;
@@ -134,7 +154,7 @@ pub fn run() {
         tauri::WindowEvent::CloseRequested { .. } => {
           let store = app.state::<WindowStateStore>();
           if let Ok(aot) = window.is_always_on_top() {
-            store.update(&label, |g: &mut WindowGeom| g.always_on_top = aot);
+            store.update(&label, |g: &mut WindowGeom| g.always_on_top = Some(aot));
           }
           store.save();
         }

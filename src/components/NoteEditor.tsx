@@ -381,7 +381,9 @@ export default function NoteEditor({
         <button
           onClick={() => {
             if (isTauri()) {
-              openFloatingNote(currentNoteIdRef.current!);
+              openFloatingNote(currentNoteIdRef.current!)?.catch(() =>
+                alert("打开悬浮窗失败，请确认在桌面壳中运行")
+              );
             } else {
               window.open(
                 `/notes/${currentNoteIdRef.current}/floating`,

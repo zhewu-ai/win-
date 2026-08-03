@@ -12,8 +12,10 @@ pub struct WindowGeom {
   pub y: i32,
   pub width: u32,
   pub height: u32,
+  // None = 用户未显式改过置顶（首次打开走窗口默认值）；
+  // Some(v) = 窗口最后一次关闭时保存的置顶状态
   #[serde(default)]
-  pub always_on_top: bool,
+  pub always_on_top: Option<bool>,
 }
 
 fn default_neg() -> i32 {
