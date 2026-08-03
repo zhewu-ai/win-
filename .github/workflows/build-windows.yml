@@ -35,9 +35,20 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 创建 release 需要仓库 Actions 权限为 Read and write；
+        # 未开启时步骤不阻塞，安装包由下方 artifact 兜底提供
+        continue-on-error: true
         with:
+          projectPath: src-tauri
           tagName: app-v__VERSION__
           releaseName: "全平台便签 v__VERSION__"
           releaseBody: "Windows 桌面壳自动构建（加载 https://notes.hello-mylife.online）"
           releaseDraft: true
           prerelease: false
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: error
