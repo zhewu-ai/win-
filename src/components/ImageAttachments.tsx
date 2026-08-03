@@ -20,15 +20,19 @@ export default function ImageAttachments({
   const handleDelete = async (att: Attachment) => {
     if (!confirm("确定删除这张图片？此操作不会删除便签内容。")) return;
 
+    let res: Response | null = null;
     try {
-      const res = await fetch(
+      res = await fetch(
         `/api/notes/${noteId}/attachments/${att.id}`,
         { method: "DELETE" }
       );
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       onAttachmentsChange(attachments.filter((a) => a.id !== att.id));
-    } catch {
-      alert("删除图片失败");
+    } catch (e) {
+      console.error("删除图片失败:", e);
+      alert(
+        res ? `删除图片失败（HTTP ${res.status}）` : "删除图片失败，请检查网络"
+      );
     }
   };
 
@@ -58,7 +62,7 @@ export default function ImageAttachments({
             />
             <button
               onClick={() => handleDelete(att)}
-              className="absolute top-1 right-1 w-7 h-7 bg-black/55 hover:bg-black/75 rounded-full flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+              className="absolute top-1 right-1 w-7 h-7 bg-black/55 hover:bg-black/75 rounded-full flex items-center justify-center transition-colors"
               title="删除图片"
             >
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -73,6 +77,7 @@ export default function ImageAttachments({
         <ImagePreview
           attachment={previewAtt}
           onClose={() => setPreviewAtt(null)}
+          onDelete={handleDelete}
         />
       )}
     </div>

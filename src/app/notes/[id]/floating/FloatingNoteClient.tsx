@@ -169,14 +169,15 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
     if (!isTauri()) return;
     getAlwaysOnTop()
       .then(setAlwaysOnTop)
-      .catch(() => {});
+      .catch((e) => console.error("get_always_on_top failed:", e));
   }, []);
 
   const handleAlwaysOnTopToggle = async () => {
     try {
       setAlwaysOnTop(await toggleAlwaysOnTop());
-    } catch {
-      // shell command unavailable; keep current state
+    } catch (e) {
+      console.error("toggle_always_on_top failed:", e);
+      alert("窗口置顶操作失败，请确认在桌面壳中运行");
     }
   };
 

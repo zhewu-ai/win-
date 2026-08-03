@@ -8,7 +8,12 @@ import ChecklistEditor from "./ChecklistEditor";
 import ImageAttachments from "./ImageAttachments";
 import ImageUploadButton from "./ImageUploadButton";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
-import { isTauri, openFloatingNote } from "@/lib/tauri";
+import {
+  isTauri,
+  openFloatingNote,
+  getAlwaysOnTop,
+  toggleAlwaysOnTop,
+} from "@/lib/tauri";
 
 const DEBOUNCE_MS = 800;
 
@@ -59,6 +64,7 @@ export default function NoteEditor({
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
     "saved"
   );
+  const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const currentNoteIdRef = useRef<string | null>(null);
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
@@ -228,6 +234,24 @@ export default function NoteEditor({
     await immediateSave({ color: newColor });
   };
 
+  // Window always-on-top state (desktop shell only)
+  useEffect(() => {
+    if (!isTauri()) return;
+    getAlwaysOnTop()
+      .then(setWindowAlwaysOnTop)
+      .catch((e) => console.error("get_always_on_top failed:", e));
+  }, []);
+
+  const handleWindowPinToggle = async () => {
+    if (!isTauri()) return;
+    try {
+      setWindowAlwaysOnTop(await toggleAlwaysOnTop());
+    } catch (e) {
+      console.error("toggle_always_on_top failed:", e);
+      alert("窗口置顶操作失败，请确认在桌面壳中运行");
+    }
+  };
+
   const handlePinToggle = async () => {
     const newPinned = !isPinned;
     setIsPinned(newPinned);
@@ -354,14 +378,37 @@ export default function NoteEditor({
           }
         />
 
+        <button
+          onClick={() => {
+            if (isTauri()) {
+              openFloatingNote(currentNoteIdRef.current!);
+            } else {
+              window.open(
+                `/notes/${currentNoteIdRef.current}/floating`,
+                "_blank"
+              );
+            }
+          }}
+          className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn transition-colors"
+          title="极小模式（以悬浮窗打开当前便签）"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+          </svg>
+        </button>
+
         {isTauri() && (
           <button
-            onClick={() => openFloatingNote(currentNoteIdRef.current!)}
-            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn transition-colors"
-            title="在悬浮窗中打开"
+            onClick={handleWindowPinToggle}
+            className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
+              windowAlwaysOnTop
+                ? "text-[#E3C24A] bg-white/10"
+                : "text-ink-muted hover:text-ink hover:bg-white/[0.08]"
+            }`}
+            title={windowAlwaysOnTop ? "取消窗口置顶" : "窗口置顶"}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v3m6-3v3M5 6h14v2a2 2 0 01-2 2H7a2 2 0 01-2-2V6zM12 10v9m-3 2h6" />
             </svg>
           </button>
         )}
