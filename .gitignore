@@ -1,0 +1,21 @@
+node_modules/
+.next/
+*.db
+*.db-journal
+.env
+.env.local
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+# 本地 cargo 镜像加速配置（不影响 CI / 服务器）
+.cargo/
+
+# 运行时数据（用户上传图片，不入库）
+uploads/
+
+# macOS
+.DS_Store
+
+# Claude Code 本地配置（含本地绝对路径，不入库）
+.claude/

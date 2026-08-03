@@ -1,0 +1,44 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import path from "path";
+import fs from "fs/promises";
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string; attachmentId: string } }
+) {
+  const session = await getSession();
+  if (!session.userId) {
+    return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+  }
+
+  // Find attachment and verify ownership
+  const attachment = await prisma.attachment.findFirst({
+    where: {
+      id: params.attachmentId,
+      noteId: params.id,
+      userId: session.userId,
+    },
+  });
+
+  if (!attachment) {
+    return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
+  }
+
+  // Delete DB record first
+  await prisma.attachment.delete({
+    where: { id: params.attachmentId },
+  });
+
+  // Delete local file; ignore if already missing
+  const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+  const filePath = path.resolve(uploadDir, attachment.storagePath);
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // File already deleted — still return success
+  }
+
+  return NextResponse.json({ ok: true });
+}

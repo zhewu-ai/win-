@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import path from "path";
+import fs from "fs/promises";
+
+export const dynamic = "force-dynamic";
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getSession();
+  if (!session.userId) {
+    return NextResponse.json(
+      { ok: false, error: "UNAUTHORIZED" },
+      { status: 401 }
+    );
+  }
+
+  const note = await prisma.note.findFirst({
+    where: {
+      id: params.id,
+      userId: session.userId,
+      deletedAt: { not: null },
+    },
+    include: { attachments: true },
+  });
+
+  if (!note) {
+    return NextResponse.json(
+      { ok: false, error: "NOT_FOUND" },
+      { status: 404 }
+    );
+  }
+
+  const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+
+  // Delete attachment files from disk
+  for (const att of note.attachments) {
+    const filePath = path.resolve(uploadDir, att.storagePath);
+    try {
+      await fs.unlink(filePath);
+    } catch {
+      // File may be missing — continue cleanup
+    }
+  }
+
+  // Remove attachment directory if it exists
+  const noteDir = path.resolve(uploadDir, "notes", params.id);
+  try {
+    await fs.rm(noteDir, { recursive: true, force: true });
+  } catch {
+    // Directory may not exist — proceed
+  }
+
+  // Delete attachments from DB, then hard delete the note
+  await prisma.attachment.deleteMany({ where: { noteId: params.id } });
+  await prisma.note.delete({ where: { id: params.id } });
+
+  return NextResponse.json({ ok: true });
+}

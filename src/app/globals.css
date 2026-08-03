@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --ink: #F5F4F2;
+    --ink-secondary: #C9C4C0;
+    --ink-muted: #8F8986;
+    --page-bg: #191919;
+    --sidebar-bg: #241E20;
+    --toolbar-bg: #221C1E;
+    --panel-bg: #1A1A1A;
+    --border-light: #3B3335;
+    --primary: #B99A28;
+    --danger: #FF3B30;
+    --success: #34C759;
+    --selection-yellow: #A98A24;
+  }
+
+  body {
+    background-color: var(--page-bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+      "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Subtle focus ring for keyboard navigation */
+  :focus-visible {
+    outline: 2px solid #D9B73A;
+    outline-offset: 2px;
+  }
+}
+
+/* Scrollbar styling */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #4A4142 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #4A4142;
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #62595A;
+  }
+}

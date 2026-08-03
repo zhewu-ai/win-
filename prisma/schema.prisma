@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  notes        Note[]
+  attachments  Attachment[]
+}
+
+model Note {
+  id           String    @id @default(cuid())
+  userId       String
+  title        String    @default("")
+  content      String    @default("")
+  color        String    @default("yellow")
+  isPinned     Boolean   @default(false)
+  isArchived   Boolean   @default(false)
+  mode         String    @default("text")
+  checklistItems String  @default("[]")
+  checklistGroups String @default("[]")
+  sortOrder    Int       @default(0)
+  windowX      Int?
+  windowY      Int?
+  windowWidth  Int?
+  windowHeight Int?
+  alwaysOnTop  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+  attachments Attachment[]
+
+  @@index([userId, deletedAt, isArchived])
+  @@index([userId, isArchived, deletedAt])
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  userId      String
+  noteId      String
+  type        String   @default("image")
+  url         String
+  storagePath String
+  filename    String
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  note Note @relation(fields: [noteId], references: [id])
+
+  @@index([userId])
+  @@index([noteId])
+}
