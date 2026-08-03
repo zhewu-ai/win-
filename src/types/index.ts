@@ -1,5 +1,7 @@
 export interface ChecklistItem {
   id: string;
+  /** "heading" = 轻量小标题行（无勾选框）；缺省视为 "todo" */
+  kind?: "todo" | "heading";
   text: string;
   checked: boolean;
   sortOrder: number;

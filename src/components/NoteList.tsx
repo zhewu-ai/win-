@@ -56,7 +56,9 @@ function getAutoTitle(note: Note): string {
     if (firstLine) return firstLine;
   }
   if (note.mode === "checklist" && note.checklistItems?.length > 0) {
-    const firstItem = note.checklistItems.find((i) => i.text.trim().length > 0);
+    const firstItem = note.checklistItems.find(
+      (i) => i.kind !== "heading" && i.text.trim().length > 0
+    );
     if (firstItem) return firstItem.text;
   }
   return "无标题便签";
@@ -67,7 +69,11 @@ function getSummaryLines(note: Note): string[] {
     return note.checklistItems
       .filter((i) => i.text.trim().length > 0)
       .slice(0, 3)
-      .map((i) => `${i.checked ? "✓" : "○"} ${i.text}`);
+      .map((i) =>
+        i.kind === "heading"
+          ? i.text
+          : `${i.checked ? "✓" : "○"} ${i.text}`
+      );
   }
   if (note.mode === "text" && note.content) {
     const lines = note.content
@@ -82,7 +88,9 @@ function getSummaryLines(note: Note): string[] {
 
 function getTodoProgress(note: Note): { done: number; total: number } | null {
   if (note.mode !== "checklist" || !note.checklistItems?.length) return null;
-  const nonEmpty = note.checklistItems.filter((i) => i.text.trim().length > 0);
+  const nonEmpty = note.checklistItems.filter(
+    (i) => i.kind !== "heading" && i.text.trim().length > 0
+  );
   if (nonEmpty.length === 0) return null;
   return {
     done: nonEmpty.filter((i) => i.checked).length,

@@ -274,7 +274,15 @@ export default function ArchivePage() {
             </div>
             {selectedNote.mode === "checklist" && selectedNote.checklistItems?.length > 0 ? (
               <div className="flex-1 ml-5 space-y-1.5 overflow-y-auto">
-                {selectedNote.checklistItems.map((item) => (
+                {selectedNote.checklistItems.map((item) =>
+                  item.kind === "heading" ? (
+                    <div key={item.id} className="flex items-start gap-2.5">
+                      <span className="flex-shrink-0 mt-0.5 w-4 h-4 rounded-full border-2 border-ink-muted/15" />
+                      <span className="text-edit-body font-semibold text-ink-muted/70">
+                        {item.text}
+                      </span>
+                    </div>
+                  ) : (
                   <div key={item.id} className="flex items-start gap-2.5">
                     <span className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
                       item.checked
@@ -291,7 +299,8 @@ export default function ArchivePage() {
                       {item.text}
                     </span>
                   </div>
-                ))}
+                  )
+                )}
               </div>
             ) : (
               <p className="text-edit-body text-ink whitespace-pre-wrap flex-1 ml-5">

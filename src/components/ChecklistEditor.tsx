@@ -1,24 +1,16 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import type { ChecklistItem, ChecklistGroup } from "@/types";
-import { parseTodoLine } from "@/lib/note-serializer";
+import { parseChecklistLine } from "@/lib/note-serializer";
+import AutoGrowTextarea from "./AutoGrowTextarea";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function newItem(groupId: string): ChecklistItem {
-  const now = new Date().toISOString();
-  return {
-    id: generateId(),
-    text: "",
-    checked: false,
-    sortOrder: Date.now(),
-    createdAt: now,
-    updatedAt: now,
-    groupId,
-  };
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 interface Props {
@@ -28,282 +20,291 @@ interface Props {
 }
 
 export default function ChecklistEditor({ items, groups, onChange }: Props) {
-  const itemInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
-  const groupTitleRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
+  const itemInputRefs = useRef<Map<string, HTMLTextAreaElement | null>>(
+    new Map()
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [completedCollapsed, setCompletedCollapsed] = useState(true);
+  const dragIdRef = useRef<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    id: string;
+    before: boolean;
+  } | null>(null);
 
-  // Fallback default group when the parent has not persisted groups yet
-  const safeGroups = useMemo(() => {
-    if (groups.length > 0) return groups;
-    return [
-      { id: "default", title: "待办", sortOrder: 0, collapsedCompleted: true },
-    ];
-  }, [groups]);
-
-  const sortedGroups = useMemo(
-    () => [...safeGroups].sort((a, b) => a.sortOrder - b.sortOrder),
-    [safeGroups]
-  );
-
-  const groupIncomplete = useCallback(
-    (gid: string) =>
-      items
-        .filter((i) => i.groupId === gid && !i.checked)
-        .sort((a, b) => a.sortOrder - b.sortOrder),
+  // Flat rows sorted globally; "active" = headings + unchecked todos (kept in
+  // order), "completed" = checked todos (single bottom section).
+  const sortedRows = useMemo(
+    () => [...items].sort((a, b) => a.sortOrder - b.sortOrder),
     [items]
   );
-
-  const groupCompleted = useCallback(
-    (gid: string) =>
-      items
-        .filter((i) => i.groupId === gid && i.checked)
+  const active = useMemo(
+    () => sortedRows.filter((r) => r.kind === "heading" || !r.checked),
+    [sortedRows]
+  );
+  const completed = useMemo(
+    () =>
+      sortedRows
+        .filter((r) => r.kind !== "heading" && r.checked)
         .sort((a, b) =>
           (b.completedAt || "").localeCompare(a.completedAt || "")
         ),
-    [items]
+    [sortedRows]
+  );
+
+  /** Re-emits rows with contiguous sortOrders: active first, then completed. */
+  const commit = useCallback(
+    (nextActive: ChecklistItem[], nextCompleted: ChecklistItem[]) => {
+      const next = [...nextActive, ...nextCompleted].map((r, i) => ({
+        ...r,
+        sortOrder: i,
+      }));
+      onChange(next, []);
+    },
+    [onChange]
   );
 
   const setItemRef = useCallback(
-    (id: string, el: HTMLInputElement | null) => {
+    (id: string, el: HTMLTextAreaElement | null) => {
       if (el) itemInputRefs.current.set(id, el);
       else itemInputRefs.current.delete(id);
     },
     []
   );
 
-  const setGroupTitleRef = useCallback(
-    (id: string, el: HTMLInputElement | null) => {
-      if (el) groupTitleRefs.current.set(id, el);
-      else groupTitleRefs.current.delete(id);
-    },
-    []
-  );
-
-  const focusItem = useCallback((id: string) => {
+  const focusRow = useCallback((id: string) => {
     requestAnimationFrame(() => {
       const el = itemInputRefs.current.get(id);
       if (el) el.focus();
     });
   }, []);
 
-  const updateItem = useCallback(
-    (id: string, updates: Partial<ChecklistItem>) => {
-      const now = new Date().toISOString();
-      const newItems = items.map((item) =>
-        item.id === id ? { ...item, ...updates, updatedAt: now } : item
+  const updateText = useCallback(
+    (id: string, text: string) => {
+      const now = nowIso();
+      onChange(
+        items.map((r) => (r.id === id ? { ...r, text, updatedAt: now } : r)),
+        []
       );
-      onChange(newItems, safeGroups);
     },
-    [items, safeGroups, onChange]
-  );
-
-  const updateGroups = useCallback(
-    (nextGroups: ChecklistGroup[]) => onChange(items, nextGroups),
     [items, onChange]
   );
 
   const handleToggle = useCallback(
     (id: string) => {
       const item = items.find((i) => i.id === id);
-      if (!item || !item.groupId) return;
+      if (!item || item.kind === "heading") return;
+      const now = nowIso();
       if (item.checked) {
-        const incomplete = groupIncomplete(item.groupId);
-        const maxSort = incomplete.reduce(
-          (m, i) => Math.max(m, i.sortOrder),
-          0
+        commit(
+          [...active, { ...item, checked: false, completedAt: null }],
+          completed.filter((r) => r.id !== id)
         );
-        updateItem(id, {
-          checked: false,
-          completedAt: null,
-          sortOrder: maxSort + 1,
-        });
       } else {
-        updateItem(id, { checked: true, completedAt: new Date().toISOString() });
+        commit(
+          active.filter((r) => r.id !== id),
+          [...completed, { ...item, checked: true, completedAt: now }]
+        );
       }
     },
-    [items, groupIncomplete, updateItem]
+    [items, active, completed, commit]
   );
 
-  const handleTextChange = useCallback(
-    (id: string, text: string) => updateItem(id, { text }),
-    [updateItem]
+  const newTodo = useCallback(
+    (text: string): ChecklistItem => ({
+      id: generateId(),
+      kind: "todo",
+      text,
+      checked: false,
+      sortOrder: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      completedAt: null,
+    }),
+    []
   );
 
-  const handleItemDelete = useCallback(
+  const newHeading = useCallback(
+    (text: string): ChecklistItem => ({
+      id: generateId(),
+      kind: "heading",
+      text,
+      checked: false,
+      sortOrder: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      completedAt: null,
+    }),
+    []
+  );
+
+  const addTodoAfter = useCallback(
     (id: string) => {
-      const next = items.filter((i) => i.id !== id);
-      onChange(
-        next.length === 0 ? [newItem(safeGroups[0].id)] : next,
-        safeGroups
-      );
+      const idx = active.findIndex((r) => r.id === id);
+      const item = newTodo("");
+      const nextActive =
+        idx < 0
+          ? [...active, item]
+          : [...active.slice(0, idx + 1), item, ...active.slice(idx + 1)];
+      commit(nextActive, completed);
+      focusRow(item.id);
     },
-    [items, safeGroups, onChange]
+    [active, completed, commit, newTodo, focusRow]
   );
 
-  const addItemToGroup = useCallback(
-    (gid: string, afterId?: string) => {
-      const incomplete = groupIncomplete(gid);
-      let sortOrder: number;
-      if (afterId) {
-        const idx = incomplete.findIndex((i) => i.id === afterId);
-        const anchor = incomplete[idx];
-        const next = incomplete[idx + 1];
-        sortOrder = next
-          ? (anchor.sortOrder + next.sortOrder) / 2
-          : anchor.sortOrder + 1;
-      } else {
-        const last = incomplete[incomplete.length - 1];
-        sortOrder = last ? last.sortOrder + 1 : 0;
-      }
-      const item = newItem(gid);
-      item.sortOrder = sortOrder;
-      onChange([...items, item], safeGroups);
-      focusItem(item.id);
+  const addTodoAtEnd = useCallback(() => {
+    const item = newTodo("");
+    commit([...active, item], completed);
+    focusRow(item.id);
+  }, [active, completed, commit, newTodo, focusRow]);
+
+  const insertHeadingAt = useCallback(
+    (activeIndex: number) => {
+      const item = newHeading("");
+      const nextActive = [
+        ...active.slice(0, activeIndex),
+        item,
+        ...active.slice(activeIndex),
+      ];
+      commit(nextActive, completed);
+      focusRow(item.id);
     },
-    [items, safeGroups, groupIncomplete, onChange, focusItem]
+    [active, completed, commit, newHeading, focusRow]
+  );
+
+  const addHeadingAtEnd = useCallback(() => {
+    const item = newHeading("");
+    commit([...active, item], completed);
+    focusRow(item.id);
+  }, [active, completed, commit, newHeading, focusRow]);
+
+  const deleteItem = useCallback(
+    (id: string) => {
+      const nextActive = active.filter((r) => r.id !== id);
+      const nextCompleted = completed.filter((r) => r.id !== id);
+      if (nextActive.length === 0 && nextCompleted.length === 0) {
+        commit([newTodo("")], []);
+        return;
+      }
+      commit(nextActive, nextCompleted);
+    },
+    [active, completed, commit, newTodo]
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>, id: string) => {
+    (e: React.KeyboardEvent, id: string) => {
       const item = items.find((i) => i.id === id);
-      if (!item || !item.groupId) return;
+      if (!item) return;
 
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter") {
+        // Single-line semantics: Enter always adds a new todo (never inserts
+        // a literal newline into the todo text; long text wraps visually).
         e.preventDefault();
-        // Completed item Enter -> new item in this group's incomplete section;
-        // otherwise insert after the current item (empty rows are cleaned up on blur)
-        addItemToGroup(item.groupId, item.checked ? undefined : id);
+        if (!e.shiftKey) addTodoAfter(id);
         return;
       }
 
       if (e.key === "Backspace" && item.text === "") {
         e.preventDefault();
         if (items.length <= 1) return;
-        const next = items.filter((i) => i.id !== id);
-        onChange(next, safeGroups);
-        const incomplete = groupIncomplete(item.groupId);
-        const idx = incomplete.findIndex((i) => i.id === id);
-        const prevId = idx > 0 ? incomplete[idx - 1].id : undefined;
-        if (prevId) focusItem(prevId);
+        const idx = active.findIndex((r) => r.id === id);
+        const prevId = idx > 0 ? active[idx - 1].id : undefined;
+        deleteItem(id);
+        if (prevId) focusRow(prevId);
         return;
       }
 
-      // Arrow navigation within this group's incomplete list
-      const incomplete = groupIncomplete(item.groupId);
-      const idx = incomplete.findIndex((i) => i.id === id);
-      if (e.key === "ArrowUp" && idx > 0) {
-        e.preventDefault();
-        const el = itemInputRefs.current.get(incomplete[idx - 1].id);
-        if (el) {
-          el.focus();
-          el.setSelectionRange(el.value.length, el.value.length);
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        const idx = active.findIndex((r) => r.id === id);
+        if (e.key === "ArrowUp" && idx > 0) {
+          e.preventDefault();
+          focusRow(active[idx - 1].id);
+        } else if (
+          e.key === "ArrowDown" &&
+          idx >= 0 &&
+          idx < active.length - 1
+        ) {
+          e.preventDefault();
+          focusRow(active[idx + 1].id);
         }
-        return;
-      }
-      if (e.key === "ArrowDown" && idx >= 0 && idx < incomplete.length - 1) {
-        e.preventDefault();
-        const el = itemInputRefs.current.get(incomplete[idx + 1].id);
-        if (el) {
-          el.focus();
-          el.setSelectionRange(el.value.length, el.value.length);
-        }
-        return;
       }
     },
-    [items, safeGroups, groupIncomplete, onChange, focusItem, addItemToGroup]
+    [items, active, addTodoAfter, deleteItem, focusRow]
   );
 
-  // Paste multi-line text -> split into multiple todos, clean prefixes, insert after current
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLInputElement>, id: string) => {
+  const makeRow = useCallback(
+    (p: { kind: "todo" | "heading"; text: string; checked: boolean }) => {
+      const now = nowIso();
+      const checked = p.kind === "todo" && p.checked;
+      return {
+        id: generateId(),
+        kind: p.kind,
+        text: p.text,
+        checked,
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+        completedAt: checked ? now : null,
+      } as ChecklistItem;
+    },
+    []
+  );
+
+  const handleRowPaste = useCallback(
+    (e: React.ClipboardEvent, id: string) => {
       const lines = e.clipboardData
         .getData("text")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.length > 0);
       if (lines.length === 0) return;
-      const parsedAll = lines.map(parseTodoLine);
+      const parsedAll = lines.map(parseChecklistLine);
       const parsedLines = parsedAll.filter((p) => p.text.length > 0);
       if (parsedLines.length === 0) return;
 
-      // Single line without a numbering/bullet/checkbox marker: let default paste
-      // happen (insert at cursor) instead of forcing a new item.
+      // Single plain line without markers/heading: let default paste insert text.
       const hasMarker = lines.some((l, i) => {
         const p = parsedAll[i];
-        return p ? p.checked || p.text !== l : false;
+        return p.kind === "heading" || p.checked || p.text !== l;
       });
       if (lines.length === 1 && !hasMarker) return;
-
       e.preventDefault();
 
-      const item = items.find((i) => i.id === id);
-      if (!item || !item.groupId) return;
-      const gid = item.groupId;
-      const incomplete = groupIncomplete(gid);
-      const idx = incomplete.findIndex((i) => i.id === id);
-      const now = new Date().toISOString();
+      const now = nowIso();
+      const idx = active.findIndex((r) => r.id === id);
+      let nextActive = [...active];
+      let pasted = parsedLines.map((p) => makeRow(p));
 
-      let insertLines = parsedLines;
-      let result = [...items];
-
-      let anchorSort: number;
-      let nextSort: number | undefined;
-      if (idx >= 0) {
-        anchorSort = incomplete[idx].sortOrder;
-        nextSort =
-          idx + 1 < incomplete.length
-            ? incomplete[idx + 1].sortOrder
-            : undefined;
-        if (item.text.trim() === "") {
-          // First line overwrites the empty current item
-          const first = parsedLines[0];
-          result = result.map((i) =>
-            i.id === id
-              ? {
-                  ...i,
-                  text: first.text,
-                  checked: first.checked,
-                  completedAt: first.checked ? now : null,
-                  updatedAt: now,
-                }
-              : i
-          );
-          insertLines = parsedLines.slice(1);
+      if (idx >= 0 && active[idx].text.trim() === "" && pasted.length > 0) {
+        const first = pasted[0];
+        if (first.kind !== "heading") {
+          nextActive[idx] = {
+            ...nextActive[idx],
+            text: first.text,
+            checked: false,
+            completedAt: null,
+            updatedAt: now,
+          };
+          pasted = pasted.slice(1);
         }
-      } else {
-        // Current item is completed -> append to end of group's incomplete list
-        const last = incomplete[incomplete.length - 1];
-        anchorSort = last ? last.sortOrder + 1 : 0;
-        nextSort = undefined;
       }
 
-      const n = insertLines.length;
-      const step = nextSort !== undefined ? (nextSort - anchorSort) / (n + 1) : 1;
-      const newItems: ChecklistItem[] = insertLines.map((p, i) => ({
-        id: generateId(),
-        text: p.text,
-        checked: p.checked,
-        sortOrder: anchorSort + step * (i + 1),
-        createdAt: now,
-        updatedAt: now,
-        groupId: gid,
-        completedAt: p.checked ? now : null,
-      }));
-
-      onChange(
-        newItems.length > 0 ? [...result, ...newItems] : result,
-        safeGroups
+      const activeInsert = pasted.filter(
+        (r) => r.kind === "heading" || !r.checked
       );
-      focusItem(
-        newItems.length > 0 ? newItems[newItems.length - 1].id : id
+      const completedInsert = pasted.filter(
+        (r) => r.kind === "todo" && r.checked
       );
+      const insertAt = idx + 1;
+      nextActive.splice(insertAt, 0, ...activeInsert);
+      commit(nextActive, [...completed, ...completedInsert]);
+      if (activeInsert.length > 0) {
+        focusRow(nextActive[insertAt + activeInsert.length - 1].id);
+      }
     },
-    [items, safeGroups, groupIncomplete, onChange, focusItem]
+    [active, completed, commit, makeRow, focusRow]
   );
 
-  // Container-level paste fallback: paste onto the checklist area background
-  // (no input focused) appends cleaned lines to the default group's incomplete list.
   const handleContainerPaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement;
@@ -315,180 +316,286 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
         .filter((l) => l.length > 0);
       if (lines.length === 0) return;
       const parsedLines = lines
-        .map(parseTodoLine)
+        .map(parseChecklistLine)
         .filter((p) => p.text.length > 0);
       if (parsedLines.length === 0) return;
       e.preventDefault();
 
-      const gid = safeGroups[0].id;
-      const incomplete = groupIncomplete(gid);
-      const last = incomplete[incomplete.length - 1];
-      const baseSort = last ? last.sortOrder + 1 : 0;
-      const now = new Date().toISOString();
-      const newItems: ChecklistItem[] = parsedLines.map((p, i) => ({
-        id: generateId(),
-        text: p.text,
-        checked: p.checked,
-        sortOrder: baseSort + i,
-        createdAt: now,
-        updatedAt: now,
-        groupId: gid,
-        completedAt: p.checked ? now : null,
-      }));
-      onChange([...items, ...newItems], safeGroups);
-      focusItem(newItems[newItems.length - 1].id);
+      const rows = parsedLines.map((p) => makeRow(p));
+      const activeInsert = rows.filter((r) => r.kind === "heading" || !r.checked);
+      const completedInsert = rows.filter(
+        (r) => r.kind === "todo" && r.checked
+      );
+      commit([...active, ...activeInsert], [...completed, ...completedInsert]);
+      if (activeInsert.length > 0) {
+        focusRow(activeInsert[activeInsert.length - 1].id);
+      }
     },
-    [items, safeGroups, groupIncomplete, onChange, focusItem]
+    [active, completed, commit, makeRow, focusRow]
   );
 
   const handleBlur = useCallback(() => {
-    const nonEmpty = items.filter((i) => i.text.trim() !== "");
+    const nonEmpty = items.filter(
+      (i) => i.kind === "heading" || i.text.trim() !== ""
+    );
     if (nonEmpty.length === 0) {
-      if (items.length > 1) {
-        onChange([items[0]], safeGroups);
-      }
+      if (items.length > 1) onChange([newTodo("")], []);
     } else if (nonEmpty.length !== items.length) {
-      onChange(nonEmpty, safeGroups);
+      const remainingIds = new Set(nonEmpty.map((i) => i.id));
+      const nextActive = active.filter((r) => remainingIds.has(r.id));
+      const nextCompleted = completed.filter((r) => remainingIds.has(r.id));
+      commit(nextActive, nextCompleted);
     }
-  }, [items, safeGroups, onChange]);
+  }, [items, active, completed, commit, newTodo, onChange]);
 
-  const handleGroupTitleChange = useCallback(
-    (gid: string, title: string) => {
-      updateGroups(
-        safeGroups.map((g) => (g.id === gid ? { ...g, title } : g))
-      );
+  // --- HTML5 drag & drop (active rows only) ---
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, id: string) => {
+      dragIdRef.current = id;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", id);
     },
-    [safeGroups, updateGroups]
+    []
   );
 
-  const handleToggleCollapse = useCallback(
-    (gid: string) => {
-      updateGroups(
-        safeGroups.map((g) =>
-          g.id === gid
-            ? { ...g, collapsedCompleted: !g.collapsedCompleted }
-            : g
-        )
-      );
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, id: string) => {
+      if (!dragIdRef.current) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rect = e.currentTarget.getBoundingClientRect();
+      setDropTarget({
+        id,
+        before: e.clientY < rect.top + rect.height / 2,
+      });
     },
-    [safeGroups, updateGroups]
+    []
   );
 
-  const renderItem = (item: ChecklistItem) => (
-    <div key={item.id} className="flex items-start gap-3 group">
+  const handleDrop = useCallback(
+    (e: React.DragEvent, id: string) => {
+      e.preventDefault();
+      const dragId = dragIdRef.current;
+      setDropTarget(null);
+      if (!dragId) return;
+      const from = active.findIndex((r) => r.id === dragId);
+      if (from < 0) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+
+      const list = [...active];
+      const [moved] = list.splice(from, 1);
+      let to = list.findIndex((r) => r.id === id);
+      if (to < 0) to = list.length;
+      if (!before) to += 1;
+      list.splice(Math.max(0, to), 0, moved);
+      commit(list, completed);
+      dragIdRef.current = null;
+    },
+    [active, completed, commit]
+  );
+
+  const handleDragEnd = useCallback(() => {
+    dragIdRef.current = null;
+    setDropTarget(null);
+  }, []);
+
+  const insertDivider = (atIndex: number, key: string) => (
+    <div key={key} className="relative group/ins h-2">
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-transparent group-hover/ins:bg-[#E3C24A]/40 transition-colors" />
       <button
-        onClick={() => handleToggle(item.id)}
-        className={`flex-shrink-0 mt-[7px] w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
-          item.checked
-            ? "bg-[#E3C24A] border-[#E3C24A] text-[#1A1A1A]"
-            : "border-ink-muted/55 hover:border-ink-secondary"
-        }`}
-        title={item.checked ? "标记为未完成" : "标记为已完成"}
+        onClick={() => insertHeadingAt(atIndex)}
+        title="在此插入小标题"
+        className="absolute left-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border-light bg-panel-bg text-ink-muted opacity-0 group-hover/ins:opacity-100 hover:text-primary hover:border-primary/40 transition-all"
       >
-        {item.checked && (
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </button>
-      <input
-        ref={(el) => setItemRef(item.id, el)}
-        type="text"
-        value={item.text}
-        onChange={(e) => handleTextChange(item.id, e.target.value)}
-        onFocus={() => setFocusedId(item.id)}
-        onBlur={(e) => {
-          setFocusedId(null);
-          // Only trim empty rows when focus leaves the checklist entirely;
-          // moving focus between rows (e.g. Enter just added a fresh empty row)
-          // must keep the empty row so the user can keep typing.
-          const next = e.relatedTarget as Node | null;
-          if (next && rootRef.current && rootRef.current.contains(next)) return;
-          handleBlur();
-        }}
-        onKeyDown={(e) => handleKeyDown(e, item.id)}
-        onPaste={(e) => handlePaste(e, item.id)}
-        placeholder={focusedId === item.id ? "" : "新待办..."}
-        className={`flex-1 bg-transparent border-none outline-none py-0.5 text-edit-body placeholder:text-ink-muted/45 ${
-          item.checked ? "text-ink-muted line-through" : "text-ink"
-        }`}
-      />
-      <button
-        onClick={() => handleItemDelete(item.id)}
-        className="opacity-0 group-hover:opacity-100 transition-opacity mt-1 p-1 text-ink-muted hover:text-danger rounded-btn"
-        title="删除此项"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
         </svg>
       </button>
     </div>
   );
 
+  const dragHandle = (row: ChecklistItem) => (
+    <div
+      draggable
+      onDragStart={(e) => handleDragStart(e, row.id)}
+      onDragEnd={handleDragEnd}
+      className="flex-shrink-0 mt-[7px] w-4 h-4 text-ink-muted/30 hover:text-ink-muted/70 cursor-grab active:cursor-grabbing touch-none select-none"
+      title="拖动排序"
+    >
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="9" cy="5" r="1.5" />
+        <circle cx="15" cy="5" r="1.5" />
+        <circle cx="9" cy="12" r="1.5" />
+        <circle cx="15" cy="12" r="1.5" />
+        <circle cx="9" cy="19" r="1.5" />
+        <circle cx="15" cy="19" r="1.5" />
+      </svg>
+    </div>
+  );
+
+  const deleteButton = (row: ChecklistItem) => (
+    <button
+      onClick={() => deleteItem(row.id)}
+      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-1 p-1 text-ink-muted hover:text-danger rounded-btn"
+      title="删除"
+    >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  );
+
+  const dropIndicator = (row: ChecklistItem) => (
+    <>
+      {dropTarget?.id === row.id && dropTarget.before && (
+        <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-[#E3C24A]" />
+      )}
+      {dropTarget?.id === row.id && !dropTarget.before && (
+        <div className="absolute -bottom-[3px] left-0 right-0 h-[3px] rounded-full bg-[#E3C24A]" />
+      )}
+    </>
+  );
+
+  const renderTodoRow = (row: ChecklistItem, draggable: boolean) => (
+    <div
+      key={row.id}
+      className="relative flex items-start gap-3 group"
+      onDragOver={draggable ? (e) => handleDragOver(e, row.id) : undefined}
+      onDrop={draggable ? (e) => handleDrop(e, row.id) : undefined}
+    >
+      {dropIndicator(row)}
+      {draggable && dragHandle(row)}
+      <button
+        onClick={() => handleToggle(row.id)}
+        className={`flex-shrink-0 mt-[7px] w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
+          row.checked
+            ? "bg-[#E3C24A] border-[#E3C24A] text-[#1A1A1A]"
+            : "border-ink-muted/55 hover:border-ink-secondary"
+        }`}
+        title={row.checked ? "标记为未完成" : "标记为已完成"}
+      >
+        {row.checked && (
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </button>
+      <AutoGrowTextarea
+        innerRef={(el) => setItemRef(row.id, el)}
+        value={row.text}
+        onChange={(v) => updateText(row.id, v)}
+        onFocus={() => setFocusedId(row.id)}
+        onBlur={(e) => {
+          setFocusedId(null);
+          const next = e.relatedTarget as Node | null;
+          if (next && rootRef.current && rootRef.current.contains(next)) return;
+          handleBlur();
+        }}
+        onKeyDown={(e) => handleKeyDown(e, row.id)}
+        onPaste={(e) => handleRowPaste(e, row.id)}
+        placeholder={focusedId === row.id ? "" : "新待办..."}
+        className="flex-1 min-w-0 bg-transparent border-none outline-none py-0.5 text-edit-body [overflow-wrap:anywhere] placeholder:text-ink-muted/45"
+        minHeight={20}
+      />
+      {deleteButton(row)}
+    </div>
+  );
+
+  const renderHeadingRow = (row: ChecklistItem) => (
+    <div
+      key={row.id}
+      className="relative flex items-center gap-3 group"
+      onDragOver={(e) => handleDragOver(e, row.id)}
+      onDrop={(e) => handleDrop(e, row.id)}
+    >
+      {dropIndicator(row)}
+      {dragHandle(row)}
+      <div className="flex-1 min-w-0 pl-1.5 border-l-2 border-ink-muted/20">
+        <AutoGrowTextarea
+          innerRef={(el) => setItemRef(row.id, el)}
+          value={row.text}
+          onChange={(v) => updateText(row.id, v)}
+          onFocus={() => setFocusedId(row.id)}
+          onBlur={(e) => {
+            setFocusedId(null);
+            const next = e.relatedTarget as Node | null;
+            if (next && rootRef.current && rootRef.current.contains(next)) return;
+            handleBlur();
+          }}
+          onKeyDown={(e) => handleKeyDown(e, row.id)}
+          onPaste={(e) => handleRowPaste(e, row.id)}
+          placeholder={focusedId === row.id ? "" : "小标题"}
+          className="w-full bg-transparent border-none outline-none py-0.5 text-xs font-semibold tracking-wide text-ink-muted/80 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
+          minHeight={18}
+        />
+      </div>
+      {deleteButton(row)}
+    </div>
+  );
+
   return (
-    <div ref={rootRef} className="space-y-5" onPaste={handleContainerPaste}>
-      {sortedGroups.map((g) => {
-        const incomplete = groupIncomplete(g.id);
-        const completed = groupCompleted(g.id);
-        const isSingle = sortedGroups.length <= 1;
-        return (
-          <div key={g.id} className="group/gblock">
-            {/* Group title - only shown when multiple groups exist */}
-            {!isSingle && (
-              <div className="flex items-center gap-2 mb-1">
-                <input
-                  ref={(el) => setGroupTitleRef(g.id, el)}
-                  value={g.title}
-                  onChange={(e) => handleGroupTitleChange(g.id, e.target.value)}
-                  placeholder="分组"
-                  className="flex-1 min-w-0 bg-transparent border-none outline-none text-edit-body font-semibold text-ink placeholder:text-ink-muted/40 py-0.5"
-                />
-              </div>
-            )}
+    <div ref={rootRef} onPaste={handleContainerPaste}>
+      {active.map((row, idx) => (
+        <Fragment key={row.id}>
+          {insertDivider(idx, `div-${idx}-top`)}
+          {row.kind === "heading"
+            ? renderHeadingRow(row)
+            : renderTodoRow(row, true)}
+        </Fragment>
+      ))}
+      {insertDivider(active.length, "div-end")}
 
-            {/* Incomplete items */}
-            {incomplete.map((item) => renderItem(item))}
+      {/* Add actions */}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          onClick={addTodoAtEnd}
+          className="flex items-center gap-1.5 py-1 px-1 text-list-meta text-ink-muted hover:text-primary transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          添加待办
+        </button>
+        <button
+          onClick={addHeadingAtEnd}
+          className="flex items-center gap-1.5 py-1 px-1 text-list-meta text-ink-muted hover:text-primary transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          添加小标题
+        </button>
+      </div>
 
-            {/* Add todo - weak entry */}
-            <button
-              onClick={() => addItemToGroup(g.id)}
-              className="flex items-center gap-1.5 mt-1 py-1 px-1 text-list-meta text-ink-muted hover:text-primary transition-colors"
+      {/* Unified completed section */}
+      {completed.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border-light/60">
+          <button
+            onClick={() => setCompletedCollapsed((v) => !v)}
+            className="flex items-center gap-1 text-list-meta text-ink-muted hover:text-ink transition-colors"
+            title={completedCollapsed ? "展开已完成" : "收起已完成"}
+          >
+            <svg
+              className={`w-3 h-3 transition-transform ${
+                completedCollapsed ? "-rotate-90" : ""
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              添加待办
-            </button>
-
-            {/* Completed section */}
-            {completed.length > 0 && (
-              <div className="mt-3">
-                <button
-                  onClick={() => handleToggleCollapse(g.id)}
-                  className="flex items-center gap-1 text-list-meta text-ink-muted hover:text-ink transition-colors"
-                  title={g.collapsedCompleted ? "展开已完成" : "收起已完成"}
-                >
-                  <svg
-                    className={`w-3 h-3 transition-transform ${g.collapsedCompleted ? "-rotate-90" : ""}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                  已完成 {completed.length}
-                </button>
-                {!g.collapsedCompleted && (
-                  <div className="mt-1.5 space-y-1.5">
-                    {completed.map((item) => renderItem(item))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+            已完成 {completed.length}
+          </button>
+          {!completedCollapsed && (
+            <div className="mt-1.5 space-y-1.5">
+              {completed.map((row) => renderTodoRow(row, false))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

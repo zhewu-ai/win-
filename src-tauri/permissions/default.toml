@@ -1,0 +1,22 @@
+[default]
+description = "默认权限：允许桌面壳自定义命令"
+permissions = [
+  "allow-open-floating-note",
+  "allow-toggle-always-on-top",
+  "allow-get-always-on-top",
+]
+
+[[permission]]
+identifier = "allow-open-floating-note"
+description = "允许打开悬浮窗"
+commands = { allow = ["open_floating_note"] }
+
+[[permission]]
+identifier = "allow-toggle-always-on-top"
+description = "允许切换窗口置顶"
+commands = { allow = ["toggle_always_on_top"] }
+
+[[permission]]
+identifier = "allow-get-always-on-top"
+description = "允许读取窗口置顶状态"
+commands = { allow = ["get_always_on_top"] }

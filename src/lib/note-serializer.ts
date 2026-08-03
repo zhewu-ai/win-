@@ -32,30 +32,45 @@ export function parseTodoLine(line: string): { text: string; checked: boolean } 
   return { text: text.trim(), checked };
 }
 
-/** Converts plain text content into a flat checklist (single default group). */
+/**
+ * Parses a checklist line into a row. A line starting with "# " becomes a
+ * lightweight heading row; everything else is a todo (with markers stripped).
+ */
+export function parseChecklistLine(line: string): {
+  kind: "todo" | "heading";
+  text: string;
+  checked: boolean;
+} {
+  const trimmed = line.trim();
+  if (trimmed.startsWith("# ")) {
+    return { kind: "heading", text: trimmed.slice(2).trim(), checked: false };
+  }
+  const { text, checked } = parseTodoLine(line);
+  return { kind: "todo", text, checked };
+}
+
+/** Converts plain text content into a flat checklist (headings via "# " lines). */
 export function textToChecklist(content: string): {
   items: ChecklistItem[];
   groups: ChecklistGroup[];
 } {
   const now = new Date().toISOString();
-  const groups: ChecklistGroup[] = [
-    { id: "default", title: "待办", sortOrder: 0, collapsedCompleted: true },
-  ];
   const items: ChecklistItem[] = [];
   let order = 0;
   let completedMode = false;
 
   const makeItem = (
+    kind: "todo" | "heading",
     text: string,
     completed: boolean
   ): ChecklistItem => ({
     id: generateId(),
+    kind,
     text,
     checked: completed,
     sortOrder: order++,
     createdAt: now,
     updatedAt: now,
-    groupId: groups[0].id,
     completedAt: completed ? now : null,
   });
 
@@ -66,58 +81,54 @@ export function textToChecklist(content: string): {
       completedMode = true;
       continue;
     }
-    const parsed = parseTodoLine(line);
+    const parsed = parseChecklistLine(line);
     if (parsed.text.length === 0) continue;
-    items.push(makeItem(parsed.text, parsed.checked || completedMode));
+    if (parsed.kind === "heading") {
+      items.push(makeItem("heading", parsed.text, false));
+      continue;
+    }
+    items.push(makeItem("todo", parsed.text, parsed.checked || completedMode));
   }
 
   if (items.length === 0) {
     items.push({
       id: generateId(),
+      kind: "todo",
       text: "",
       checked: false,
       sortOrder: 0,
       createdAt: now,
       updatedAt: now,
-      groupId: groups[0].id,
     });
   }
 
-  return { items, groups };
+  return { items, groups: [] };
 }
 
-/** Serializes checklist items/groups back into clean plain text (no [ ]/[x] prefixes). */
+/** Serializes flat checklist rows back into clean plain text (headings as "# text"). */
 export function checklistToText(
   items: ChecklistItem[],
-  groups: ChecklistGroup[]
+  _groups: ChecklistGroup[]
 ): string {
-  const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
-  const visible = sortedGroups.filter((g) =>
-    items.some((i) => i.groupId === g.id)
-  );
-  const blocks: string[] = [];
-  for (const g of visible) {
-    const incomplete = items
-      .filter((i) => i.groupId === g.id && !i.checked)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((i) => i.text.trim())
-      .filter((t) => t.length > 0);
-    const completed = items
-      .filter((i) => i.groupId === g.id && i.checked)
-      .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""))
-      .map((i) => i.text.trim())
-      .filter((t) => t.length > 0);
-    const block: string[] = [];
-    if (visible.length > 1) block.push(g.title.trim() || "待办");
-    block.push(...incomplete);
-    if (completed.length > 0) {
-      block.push("");
-      block.push("已完成");
-      block.push(...completed);
-    }
-    blocks.push(block.join("\n"));
+  const rows = [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+  const active = rows.filter((r) => r.kind === "heading" || !r.checked);
+  const completed = rows
+    .filter((r) => r.kind !== "heading" && r.checked)
+    .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""));
+
+  const lines: string[] = [];
+  for (const r of active) {
+    const t = r.text.trim();
+    if (!t) continue;
+    lines.push(r.kind === "heading" ? `# ${t}` : t);
   }
-  return blocks.join("\n\n");
+  const completedTexts = completed
+    .map((i) => i.text.trim())
+    .filter((t) => t.length > 0);
+  if (completedTexts.length > 0) {
+    lines.push("", "已完成", ...completedTexts);
+  }
+  return lines.join("\n");
 }
 
 export function parseChecklistItems(value: unknown): unknown[] {
@@ -210,12 +221,13 @@ export function serializeNote(note: Record<string, unknown>) {  const rawAttachm
 }
 
 /**
- * Normalizes legacy checklist data into grouped form:
- * - empty groups -> a single default group titled "待办"
- * - items without a valid groupId -> assigned to the first group
- * - checked items without completedAt -> backfill from updatedAt/createdAt
- * Returns { items, groups, changed } where changed indicates the result
- * should be persisted.
+ * Normalizes checklist data into flat rows:
+ * - legacy grouped data (groupId + checklistGroups) is migrated to a flat list
+ *   where each group title becomes a heading row (a single default "待办" group
+ *   does not produce a heading, to keep existing single-section notes unchanged);
+ * - items already in flat form are only backfilled (kind / completedAt).
+ * Returns { items, groups, changed } — when changed, the caller should persist
+ * the flattened result (groups become empty).
  */
 export function normalizeChecklist(
   items: ChecklistItem[],
@@ -225,30 +237,93 @@ export function normalizeChecklist(
   groups: ChecklistGroup[];
   changed: boolean;
 } {
+  const now = new Date().toISOString();
   let changed = false;
-  let resultGroups: ChecklistGroup[] = groups;
-  if (groups.length === 0) {
-    resultGroups = [
-      { id: "default", title: "待办", sortOrder: 0, collapsedCompleted: true },
-    ];
-    changed = true;
-  }
-  const validGroupIds = new Set(resultGroups.map((g) => g.id));
-  const defaultGroupId = resultGroups[0].id;
-  const resultItems = items.map((item) => {
+
+  const backfill = (item: ChecklistItem): ChecklistItem => {
     let next: ChecklistItem = item;
-    if (!item.groupId || !validGroupIds.has(item.groupId)) {
-      next = { ...item, groupId: defaultGroupId };
-      changed = true;
-    }
-    if (item.checked && !item.completedAt) {
-      next = {
-        ...next,
-        completedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
-      };
-      changed = true;
+    if (item.kind !== "heading") {
+      if (item.kind !== "todo") {
+        next = { ...next, kind: "todo" };
+        changed = true;
+      }
+      if (item.checked && !item.completedAt) {
+        next = {
+          ...next,
+          completedAt: item.updatedAt || item.createdAt || now,
+        };
+        changed = true;
+      }
     }
     return next;
-  });
-  return { items: resultItems, groups: resultGroups, changed };
+  };
+
+  // Already flat (heading rows present) — nothing to migrate.
+  if (items.some((i) => i.kind === "heading")) {
+    return { items: items.map(backfill), groups: [], changed };
+  }
+
+  // Fresh flat todo-only note (e.g. the empty item created in the editor).
+  if (groups.length === 0 && !items.some((i) => i.groupId)) {
+    return { items: items.map(backfill), groups: [], changed };
+  }
+
+  // Migrate legacy grouped model -> flat rows.
+  changed = true;
+  const flat: ChecklistItem[] = [];
+  let order = 0;
+
+  const sortedGroups =
+    groups.length > 0
+      ? [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
+      : [{ id: "default", title: "待办", sortOrder: 0 }];
+  const validGroupIds = new Set(sortedGroups.map((g) => g.id));
+  const singleDefault =
+    groups.length <= 1 && sortedGroups[0].title === "待办";
+
+  const emitItem = (it: ChecklistItem) => {
+    flat.push({
+      ...it,
+      kind: "todo",
+      groupId: undefined,
+      sortOrder: order++,
+      completedAt:
+        it.checked && !it.completedAt
+          ? it.updatedAt || it.createdAt || now
+          : it.completedAt,
+    });
+  };
+
+  for (const g of sortedGroups) {
+    if (!singleDefault && g.title.trim()) {
+      flat.push({
+        id: generateId(),
+        kind: "heading",
+        text: g.title.trim(),
+        checked: false,
+        sortOrder: order++,
+        createdAt: now,
+        updatedAt: now,
+        completedAt: null,
+      });
+    }
+    const gItems = items.filter((i) => i.groupId === g.id);
+    const incomplete = gItems
+      .filter((i) => !i.checked)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const completed = gItems
+      .filter((i) => i.checked)
+      .sort((a, b) =>
+        (b.completedAt || "").localeCompare(a.completedAt || "")
+      );
+    for (const it of [...incomplete, ...completed]) emitItem(it);
+  }
+
+  // Items whose groupId is missing/invalid land after all groups, no heading.
+  const orphaned = items
+    .filter((i) => !i.groupId || !validGroupIds.has(i.groupId))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const it of orphaned) emitItem(it);
+
+  return { items: flat, groups: [], changed: true };
 }

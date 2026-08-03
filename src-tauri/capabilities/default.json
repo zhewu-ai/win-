@@ -13,6 +13,9 @@
     ]
   },
   "permissions": [
-    "core:default"
+    "core:default",
+    "allow-open-floating-note",
+    "allow-toggle-always-on-top",
+    "allow-get-always-on-top"
   ]
 }

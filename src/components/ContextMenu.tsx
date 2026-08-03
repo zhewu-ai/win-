@@ -50,10 +50,6 @@ export default function ContextMenuProvider({
 }) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ x: number; y: number }>({
-    x: 0,
-    y: 0,
-  });
 
   const close = useCallback(() => setMenu(null), []);
 
@@ -76,9 +72,13 @@ export default function ContextMenuProvider({
         hasSelection = !!sel && !sel.isCollapsed;
       }
 
+      // Compute clamped position synchronously so the menu renders once,
+      // at the final coordinates (avoids a one-frame render at the old spot).
+      const menuW = 176;
+      const menuH = MENU_ITEMS.length * 34 + 8;
       setMenu({
-        x: e.clientX,
-        y: e.clientY,
+        x: Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8)),
+        y: Math.max(8, Math.min(e.clientY, window.innerHeight - menuH - 8)),
         editable: isFormEditable(editable) ? editable : null,
         contentEditable:
           editable && !isFormEditable(editable)
@@ -165,16 +165,6 @@ export default function ContextMenuProvider({
     [menu, close]
   );
 
-  useEffect(() => {
-    if (!menu) return;
-    const menuW = 176;
-    const menuH = MENU_ITEMS.length * 34 + 8;
-    setPosition({
-      x: Math.min(menu.x, window.innerWidth - menuW - 8),
-      y: Math.min(menu.y, window.innerHeight - menuH - 8),
-    });
-  }, [menu]);
-
   return (
     <>
       {children}
@@ -183,7 +173,7 @@ export default function ContextMenuProvider({
           <div
             ref={menuRef}
             className="fixed z-[9999] min-w-[176px] rounded-card border border-border-light bg-[#2A2527] shadow-lg shadow-black/40 py-1 select-none"
-            style={{ left: position.x, top: position.y }}
+            style={{ left: menu.x, top: menu.y }}
           >
             {MENU_ITEMS.map((item) => (
               <div key={item.key}>

@@ -456,9 +456,6 @@ export default function NoteEditor({
         onKeyDown={handleKeyDown}
       >
         <div className="max-w-paper mx-auto px-[clamp(12px,4vw,48px)] pt-5 pb-12 space-y-4">
-          <div className="text-center text-[17px] leading-tight font-bold text-ink-muted mb-7">
-            {formatEditorDate(note.updatedAt)}
-          </div>
           <input
             ref={titleRef}
             type="text"
@@ -490,6 +487,11 @@ export default function NoteEditor({
             attachments={attachments}
             onAttachmentsChange={setAttachments}
           />
+
+          {/* Weak last-edited timestamp */}
+          <div className="pt-2 text-center text-xs text-ink-muted/45 select-none">
+            最后编辑于 {formatEditorDate(note.updatedAt)}
+          </div>
         </div>
       </div>
     </div>
