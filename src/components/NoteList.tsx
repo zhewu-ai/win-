@@ -335,7 +335,7 @@ export default function NoteList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg">
+    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg max-[421px]:pb-14">
       {pinned.length > 0 && (
         <div>
           <SectionHeader

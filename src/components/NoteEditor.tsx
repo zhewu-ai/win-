@@ -9,12 +9,7 @@ import ImageAttachments from "./ImageAttachments";
 import ImageUploadButton from "./ImageUploadButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
-import {
-  isTauri,
-  openFloatingNote,
-  getAlwaysOnTop,
-  toggleAlwaysOnTop,
-} from "@/lib/tauri";
+import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
 
 const DEBOUNCE_MS = 800;
 
@@ -378,28 +373,6 @@ export default function NoteEditor({
             setAttachments((prev) => [...prev, ...uploaded])
           }
         />
-
-        <button
-          onClick={() => {
-            if (isTauri()) {
-              openFloatingNote(currentNoteIdRef.current!)?.catch((e) => {
-                console.error("open_floating_note failed:", e);
-                alert(`打开悬浮窗失败：${String(e)}`);
-              });
-            } else {
-              window.open(
-                `/notes/${currentNoteIdRef.current}/floating`,
-                "_blank"
-              );
-            }
-          }}
-          className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn transition-colors"
-          title="极小模式（以悬浮窗打开当前便签）"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-          </svg>
-        </button>
 
         {isTauri() && (
           <button

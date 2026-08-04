@@ -348,60 +348,76 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
     }
   }, [items, active, completed, commit, newTodo, onChange]);
 
-  // --- HTML5 drag & drop (active rows only) ---
-  const handleDragStart = useCallback(
-    (e: React.DragEvent, id: string) => {
+  // --- Pointer-event drag & drop (active rows only) ---
+  // HTML5 DnD (draggable + dragstart/drop) is unreliable inside WebView2
+  // (Windows shell), so use pointer capture + elementFromPoint instead; this
+  // works with both mouse and touch across browser / Tauri.
+  const pointerDragRef = useRef<{ id: string } | null>(null);
+
+  const handleHandlePointerDown = useCallback(
+    (e: React.PointerEvent, id: string) => {
+      if (e.button !== 0) return;
+      pointerDragRef.current = { id };
       dragIdRef.current = id;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", id);
+      e.currentTarget.setPointerCapture(e.pointerId);
     },
     []
   );
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, id: string) => {
-      if (!dragIdRef.current) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const rect = e.currentTarget.getBoundingClientRect();
-      setDropTarget({
-        id,
-        before: e.clientY < rect.top + rect.height / 2,
-      });
-    },
-    []
-  );
+  const handleHandlePointerMove = useCallback((e: React.PointerEvent) => {
+    const drag = pointerDragRef.current;
+    if (!drag) return;
+    e.preventDefault();
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const rowEl = under?.closest?.("[data-row-id]") as HTMLElement | null;
+    const rowId = rowEl?.dataset.rowId;
+    if (!rowId) return;
+    if (rowId === drag.id) {
+      setDropTarget((d) => (d && d.id === drag.id ? null : d));
+      return;
+    }
+    const rect = rowEl.getBoundingClientRect();
+    setDropTarget({
+      id: rowId,
+      before: e.clientY < rect.top + rect.height / 2,
+    });
+  }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent, id: string) => {
-      e.preventDefault();
-      const dragId = dragIdRef.current;
+  const handleHandlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const drag = pointerDragRef.current;
+      if (!drag) return;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* capture may already be released */
+      }
+      const target = dropTarget;
+      pointerDragRef.current = null;
+      dragIdRef.current = null;
       setDropTarget(null);
-      if (!dragId) return;
-      const from = active.findIndex((r) => r.id === dragId);
+      if (!target || target.id === drag.id) return;
+      const from = active.findIndex((r) => r.id === drag.id);
       if (from < 0) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const before = e.clientY < rect.top + rect.height / 2;
-
       const list = [...active];
       const [moved] = list.splice(from, 1);
-      let to = list.findIndex((r) => r.id === id);
+      let to = list.findIndex((r) => r.id === target.id);
       if (to < 0) to = list.length;
-      if (!before) to += 1;
+      if (!target.before) to += 1;
       list.splice(Math.max(0, to), 0, moved);
       commit(list, completed);
-      dragIdRef.current = null;
     },
-    [active, completed, commit]
+    [active, completed, commit, dropTarget]
   );
 
-  const handleDragEnd = useCallback(() => {
+  const handleHandlePointerCancel = useCallback(() => {
+    pointerDragRef.current = null;
     dragIdRef.current = null;
     setDropTarget(null);
   }, []);
 
   const insertDivider = (atIndex: number, key: string) => (
-    <div key={key} className="relative group/ins h-2">
+    <div key={key} className="relative group/ins h-1">
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-transparent group-hover/ins:bg-[#E3C24A]/40 transition-colors" />
       <button
         onClick={() => insertHeadingAt(atIndex)}
@@ -417,10 +433,11 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
 
   const dragHandle = (row: ChecklistItem) => (
     <div
-      draggable
-      onDragStart={(e) => handleDragStart(e, row.id)}
-      onDragEnd={handleDragEnd}
-      className="flex-shrink-0 mt-[7px] w-4 h-4 text-ink-muted/30 hover:text-ink-muted/70 cursor-grab active:cursor-grabbing touch-none select-none"
+      onPointerDown={(e) => handleHandlePointerDown(e, row.id)}
+      onPointerMove={handleHandlePointerMove}
+      onPointerUp={handleHandlePointerUp}
+      onPointerCancel={handleHandlePointerCancel}
+      className="flex-shrink-0 mt-0.5 -ml-1 w-6 h-6 flex items-center justify-center text-ink-muted/30 hover:text-ink-muted/70 cursor-grab active:cursor-grabbing touch-none select-none"
       title="拖动排序"
     >
       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -460,15 +477,14 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
   const renderTodoRow = (row: ChecklistItem, draggable: boolean) => (
     <div
       key={row.id}
-      className="relative flex items-start gap-3 group"
-      onDragOver={draggable ? (e) => handleDragOver(e, row.id) : undefined}
-      onDrop={draggable ? (e) => handleDrop(e, row.id) : undefined}
+      data-row-id={row.id}
+      className="relative flex items-start gap-2.5 group"
     >
       {dropIndicator(row)}
       {draggable && dragHandle(row)}
       <button
         onClick={() => handleToggle(row.id)}
-        className={`flex-shrink-0 mt-[7px] w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
+        className={`flex-shrink-0 mt-0.5 w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
           row.checked
             ? "bg-[#E3C24A] border-[#E3C24A] text-[#1A1A1A]"
             : "border-ink-muted/55 hover:border-ink-secondary"
@@ -495,7 +511,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
         onKeyDown={(e) => handleKeyDown(e, row.id)}
         onPaste={(e) => handleRowPaste(e, row.id)}
         placeholder={focusedId === row.id ? "" : "新待办..."}
-        className="flex-1 min-w-0 bg-transparent border-none outline-none py-0.5 text-edit-body [overflow-wrap:anywhere] placeholder:text-ink-muted/45"
+        className="flex-1 min-w-0 bg-transparent border-none outline-none py-0 text-edit-body leading-[1.5] [overflow-wrap:anywhere] placeholder:text-ink-muted/45"
         minHeight={20}
       />
       {deleteButton(row)}
@@ -505,9 +521,8 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
   const renderHeadingRow = (row: ChecklistItem) => (
     <div
       key={row.id}
-      className="relative flex items-center gap-3 group"
-      onDragOver={(e) => handleDragOver(e, row.id)}
-      onDrop={(e) => handleDrop(e, row.id)}
+      data-row-id={row.id}
+      className="relative flex items-center gap-2.5 group"
     >
       {dropIndicator(row)}
       {dragHandle(row)}
@@ -526,7 +541,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
           onKeyDown={(e) => handleKeyDown(e, row.id)}
           onPaste={(e) => handleRowPaste(e, row.id)}
           placeholder={focusedId === row.id ? "" : "小标题"}
-          className="w-full bg-transparent border-none outline-none py-0.5 text-xs font-semibold tracking-wide text-ink-muted/80 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
+          className="w-full bg-transparent border-none outline-none py-0 text-xs font-semibold tracking-wide text-ink-muted/80 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
           minHeight={18}
         />
       </div>
@@ -570,7 +585,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
 
       {/* Unified completed section */}
       {completed.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border-light/60">
+        <div className="mt-2 pt-2 border-t border-border-light/60">
           <button
             onClick={() => setCompletedCollapsed((v) => !v)}
             className="flex items-center gap-1 text-list-meta text-ink-muted hover:text-ink transition-colors"
@@ -590,7 +605,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
             已完成 {completed.length}
           </button>
           {!completedCollapsed && (
-            <div className="mt-1.5 space-y-1.5">
+            <div className="mt-1 space-y-1">
               {completed.map((row) => renderTodoRow(row, false))}
             </div>
           )}

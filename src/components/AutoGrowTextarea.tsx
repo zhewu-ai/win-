@@ -52,6 +52,7 @@ export default function AutoGrowTextarea({
   return (
     <textarea
       ref={setRefs}
+      rows={1}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
