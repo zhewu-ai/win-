@@ -526,7 +526,8 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
     >
       {dropIndicator(row)}
       {dragHandle(row)}
-      <div className="flex-1 min-w-0 pl-1.5 border-l-2 border-ink-muted/20">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <div className="flex-1 h-px bg-ink-muted/15" />
         <AutoGrowTextarea
           innerRef={(el) => setItemRef(row.id, el)}
           value={row.text}
@@ -541,9 +542,10 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
           onKeyDown={(e) => handleKeyDown(e, row.id)}
           onPaste={(e) => handleRowPaste(e, row.id)}
           placeholder={focusedId === row.id ? "" : "小标题"}
-          className="w-full bg-transparent border-none outline-none py-0 text-xs font-semibold tracking-wide text-ink-muted/80 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
+          className="flex-[1.5] min-w-0 bg-transparent border-none outline-none py-0 text-xs font-semibold tracking-wide text-center text-ink-muted/85 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
           minHeight={18}
         />
+        <div className="flex-1 h-px bg-ink-muted/15" />
       </div>
       {deleteButton(row)}
     </div>

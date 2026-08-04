@@ -428,41 +428,44 @@ export default function NoteEditor({
         className="flex-1 overflow-y-auto scrollbar-thin"
         onKeyDown={handleKeyDown}
       >
-        <div className="max-w-paper mx-auto px-[clamp(12px,4vw,48px)] pt-5 pb-12 space-y-4">
-          <input
-            ref={titleRef}
-            type="text"
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="无标题便签"
-            className="w-full text-edit-title text-ink border-none outline-none bg-transparent placeholder:text-ink-muted/60"
-          />
-
-          {mode === "text" ? (
-            <AutoGrowTextarea
-              value={content}
-              onChange={handleContentChange}
-              placeholder="开始记录..."
-              className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
-              minHeight={200}
+        <div className="min-h-full flex flex-col">
+          <div className="max-w-paper mx-auto w-full px-[clamp(12px,4vw,48px)] pt-5 pb-8 space-y-4 flex-1">
+            <input
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="无标题便签"
+              className="w-full text-edit-title text-ink border-none outline-none bg-transparent placeholder:text-ink-muted/60"
             />
-          ) : (
-            <ChecklistEditor
-              items={checklistItems}
-              groups={checklistGroups}
-              onChange={handleChecklistChange}
+
+            {mode === "text" ? (
+              <AutoGrowTextarea
+                value={content}
+                onChange={handleContentChange}
+                placeholder="开始记录..."
+                className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
+                minHeight={200}
+              />
+            ) : (
+              <ChecklistEditor
+                items={checklistItems}
+                groups={checklistGroups}
+                onChange={handleChecklistChange}
+              />
+            )}
+
+            {/* Image attachments */}
+            <ImageAttachments
+              noteId={currentNoteIdRef.current || ""}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
             />
-          )}
+          </div>
 
-          {/* Image attachments */}
-          <ImageAttachments
-            noteId={currentNoteIdRef.current || ""}
-            attachments={attachments}
-            onAttachmentsChange={setAttachments}
-          />
-
-          {/* Weak last-edited timestamp */}
-          <div className="pt-2 text-center text-xs text-ink-muted/45 select-none">
+          {/* Bottom metadata: pinned to editor bottom when content is short,
+              otherwise follows content and is visible after scrolling */}
+          <div className="max-w-paper mx-auto w-full px-[clamp(12px,4vw,48px)] pt-2 pb-4 text-center text-xs text-ink-muted/45 select-none">
             最后编辑于 {formatEditorDate(note.updatedAt)}
           </div>
         </div>

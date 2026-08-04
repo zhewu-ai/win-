@@ -110,7 +110,7 @@ export default function TopBar({
   );
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-border-light bg-toolbar-bg z-10 min-h-[56px]">
+    <div className={`flex items-center gap-2 px-4 py-2 border-b border-border-light bg-toolbar-bg z-10 min-h-[56px] ${showEditor ? "max-[420px]:hidden" : ""}`}>
       {showBack && (
         <button
           onClick={onBack}
