@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import { useNotes } from "@/hooks/useNotes";
+import { useNarrowMode } from "@/hooks/useNarrowMode";
 import type { Note } from "@/types";
 
 const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
@@ -12,6 +13,8 @@ export default function HomePage() {
   const { notes, loading, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
     useNotes(false);
 
+  // 极窄窗口（<520px）进入单栏模式；桌面窗口 520px 以上始终双栏，迟滞防横跳
+  const isNarrow = useNarrowMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -100,11 +103,15 @@ export default function HomePage() {
   return (
     <div className="h-screen flex flex-col bg-page-bg">
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - hidden on mobile when editor is open; collapsible on wide */}
+        {/* 侧边栏：
+            窄屏单栏 → 编辑打开时隐藏，否则全宽显示；
+            宽屏双栏 → 仅随用户折叠状态显示/隐藏。 */}
         <div
-          className={`${showEditor ? "hidden" : "flex"} ${
-            sidebarCollapsed ? "md:hidden" : "md:flex"
-          } w-full md:w-[350px] flex-shrink-0 border-r border-black flex-col bg-sidebar-bg`}
+          className={`${
+            isNarrow ? (!showEditor ? "flex" : "hidden") : sidebarCollapsed ? "hidden" : "flex"
+          } ${
+            isNarrow ? "w-full" : "w-[350px]"
+          } flex-shrink-0 border-r border-black flex-col bg-sidebar-bg`}
         >
           <Sidebar
             notes={notes}
@@ -114,15 +121,15 @@ export default function HomePage() {
             searchQuery={searchQuery}
             onSearchChange={handleSearchChange}
             onCreateNote={handleCreate}
-            onCollapse={toggleSidebar}
+            onCollapse={isNarrow ? undefined : toggleSidebar}
           />
         </div>
 
-        {/* Collapsed expand strip - wide only */}
-        {sidebarCollapsed && (
+        {/* 折叠后的展开条 - 仅宽屏双栏 */}
+        {!isNarrow && sidebarCollapsed && (
           <button
             onClick={toggleSidebar}
-            className="hidden md:flex w-7 flex-shrink-0 items-center justify-center bg-sidebar-bg border-r border-black text-ink-muted hover:text-ink hover:bg-white/[0.05] transition-colors"
+            className="w-7 flex-shrink-0 items-center justify-center bg-sidebar-bg border-r border-black text-ink-muted hover:text-ink hover:bg-white/[0.05] transition-colors flex"
             title="展开侧边栏"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -131,9 +138,11 @@ export default function HomePage() {
           </button>
         )}
 
-        {/* Editor */}
+        {/* 编辑器：窄屏单栏时编辑打开才显示；宽屏始终显示 */}
         <div
-          className={`${!showEditor && !selectedNote ? "hidden" : "flex"} md:flex flex-1 flex-col`}
+          className={`${
+            isNarrow && !showEditor ? "hidden" : "flex"
+          } flex-1 flex-col`}
         >
           <NoteEditor
             note={selectedNote}
@@ -141,7 +150,7 @@ export default function HomePage() {
             onDelete={handleDelete}
             onArchive={handleArchive}
             onNewNote={handleCreate}
-            showBackButton={true}
+            showBackButton={isNarrow}
             onBack={handleBack}
           />
         </div>

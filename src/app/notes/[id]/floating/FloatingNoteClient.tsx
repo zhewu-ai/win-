@@ -341,7 +341,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
       </div>
 
       {/* Editor body */}
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin space-y-3 [scrollbar-gutter:stable]">
         <input
           type="text"
           value={title}

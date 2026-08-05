@@ -176,7 +176,7 @@ export default function NoteList({
 }: Props) {
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin [scrollbar-gutter:stable]">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
@@ -331,7 +331,7 @@ export default function NoteList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg">
+    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg [scrollbar-gutter:stable]">
       {pinned.length > 0 && (
         <div>
           <SectionHeader

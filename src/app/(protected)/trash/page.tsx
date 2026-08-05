@@ -139,7 +139,7 @@ export default function TrashPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]">
         {loading ? (
           <div className="p-4 space-y-2">
             {[1, 2, 3].map((i) => (

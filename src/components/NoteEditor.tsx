@@ -337,12 +337,13 @@ export default function NoteEditor({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-panel-bg">
-      {/* Editor toolbar - always single line; low-freq ops live in "more" menu */}
-      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4 max-[360px]:gap-0.5 max-[360px]:px-1.5">
+      {/* Editor toolbar - always single line; low-freq ops live in "more" menu.
+          整体断点：640px 以上展开（模式文字/色球/保存文案），以下整组变图标。 */}
+      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4">
         {showBackButton && (
           <button
             onClick={onBack}
-            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn md:hidden transition-colors"
+            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn transition-colors"
             title="返回列表"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -378,14 +379,17 @@ export default function NoteEditor({
           )}
         </button>
 
-        <div className="w-px h-5 bg-border-light mx-1 max-[360px]:hidden" />
+        <div className="w-px h-5 bg-border-light mx-1" />
 
         {/* Color picker inline */}
         <ColorPicker selected={color} onChange={handleColorChange} />
 
         <div className="flex-1" />
 
-        <SaveStatus status={saveStatus} onRetry={handleRetry} />
+        {/* 保存状态预留固定宽度，状态变化不推动右侧图标横移 */}
+        <div className="w-14 flex items-center justify-end flex-shrink-0">
+          <SaveStatus status={saveStatus} onRetry={handleRetry} />
+        </div>
 
         <ImageUploadButton
           noteId={currentNoteIdRef.current || ""}
@@ -476,7 +480,7 @@ export default function NoteEditor({
 
       {/* Editor body */}
       <div
-        className="flex-1 overflow-y-auto scrollbar-thin"
+        className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]"
         onKeyDown={handleKeyDown}
       >
         <div className="min-h-full flex flex-col">
