@@ -511,7 +511,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
         onKeyDown={(e) => handleKeyDown(e, row.id)}
         onPaste={(e) => handleRowPaste(e, row.id)}
         placeholder={focusedId === row.id ? "" : "新待办..."}
-        className="flex-1 min-w-0 bg-transparent border-none outline-none py-0 text-edit-body leading-[1.5] [overflow-wrap:anywhere] placeholder:text-ink-muted/45"
+        className="flex-1 min-w-0 w-0 bg-transparent border-none outline-none py-0 text-edit-body leading-[1.5] [overflow-wrap:anywhere] placeholder:text-ink-muted/45"
         minHeight={20}
       />
       {deleteButton(row)}
@@ -542,7 +542,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
           onKeyDown={(e) => handleKeyDown(e, row.id)}
           onPaste={(e) => handleRowPaste(e, row.id)}
           placeholder={focusedId === row.id ? "" : "小标题"}
-          className="flex-[1.5] min-w-0 bg-transparent border-none outline-none py-0 text-xs font-semibold tracking-wide text-center text-ink-muted/85 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
+          className="flex-[1.5] min-w-0 w-0 bg-transparent border-none outline-none py-0 text-xs font-semibold tracking-wide text-center text-ink-muted/85 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
           minHeight={18}
         />
         <div className="flex-1 h-px bg-ink-muted/15" />

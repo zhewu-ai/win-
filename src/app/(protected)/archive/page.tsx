@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { Note } from "@/types";
 import ImagePreview from "@/components/ImagePreview";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { useNarrowMode } from "@/hooks/useNarrowMode";
+import { useLayoutMode } from "@/hooks/useLayoutMode";
 import type { Attachment } from "@/types";
 
 const ACCENT: Record<string, string> = {
@@ -26,8 +26,9 @@ const SELECTED: Record<string, string> = {
 
 export default function ArchivePage() {
   const router = useRouter();
-  // 极窄窗口（<520px）单栏：列表 ↔ 详情切换；宽屏始终双栏
-  const isNarrow = useNarrowMode();
+  // 整体布局模式：<720 单栏（列表↔详情切换）；≥720 双栏（舒展/紧凑）
+  const mode = useLayoutMode();
+  const single = mode === "single";
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -151,7 +152,7 @@ export default function ArchivePage() {
       {/* Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* List */}
-        <div className={`${isNarrow && selectedNote ? "hidden" : "flex"} ${isNarrow ? "w-full" : "w-80"} flex-col border-r border-border-light bg-toolbar-bg overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]`}>
+        <div className={`${single && selectedNote ? "hidden" : "flex"} ${single ? "w-full" : mode === "spacious" ? "w-80" : "w-72"} flex-col border-r border-border-light bg-toolbar-bg overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]`}>
           {loading ? (
             <div className="p-3 space-y-2">
               {[1, 2, 3].map((i) => (
@@ -193,8 +194,8 @@ export default function ArchivePage() {
           )}
         </div>
 
-        {/* Detail panel - desktop (wide mode) */}
-        <div className={`${isNarrow ? "hidden" : "flex"} flex-1 flex-col bg-toolbar-bg`}>
+        {/* Detail panel - desktop (dual mode) */}
+        <div className={`${single ? "hidden" : "flex"} flex-1 flex-col bg-toolbar-bg`}>
           {selectedNote ? (
             <div className="flex-1 p-6 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]">
               <div className="max-w-paper mx-auto">
@@ -272,9 +273,9 @@ export default function ArchivePage() {
           )}
         </div>
 
-        {/* Mobile detail - narrow mode single-column */}
+        {/* Mobile detail - single-column mode */}
         {selectedNote && (
-          <div className={`${isNarrow ? "flex" : "hidden"} flex-1 flex-col bg-toolbar-bg p-4 overflow-y-auto [scrollbar-gutter:stable]`}>
+          <div className={`${single ? "flex" : "hidden"} flex-1 flex-col bg-toolbar-bg p-4 overflow-y-auto [scrollbar-gutter:stable]`}>
             <div className="flex items-start gap-2 mb-4">
               <div
                 className={`w-3 h-3 rounded-full mt-2 flex-shrink-0 ${ACCENT[selectedNote.color] || "bg-ink-muted/30"}`}

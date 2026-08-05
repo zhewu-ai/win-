@@ -53,4 +53,35 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.2);
   }
+
+  /* 工具栏条目切换时的短过渡：元素由 hidden → 可见时重新播放淡入 */
+  .toolbar-item {
+    animation: toolbar-pop 120ms ease-out;
+  }
+
+  /* 下拉菜单 / 弹层出现动画 */
+  .menu-pop {
+    transform-origin: top right;
+    animation: menu-pop 120ms ease-out;
+  }
+}
+
+@keyframes toolbar-pop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }

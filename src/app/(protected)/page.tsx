@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import { useNotes } from "@/hooks/useNotes";
-import { useNarrowMode } from "@/hooks/useNarrowMode";
+import { useLayoutMode } from "@/hooks/useLayoutMode";
 import type { Note } from "@/types";
 
 const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
@@ -13,8 +13,8 @@ export default function HomePage() {
   const { notes, loading, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
     useNotes(false);
 
-  // 极窄窗口（<520px）进入单栏模式；桌面窗口 520px 以上始终双栏，迟滞防横跳
-  const isNarrow = useNarrowMode();
+  // 整体布局模式：≥900 舒展 / 720-899 紧凑 / <720 单栏（工具栏再按编辑区实际宽度细分）
+  const mode = useLayoutMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -104,14 +104,18 @@ export default function HomePage() {
     <div className="h-screen flex flex-col bg-page-bg">
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
-            窄屏单栏 → 编辑打开时隐藏，否则全宽显示；
-            宽屏双栏 → 仅随用户折叠状态显示/隐藏。 */}
+            单栏 → 编辑打开时隐藏，否则全宽显示；
+            双栏 → 舒展 350px / 紧凑 280px，仅随用户折叠状态隐藏（w-0+opacity 过渡动画）。 */}
         <div
           className={`${
-            isNarrow ? (!showEditor ? "flex" : "hidden") : sidebarCollapsed ? "hidden" : "flex"
-          } ${
-            isNarrow ? "w-full" : "w-[350px]"
-          } flex-shrink-0 border-r border-black flex-col bg-sidebar-bg`}
+            mode === "single"
+              ? !showEditor
+                ? "flex w-full border-r border-black"
+                : "hidden"
+              : sidebarCollapsed
+                ? "flex w-0 opacity-0 overflow-hidden pointer-events-none"
+                : `flex ${mode === "spacious" ? "w-[350px]" : "w-[280px]"} border-r border-black`
+          } flex-shrink-0 flex-col bg-sidebar-bg transition-[width,opacity] duration-150 ease-out`}
         >
           <Sidebar
             notes={notes}
@@ -121,12 +125,12 @@ export default function HomePage() {
             searchQuery={searchQuery}
             onSearchChange={handleSearchChange}
             onCreateNote={handleCreate}
-            onCollapse={isNarrow ? undefined : toggleSidebar}
+            onCollapse={mode === "single" ? undefined : toggleSidebar}
           />
         </div>
 
-        {/* 折叠后的展开条 - 仅宽屏双栏 */}
-        {!isNarrow && sidebarCollapsed && (
+        {/* 折叠后的展开条 - 仅双栏 */}
+        {mode !== "single" && sidebarCollapsed && (
           <button
             onClick={toggleSidebar}
             className="w-7 flex-shrink-0 items-center justify-center bg-sidebar-bg border-r border-black text-ink-muted hover:text-ink hover:bg-white/[0.05] transition-colors flex"
@@ -138,10 +142,10 @@ export default function HomePage() {
           </button>
         )}
 
-        {/* 编辑器：窄屏单栏时编辑打开才显示；宽屏始终显示 */}
+        {/* 编辑器：单栏时编辑打开才显示；双栏始终显示 */}
         <div
           className={`${
-            isNarrow && !showEditor ? "hidden" : "flex"
+            mode === "single" && !showEditor ? "hidden" : "flex"
           } flex-1 flex-col`}
         >
           <NoteEditor
@@ -150,7 +154,7 @@ export default function HomePage() {
             onDelete={handleDelete}
             onArchive={handleArchive}
             onNewNote={handleCreate}
-            showBackButton={isNarrow}
+            showBackButton={mode === "single"}
             onBack={handleBack}
           />
         </div>

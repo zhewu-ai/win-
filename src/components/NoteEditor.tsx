@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import type { Note, NoteColor, ChecklistItem, ChecklistGroup, Attachment } from "@/types";
 import ColorPicker from "./ColorPicker";
 import SaveStatus from "./SaveStatus";
@@ -64,6 +64,9 @@ export default function NoteEditor({
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // 工具栏按编辑区实际容器宽度分三档（≥520 舒展 / 360-520 紧凑 / <360 极简）
+  const [toolbarMode, setToolbarMode] = useState<"spacious" | "compact" | "minimal">("compact");
+  const editorRootRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const currentNoteIdRef = useRef<string | null>(null);
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
@@ -225,6 +228,23 @@ export default function NoteEditor({
     };
   }, []);
 
+  // 用 ResizeObserver 跟踪编辑区真实宽度 → 工具栏三态；首帧前校正避免错位闪动
+  useLayoutEffect(() => {
+    if (!note) return;
+    const el = editorRootRef.current;
+    if (!el) return;
+    const update = (w: number) =>
+      setToolbarMode(w >= 520 ? "spacious" : w >= 360 ? "compact" : "minimal");
+    update(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) update(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!note]);
+
   const handleTitleChange = (value: string) => {
     setTitle(value);
     debouncedSave({ title: value });
@@ -336,7 +356,7 @@ export default function NoteEditor({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-panel-bg">
+    <div ref={editorRootRef} className="flex-1 flex flex-col h-full bg-panel-bg">
       {/* Editor toolbar - always single line; low-freq ops live in "more" menu.
           整体断点：640px 以上展开（模式文字/色球/保存文案），以下整组变图标。 */}
       <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4">
@@ -367,29 +387,37 @@ export default function NoteEditor({
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span className="hidden sm:inline">便签</span>
+              <span className={`${toolbarMode === "spacious" ? "inline" : "hidden"} toolbar-item`}>便签</span>
             </>
           ) : (
             <>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
-              <span className="hidden sm:inline">待办</span>
+              <span className={`${toolbarMode === "spacious" ? "inline" : "hidden"} toolbar-item`}>待办</span>
             </>
           )}
         </button>
 
-        <div className="w-px h-5 bg-border-light mx-1" />
+        {toolbarMode !== "minimal" && (
+          <div className="w-px h-5 bg-border-light mx-1" />
+        )}
 
-        {/* Color picker inline */}
-        <ColorPicker selected={color} onChange={handleColorChange} />
+        {/* Color picker - spacious 显示色球 / compact 显示颜色按钮 / minimal 收进更多菜单 */}
+        <ColorPicker selected={color} onChange={handleColorChange} mode={toolbarMode} />
 
         <div className="flex-1" />
 
-        {/* 保存状态预留固定宽度，状态变化不推动右侧图标横移 */}
-        <div className="w-14 flex items-center justify-end flex-shrink-0">
-          <SaveStatus status={saveStatus} onRetry={handleRetry} />
-        </div>
+        {/* 保存状态预留固定宽度，状态变化不推动右侧图标横移（minimal 时省略） */}
+        {toolbarMode !== "minimal" && (
+          <div className="w-14 flex items-center justify-end flex-shrink-0 toolbar-item">
+            <SaveStatus
+              status={saveStatus}
+              onRetry={handleRetry}
+              showText={toolbarMode === "spacious"}
+            />
+          </div>
+        )}
 
         <ImageUploadButton
           noteId={currentNoteIdRef.current || ""}
@@ -429,7 +457,39 @@ export default function NoteEditor({
             </svg>
           </button>
           {moreOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20">
+            <div className="absolute right-0 top-full mt-1.5 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 menu-pop">
+              {toolbarMode === "minimal" && (
+                <>
+                  <div className="flex items-center gap-2 px-3.5 pt-2 pb-2.5">
+                    {(
+                      [
+                        { value: "yellow", bg: "bg-accent-yellow" },
+                        { value: "blue", bg: "bg-accent-blue" },
+                        { value: "green", bg: "bg-accent-green" },
+                        { value: "pink", bg: "bg-accent-pink" },
+                        { value: "gray", bg: "bg-accent-gray" },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.value}
+                        type="button"
+                        onClick={() => {
+                          setMoreOpen(false);
+                          handleColorChange(c.value);
+                        }}
+                        className={`w-5 h-5 ${c.bg} rounded-full transition-transform ${
+                          color === c.value
+                            ? "ring-2 ring-white/45 ring-offset-2 ring-offset-toolbar-bg scale-110"
+                            : "hover:scale-110"
+                        }`}
+                        title={c.value}
+                        aria-label={c.value}
+                      />
+                    ))}
+                  </div>
+                  <div className="my-1 h-px bg-border-light/60" />
+                </>
+              )}
               <button
                 onClick={() => {
                   setMoreOpen(false);
