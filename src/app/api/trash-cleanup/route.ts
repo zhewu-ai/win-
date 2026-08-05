@@ -5,14 +5,15 @@ export const dynamic = "force-dynamic";
 
 /**
  * Internal maintenance endpoint for the daily trash cleanup timer.
- * The app listens on 127.0.0.1 only, so a request with no X-Forwarded-For
- * header is local; when proxied through Caddy the header is set, and only
- * loopback is accepted.
+ * Only loopback callers are accepted. When the app binds a dual-stack
+ * wildcard, IPv4 loopback connections arrive as IPv6-mapped ::ffff:127.0.0.1,
+ * so that form is normalized to 127.0.0.1 before the loopback check.
  */
 export async function POST(request: Request) {
   const forwarded = request.headers.get("x-forwarded-for") || "";
-  const first = forwarded.split(",")[0].trim();
-  const loopback = first === "127.0.0.1" || first === "::1";
+  const first = forwarded.split(",")[0].trim().replace(/^::ffff:/, "");
+  const loopback =
+    first === "127.0.0.1" || first === "::1" || /^127\./.test(first);
   if (forwarded && !loopback) {
     return NextResponse.json(
       { ok: false, error: "FORBIDDEN" },
