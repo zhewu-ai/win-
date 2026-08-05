@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { serializeNote } from "@/lib/note-serializer";
+import { runTrashCleanup } from "@/lib/trash-cleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,9 @@ export async function GET(request: Request) {
         { status: 401 }
       );
     }
+
+    // Lazy safety net: purge expired trash before listing (throttled to 1/h)
+    await runTrashCleanup();
 
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q") || "";

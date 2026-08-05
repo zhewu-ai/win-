@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import { useNotes } from "@/hooks/useNotes";
@@ -83,6 +83,19 @@ export default function HomePage() {
     setSearchQuery(q);
     fetchNotes(q || undefined);
   };
+
+  useEffect(() => {
+    const onChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ deletedId?: string }>).detail;
+      if (detail?.deletedId && detail.deletedId === selectedNoteId) {
+        setSelectedNoteId(null);
+        setShowEditor(false);
+      }
+      fetchNotes(searchQuery || undefined);
+    };
+    window.addEventListener("sticky-notes:changed", onChanged);
+    return () => window.removeEventListener("sticky-notes:changed", onChanged);
+  }, [fetchNotes, searchQuery, selectedNoteId]);
 
   return (
     <div className="h-screen flex flex-col bg-page-bg">

@@ -250,6 +250,7 @@ export default function NoteList({
     return (
       <button
         onClick={() => onSelect(note.id)}
+        data-note-id={note.id}
         className={`relative w-full text-left rounded-[8px] transition-colors duration-150 ${
           isSelected ? `${selected} text-white` : tint
         }`}

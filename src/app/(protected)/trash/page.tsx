@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Note } from "@/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { formatNoteTime } from "@/lib/format-time";
+import { formatDeletedDate, formatTrashRetention } from "@/lib/format-time";
 
 const ACCENT: Record<string, string> = {
   yellow: "bg-accent-yellow",
@@ -184,7 +184,12 @@ export default function TrashPage() {
                       {autoTitle}
                     </p>
                     <p className="text-list-meta text-ink-muted mt-0.5">
-                      删除于 {formatNoteTime(note.deletedAt || "")}
+                      删除于 {formatDeletedDate(note.deletedAt || "")}
+                      {note.deletedAt && (
+                        <span className="ml-1.5">
+                          · {formatTrashRetention(note.deletedAt)}
+                        </span>
+                      )}
                       {note.attachments && note.attachments.length > 0 && (
                         <span className="ml-2">
                           {note.attachments.length} 图

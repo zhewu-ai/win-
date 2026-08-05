@@ -1,3 +1,5 @@
+export const TRASH_RETENTION_DAYS = 7;
+
 export function formatNoteTime(dateStr: string, now = new Date()): string {
   const date = new Date(dateStr);
   const diffMs = now.getTime() - date.getTime();
@@ -31,4 +33,27 @@ export function formatNoteTime(dateStr: string, now = new Date()): string {
     )}`;
   }
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${hhmm}`;
+}
+
+/** 删除日期，如「8月6日」，跨年带年份。 */
+export function formatDeletedDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const md = `${d.getMonth() + 1}月${d.getDate()}日`;
+  if (d.getFullYear() !== now.getFullYear()) return `${d.getFullYear()}年${md}`;
+  return md;
+}
+
+/** 回收站剩余保留时间：满 7 天自动永久删除。 */
+export function formatTrashRetention(
+  deletedAt: string,
+  now = new Date()
+): string {
+  const d = new Date(deletedAt);
+  if (isNaN(d.getTime())) return "";
+  const expireAt = d.getTime() + TRASH_RETENTION_DAYS * 24 * 3600 * 1000;
+  const daysLeft = Math.ceil((expireAt - now.getTime()) / 86400000);
+  if (daysLeft <= 0) return "今天将永久删除";
+  return `${daysLeft}天后永久删除`;
 }
