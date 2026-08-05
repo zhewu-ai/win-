@@ -88,7 +88,7 @@ function getImageCount(note: Note): number {
   return note.attachments?.length || 0;
 }
 
-function getDateSection(dateStr: string): string {
+function getDateSection(dateStr: string): { label: string; rank: number } {
   const date = new Date(dateStr);
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -101,12 +101,15 @@ function getDateSection(dateStr: string): string {
     (startOfToday.getTime() - startOfNoteDay.getTime()) / 86400000
   );
 
-  if (diffDays <= 0) return "今天";
-  if (diffDays <= 7) return "过去 7 天";
-  if (diffDays <= 30) return "过去 30 天";
-  return date.toLocaleDateString("zh-CN", {
-    month: "long",
-  });
+  if (diffDays <= 0) return { label: "今天", rank: 0 };
+  if (diffDays <= 7) return { label: "过去 7 天", rank: 1 };
+  if (diffDays <= 30) return { label: "过去 30 天", rank: 2 };
+  return {
+    label: date.toLocaleDateString("zh-CN", {
+      month: "long",
+    }),
+    rank: 3 + diffDays,
+  };
 }
 
 // Highlight matching text segments
@@ -213,18 +216,24 @@ export default function NoteList({
 
   const pinned = notes.filter((n) => n.isPinned);
   const regular = notes.filter((n) => !n.isPinned);
-  const regularGroups = regular.reduce<Array<{ label: string; notes: Note[] }>>(
-    (groups, note) => {
-      const label = getDateSection(note.updatedAt);
-      const group = groups.find((g) => g.label === label);
-      if (group) {
-        group.notes.push(note);
-      } else {
-        groups.push({ label, notes: [note] });
-      }
-      return groups;
-    },
-    []
+  const regularGroups = regular.reduce<
+    Array<{ label: string; rank: number; notes: Note[] }>
+  >((groups, note) => {
+    const { label, rank } = getDateSection(note.updatedAt);
+    const group = groups.find((g) => g.label === label);
+    if (group) {
+      group.notes.push(note);
+    } else {
+      groups.push({ label, rank, notes: [note] });
+    }
+    return groups;
+  }, []);
+  // Deterministic ordering: 今天 first, then older buckets; newest within each section.
+  regularGroups.sort((a, b) => a.rank - b.rank);
+  regularGroups.forEach((g) =>
+    g.notes.sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
   );
 
   function NoteItem({ note }: { note: Note }) {

@@ -76,7 +76,7 @@ export default function Sidebar({
       </div>
 
       {/* Note list */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col">
         <NoteList
           notes={notes}
           selectedId={selectedId}
