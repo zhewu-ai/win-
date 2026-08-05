@@ -8,6 +8,7 @@ import ChecklistEditor from "@/components/ChecklistEditor";
 import ImageAttachments from "@/components/ImageAttachments";
 import ImageUploadButton from "@/components/ImageUploadButton";
 import AutoGrowTextarea from "@/components/AutoGrowTextarea";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import {
@@ -62,6 +63,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
     initialNote.attachments || []
   );
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
     "saved"
   );
@@ -188,8 +190,12 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
     await immediateSave({ isPinned: newPinned });
   };
 
-  const handleDelete = async () => {
-    if (!confirm("确定删除此便签？删除后可在回收站恢复。")) return;
+  const handleDelete = () => {
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setDeleteConfirmOpen(false);
     try {
       const res = await fetch(`/api/notes/${noteId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
@@ -371,6 +377,15 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           onAttachmentsChange={setAttachments}
         />
       </div>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="删除便签"
+        message="确定删除此便签？删除后可在回收站恢复。"
+        confirmLabel="删除"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
   );
 }

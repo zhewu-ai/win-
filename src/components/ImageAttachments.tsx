@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Attachment } from "@/types";
 import ImagePreview from "./ImagePreview";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Props {
   noteId: string;
@@ -16,9 +17,17 @@ export default function ImageAttachments({
   onAttachmentsChange,
 }: Props) {
   const [previewAtt, setPreviewAtt] = useState<Attachment | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Attachment | null>(null);
 
-  const handleDelete = async (att: Attachment) => {
-    if (!confirm("确定删除这张图片？此操作不会删除便签内容。")) return;
+  const handleDelete = (att: Attachment) => {
+    setDeleteTarget(att);
+  };
+
+  const confirmDelete = async () => {
+    const att = deleteTarget;
+    setDeleteTarget(null);
+    setPreviewAtt(null);
+    if (!att) return;
 
     let res: Response | null = null;
     try {
@@ -80,6 +89,15 @@ export default function ImageAttachments({
           onDelete={handleDelete}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="删除图片"
+        message="确定删除这张图片？此操作不会删除便签内容。"
+        confirmLabel="删除"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

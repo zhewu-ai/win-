@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Note } from "@/types";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { formatNoteTime } from "@/lib/format-time";
 
 const ACCENT: Record<string, string> = {
   yellow: "bg-accent-yellow",
@@ -25,26 +27,12 @@ function getAutoTitle(note: Note): string {
   return "无标题便签";
 }
 
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  const hours = Math.floor(diffMs / 3600000);
-  const days = Math.floor(diffMs / 86400000);
-
-  if (mins < 1) return "刚刚";
-  if (mins < 60) return `${mins}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
-  return date.toLocaleDateString("zh-CN");
-}
-
 export default function TrashPage() {
   const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const fetchingRef = useRef(false);
 
   const fetchNotes = useCallback(async (q?: string) => {
@@ -80,8 +68,14 @@ export default function TrashPage() {
     }
   };
 
-  const handlePermanentDelete = async (id: string) => {
-    if (!confirm("永久删除后无法恢复，确定删除？")) return;
+  const handlePermanentDelete = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmPermanentDelete = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget;
+    setDeleteTarget(null);
     try {
       const res = await fetch(`/api/notes/${id}/permanent`, {
         method: "DELETE",
@@ -190,7 +184,7 @@ export default function TrashPage() {
                       {autoTitle}
                     </p>
                     <p className="text-list-meta text-ink-muted mt-0.5">
-                      删除于 {formatTime(note.deletedAt || "")}
+                      删除于 {formatNoteTime(note.deletedAt || "")}
                       {note.attachments && note.attachments.length > 0 && (
                         <span className="ml-2">
                           {note.attachments.length} 图
@@ -218,6 +212,15 @@ export default function TrashPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="永久删除"
+        message="永久删除后无法恢复，确定删除此便签？"
+        confirmLabel="永久删除"
+        onConfirm={confirmPermanentDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import TopBar from "@/components/TopBar";
-import NoteList from "@/components/NoteList";
+import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import { useNotes } from "@/hooks/useNotes";
 import type { Note } from "@/types";
+
+const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
 
 export default function HomePage() {
   const { notes, loading, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
@@ -13,6 +14,22 @@ export default function HomePage() {
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage may be unavailable; collapse still applies for this session
+      }
+      return next;
+    });
+  };
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
@@ -69,26 +86,37 @@ export default function HomePage() {
 
   return (
     <div className="h-screen flex flex-col bg-page-bg">
-      <TopBar
-        searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
-        onCreateNote={handleCreate}
-        showEditor={showEditor}
-      />
-
       <div className="flex-1 flex overflow-hidden">
-        {/* Note list sidebar - hidden on mobile when editor is open */}
+        {/* Sidebar - hidden on mobile when editor is open; collapsible on wide */}
         <div
-          className={`${showEditor ? "hidden" : "flex"} md:flex w-full md:w-[350px] flex-shrink-0 border-r border-black flex-col bg-sidebar-bg`}
+          className={`${showEditor ? "hidden" : "flex"} ${
+            sidebarCollapsed ? "md:hidden" : "md:flex"
+          } w-full md:w-[350px] flex-shrink-0 border-r border-black flex-col bg-sidebar-bg`}
         >
-          <NoteList
+          <Sidebar
             notes={notes}
             selectedId={selectedNoteId}
             onSelect={handleSelect}
             loading={loading}
             searchQuery={searchQuery}
+            onSearchChange={handleSearchChange}
+            onCreateNote={handleCreate}
+            onCollapse={toggleSidebar}
           />
         </div>
+
+        {/* Collapsed expand strip - wide only */}
+        {sidebarCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            className="hidden md:flex w-7 flex-shrink-0 items-center justify-center bg-sidebar-bg border-r border-black text-ink-muted hover:text-ink hover:bg-white/[0.05] transition-colors"
+            title="展开侧边栏"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
 
         {/* Editor */}
         <div

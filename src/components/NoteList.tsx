@@ -1,6 +1,7 @@
 "use client";
 
 import type { Note } from "@/types";
+import { formatNoteTime } from "@/lib/format-time";
 
 interface Props {
   notes: Note[];
@@ -33,21 +34,6 @@ const TINT: Record<string, string> = {
   pink: "hover:bg-tint-pink active:bg-tint-pink",
   gray: "hover:bg-tint-gray active:bg-tint-gray",
 };
-
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  const hours = Math.floor(diffMs / 3600000);
-  const days = Math.floor(diffMs / 86400000);
-
-  if (mins < 1) return "刚刚";
-  if (mins < 60) return `${mins}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
-  return date.toLocaleDateString("zh-CN");
-}
 
 function getAutoTitle(note: Note): string {
   if (note.title) return note.title;
@@ -308,7 +294,7 @@ export default function NoteList({
                 isSelected ? "text-white/[0.72]" : "text-ink-muted"
               }`}
             >
-              {formatTime(note.updatedAt)}
+              {formatNoteTime(note.updatedAt)}
             </span>
             {imageCount > 0 && (
               <span
@@ -335,7 +321,7 @@ export default function NoteList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg max-[421px]:pb-14">
+    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg">
       {pinned.length > 0 && (
         <div>
           <SectionHeader

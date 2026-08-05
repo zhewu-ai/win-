@@ -8,6 +8,7 @@ import ChecklistEditor from "./ChecklistEditor";
 import ImageAttachments from "./ImageAttachments";
 import ImageUploadButton from "./ImageUploadButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
+import ConfirmDialog from "./ConfirmDialog";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
 
@@ -61,12 +62,27 @@ export default function NoteEditor({
     "saved"
   );
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const currentNoteIdRef = useRef<string | null>(null);
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const prevNoteIdRef = useRef<string | null>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  // Close "more" menu on outside click
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [moreOpen]);
 
   // Create a stable empty checklist item for fallback
   function createEmptyItem(): ChecklistItem {
@@ -260,7 +276,11 @@ export default function NoteEditor({
   };
 
   const handleDelete = () => {
-    if (!confirm("确定删除此便签？删除后可在回收站恢复。")) return;
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    setDeleteConfirmOpen(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     pendingUpdatesRef.current = {};
     onDelete(currentNoteIdRef.current!);
@@ -317,8 +337,8 @@ export default function NoteEditor({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-panel-bg">
-      {/* Editor toolbar */}
-      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4 flex-wrap">
+      {/* Editor toolbar - always single line; low-freq ops live in "more" menu */}
+      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4 max-[360px]:gap-0.5 max-[360px]:px-1.5">
         {showBackButton && (
           <button
             onClick={onBack}
@@ -358,7 +378,7 @@ export default function NoteEditor({
           )}
         </button>
 
-        <div className="w-px h-5 bg-border-light mx-1" />
+        <div className="w-px h-5 bg-border-light mx-1 max-[360px]:hidden" />
 
         {/* Color picker inline */}
         <ColorPicker selected={color} onChange={handleColorChange} />
@@ -390,37 +410,68 @@ export default function NoteEditor({
           </button>
         )}
 
-        <button
-          onClick={handlePinToggle}
-          className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
-            isPinned
-              ? "text-[#E3C24A] bg-white/10"
-              : "text-ink-muted hover:text-ink hover:bg-white/[0.08]"
-          }`}
-          title={isPinned ? "取消置顶" : "置顶"}
-        >
-          <svg className="w-5 h-5" fill={isPinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-          </svg>
-        </button>
-        <button
-          onClick={handleArchive}
-          className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn transition-colors"
-          title="归档"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-          </svg>
-        </button>
-        <button
-          onClick={handleDelete}
-          className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-danger hover:bg-white/[0.08] rounded-btn transition-colors"
-          title="删除"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        {/* More menu: pin / archive / delete / (color stays inline) */}
+        <div className="relative flex-shrink-0" ref={moreRef}>
+          <button
+            onClick={() => setMoreOpen((o) => !o)}
+            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] rounded-btn transition-colors"
+            title="更多操作"
+            aria-expanded={moreOpen}
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="5" r="1.7" />
+              <circle cx="12" cy="12" r="1.7" />
+              <circle cx="12" cy="19" r="1.7" />
+            </svg>
+          </button>
+          {moreOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20">
+              <button
+                onClick={() => {
+                  setMoreOpen(false);
+                  handlePinToggle();
+                }}
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-white/[0.06] transition-colors"
+              >
+                <svg
+                  className="w-4 h-4 text-ink-muted"
+                  fill={isPinned ? "currentColor" : "none"}
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                {isPinned ? "取消置顶" : "置顶便签"}
+              </button>
+              <button
+                onClick={() => {
+                  setMoreOpen(false);
+                  handleArchive();
+                }}
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-white/[0.06] transition-colors"
+              >
+                <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                归档
+              </button>
+              <div className="my-1 h-px bg-border-light/60" />
+              <button
+                onClick={() => {
+                  setMoreOpen(false);
+                  handleDelete();
+                }}
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-danger hover:bg-white/[0.06] transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                删除
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Editor body */}
@@ -470,6 +521,15 @@ export default function NoteEditor({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="删除便签"
+        message="确定删除此便签？删除后可在回收站恢复。"
+        confirmLabel="删除"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
   );
 }

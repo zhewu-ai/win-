@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Note } from "@/types";
 import ImagePreview from "@/components/ImagePreview";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import type { Attachment } from "@/types";
 
 const ACCENT: Record<string, string> = {
@@ -29,6 +30,7 @@ export default function ArchivePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [previewAtt, setPreviewAtt] = useState<Attachment | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const fetchingRef = useRef(false);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
@@ -71,8 +73,14 @@ export default function ArchivePage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("确定删除此便签？删除后可在回收站恢复。")) return;
+  const handleDelete = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget;
+    setDeleteTarget(null);
     try {
       const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
@@ -344,6 +352,15 @@ export default function ArchivePage() {
           onClose={() => setPreviewAtt(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="删除便签"
+        message="确定删除此便签？删除后可在回收站恢复。"
+        confirmLabel="删除"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
