@@ -2,18 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-export type LayoutMode = "spacious" | "compact" | "single";
+export type LayoutMode = "dual" | "single";
 
-const SPACIOUS = 900;
-const DUAL = 720;
+const SINGLE = 720;
 
 export function useLayoutMode(): LayoutMode {
-  const [mode, setMode] = useState<LayoutMode>("compact");
+  const [mode, setMode] = useState<LayoutMode>("dual");
 
   useEffect(() => {
     const compute = () => {
-      const w = window.innerWidth;
-      setMode(w >= SPACIOUS ? "spacious" : w >= DUAL ? "compact" : "single");
+      setMode(window.innerWidth < SINGLE ? "single" : "dual");
     };
     compute();
     window.addEventListener("resize", compute);

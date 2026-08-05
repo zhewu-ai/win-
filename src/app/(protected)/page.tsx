@@ -13,7 +13,7 @@ export default function HomePage() {
   const { notes, loading, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
     useNotes(false);
 
-  // 整体布局模式：≥900 舒展 / 720-899 紧凑 / <720 单栏（工具栏再按编辑区实际宽度细分）
+  // 布局模式：≥720 双栏（侧栏固定 350px，仅手动折叠）/ <720 单栏（工具栏再按编辑区实际宽度细分）
   const mode = useLayoutMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -105,7 +105,7 @@ export default function HomePage() {
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
             单栏 → 编辑打开时隐藏，否则全宽显示；
-            双栏 → 舒展 350px / 紧凑 280px，仅随用户折叠状态隐藏（w-0+opacity 过渡动画）。 */}
+            双栏 → 固定 350px，仅随用户手动折叠状态隐藏（w-0+opacity 过渡动画），不随窗口缩放自动变化。 */}
         <div
           className={`${
             mode === "single"
@@ -114,7 +114,7 @@ export default function HomePage() {
                 : "hidden"
               : sidebarCollapsed
                 ? "flex w-0 opacity-0 overflow-hidden pointer-events-none"
-                : `flex ${mode === "spacious" ? "w-[350px]" : "w-[280px]"} border-r border-black`
+                : "flex w-[350px] border-r border-black"
           } flex-shrink-0 flex-col bg-sidebar-bg transition-[width,opacity] duration-150 ease-out`}
         >
           <Sidebar

@@ -152,7 +152,7 @@ export default function ArchivePage() {
       {/* Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* List */}
-        <div className={`${single && selectedNote ? "hidden" : "flex"} ${single ? "w-full" : mode === "spacious" ? "w-80" : "w-72"} flex-col border-r border-border-light bg-toolbar-bg overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]`}>
+        <div className={`${single && selectedNote ? "hidden" : "flex"} ${single ? "w-full" : "w-80"} flex-col border-r border-border-light bg-toolbar-bg overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]`}>
           {loading ? (
             <div className="p-3 space-y-2">
               {[1, 2, 3].map((i) => (

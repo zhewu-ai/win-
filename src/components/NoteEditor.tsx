@@ -66,6 +66,8 @@ export default function NoteEditor({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // 工具栏按编辑区实际容器宽度分三档（≥520 舒展 / 360-520 紧凑 / <360 极简）
   const [toolbarMode, setToolbarMode] = useState<"spacious" | "compact" | "minimal">("compact");
+  // 迟滞判定用：进入 520/360，退出 500/340，避免断点边缘微调时反复横跳
+  const toolbarModeRef = useRef<"spacious" | "compact" | "minimal">("compact");
   const editorRootRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const currentNoteIdRef = useRef<string | null>(null);
@@ -233,8 +235,19 @@ export default function NoteEditor({
     if (!note) return;
     const el = editorRootRef.current;
     if (!el) return;
-    const update = (w: number) =>
-      setToolbarMode(w >= 520 ? "spacious" : w >= 360 ? "compact" : "minimal");
+    const update = (w: number) => {
+      const cur = toolbarModeRef.current;
+      let next = cur;
+      if (w >= 520) {
+        next = "spacious";
+      } else if (w >= 360) {
+        next = cur === "spacious" && w >= 500 ? "spacious" : "compact";
+      } else {
+        next = cur === "compact" && w >= 340 ? "compact" : "minimal";
+      }
+      toolbarModeRef.current = next;
+      setToolbarMode(next);
+    };
     update(el.clientWidth);
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width;
