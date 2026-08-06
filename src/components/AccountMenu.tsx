@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useTheme } from "@/hooks/useTheme";
+import { useSyncStatus } from "@/hooks/useSyncStatus";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Props {
   /** Tailwind classes for dropdown position, e.g. "top-full mt-1.5" (opens down) or "bottom-full mb-1.5" (opens up). */
@@ -12,8 +14,10 @@ export default function AccountMenu({
   dropdownPos = "top-full mt-1.5",
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
+  const { pendingCount } = useSyncStatus();
 
   useEffect(() => {
     if (!open) return;
@@ -29,6 +33,16 @@ export default function AccountMenu({
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
+  };
+
+  const handleLogoutClick = () => {
+    setOpen(false);
+    // 有未同步内容时要求明确确认，防止本地草稿无法同步（SPEC 12.4）
+    if (pendingCount > 0) {
+      setLogoutConfirmOpen(true);
+    } else {
+      void handleLogout();
+    }
   };
 
   return (
@@ -101,7 +115,7 @@ export default function AccountMenu({
           </button>
           <div className="my-1 h-px bg-border-light/60" />
           <button
-            onClick={handleLogout}
+            onClick={handleLogoutClick}
             className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-danger hover:bg-surface-hover transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -111,6 +125,18 @@ export default function AccountMenu({
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        title="退出登录"
+        message="还有未同步内容，退出登录可能导致本地草稿无法同步。确定退出？"
+        confirmLabel="退出"
+        onConfirm={() => {
+          setLogoutConfirmOpen(false);
+          void handleLogout();
+        }}
+        onCancel={() => setLogoutConfirmOpen(false)}
+      />
     </div>
   );
 }

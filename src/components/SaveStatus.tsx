@@ -1,11 +1,24 @@
+"use client";
+
+import { useSyncStatus } from "@/hooks/useSyncStatus";
+import type { SyncStatus } from "@/types";
+
 interface Props {
   status: "saved" | "saving" | "error";
   onRetry?: () => void;
   showText?: boolean;
+  syncStatus?: SyncStatus;
 }
 
-export default function SaveStatus({ status, onRetry, showText = true }: Props) {
+export default function SaveStatus({
+  status,
+  onRetry,
+  showText = true,
+  syncStatus,
+}: Props) {
+  const { isOnline, isSyncing } = useSyncStatus();
   const textCls = showText ? "inline" : "hidden";
+
   if (status === "saving") {
     return (
       <span className="text-list-meta text-ink-muted/60 flex items-center gap-1 whitespace-nowrap">
@@ -34,10 +47,34 @@ export default function SaveStatus({ status, onRetry, showText = true }: Props) 
     );
   }
 
+  // saved：按同步状态给出明确文案，避免离线误显示“已同步”
+  const pending =
+    syncStatus === "pendingCreate" ||
+    syncStatus === "pendingUpdate" ||
+    syncStatus === "pendingDelete";
+
+  let label = "已同步";
+  let dotCls = "bg-ink-muted/30";
+  if (syncStatus === "syncError") {
+    label = "同步失败";
+    dotCls = "bg-danger";
+  } else if (pending) {
+    if (!isOnline) {
+      label = "已保存到本地";
+      dotCls = "bg-primary/70";
+    } else if (isSyncing) {
+      label = "同步中";
+      dotCls = "bg-primary animate-pulse";
+    } else {
+      label = "等待同步";
+      dotCls = "bg-primary/70";
+    }
+  }
+
   return (
     <span className="text-list-meta text-ink-muted/40 flex items-center gap-1 whitespace-nowrap">
-      <span className="w-1.5 h-1.5 bg-ink-muted/30 rounded-full" />
-      <span className={textCls}>已保存</span>
+      <span className={`w-1.5 h-1.5 ${dotCls} rounded-full`} />
+      <span className={textCls}>{label}</span>
     </span>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Attachment } from "@/types";
+import { useSyncStatus } from "@/hooks/useSyncStatus";
 
 interface Props {
   noteId: string;
@@ -12,6 +13,7 @@ export default function ImageUploadButton({ noteId, onUploaded }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isOnline } = useSyncStatus();
 
   const handleSelectFiles = () => fileInputRef.current?.click();
 
@@ -55,13 +57,23 @@ export default function ImageUploadButton({ noteId, onUploaded }: Props) {
     <div className="relative">
       <button
         onClick={handleSelectFiles}
-        disabled={uploading}
+        disabled={uploading || !isOnline}
         className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
           error
             ? "text-danger hover:bg-danger/10"
             : "text-ink-muted hover:text-ink hover:bg-surface-hover"
-        } ${uploading ? "opacity-60 animate-pulse" : ""}`}
-        title={error ? "上传失败，点击重试" : uploading ? "上传中..." : "添加图片"}
+        } ${uploading ? "opacity-60 animate-pulse" : ""} ${
+          !isOnline ? "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-ink-muted" : ""
+        }`}
+        title={
+          !isOnline
+            ? "离线模式下暂不支持上传图片"
+            : error
+              ? "上传失败，点击重试"
+              : uploading
+                ? "上传中..."
+                : "添加图片"
+        }
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />

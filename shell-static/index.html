@@ -2,9 +2,153 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <title>全平台便签</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PinNote</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #191919;
+        color: #f5f4f2;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .box {
+        text-align: center;
+        padding: 32px;
+      }
+      .spinner {
+        width: 26px;
+        height: 26px;
+        margin: 0 auto 16px;
+        border: 3px solid rgba(255, 255, 255, 0.15);
+        border-top-color: #b99a28;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0 0 8px;
+      }
+      p {
+        color: #8f8986;
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 0 0 20px;
+      }
+      button {
+        background: #b99a28;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 22px;
+        font-size: 14px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        filter: brightness(1.08);
+      }
+    </style>
   </head>
   <body>
-    <p>正在加载全平台便签……</p>
+    <div class="box" id="root">
+      <div class="spinner"></div>
+      <p>正在连接 PinNote…</p>
+    </div>
+    <script>
+      // 生产包入口：探测连通性 → 在线跳转到线上 App，离线显示本地 fallback。
+      // 悬浮窗通过 hash 传递目标路径，例如 index.html#/notes/abc/floating
+      var PROD_URL = "https://notes.hello-mylife.online";
+      var root = document.getElementById("root");
+
+      function targetUrl() {
+        var h = location.hash;
+        if (h && h.length > 1) return PROD_URL + h.slice(1);
+        return PROD_URL;
+      }
+
+      function showOffline() {
+        root.innerHTML =
+          '<h1>当前离线</h1>' +
+          '<p>正在使用本地缓存<br>离线编辑会在联网后自动同步</p>' +
+          '<button onclick="retry()">重试连接</button>';
+      }
+
+      function showConnecting() {
+        root.innerHTML =
+          '<div class="spinner"></div><p>正在连接 PinNote…</p>';
+      }
+
+      // no-cors：tauri 本地源 → 远程 https 的跨源探测，在线时返回 opaque 响应，离线时 reject
+      function probe() {
+        return new Promise(function (resolve, reject) {
+          var settled = false;
+          var done = function (ok) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            ok ? resolve() : reject();
+          };
+          var timer = setTimeout(function () {
+            done(false);
+          }, 5000);
+          fetch(PROD_URL, {
+            method: "GET",
+            mode: "no-cors",
+            cache: "no-store",
+          })
+            .then(function () {
+              done(true);
+            })
+            .catch(function () {
+              // 少数环境 fetch 对 no-cors 处理不一致，用图片探测兜底
+              var img = new Image();
+              img.onload = function () {
+                done(true);
+              };
+              img.onerror = function () {
+                done(false);
+              };
+              img.src = PROD_URL + "/favicon.ico";
+            });
+        });
+      }
+
+      window.retry = function () {
+        showConnecting();
+        probe().then(
+          function () {
+            window.location.href = targetUrl();
+          },
+          function () {
+            showOffline();
+          }
+        );
+      };
+
+      probe().then(
+        function () {
+          window.location.href = targetUrl();
+        },
+        function () {
+          showOffline();
+        }
+      );
+    </script>
   </body>
 </html>

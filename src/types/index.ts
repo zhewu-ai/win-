@@ -31,9 +31,18 @@ export interface Attachment {
   createdAt: string;
 }
 
+export type SyncStatus =
+  | "synced"
+  | "pendingCreate"
+  | "pendingUpdate"
+  | "pendingDelete"
+  | "syncError";
+
 export interface Note {
   id: string;
   userId: string;
+  /** 本地同步状态；服务端返回的便签无此字段（等价 synced）。仅离线层写入。 */
+  syncStatus?: SyncStatus;
   title: string;
   content: string;
   color: NoteColor;

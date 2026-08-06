@@ -16,6 +16,13 @@ import {
   getAlwaysOnTop,
   toggleAlwaysOnTop,
 } from "@/lib/tauri";
+import {
+  ApiError,
+  deleteNoteOfflineAware,
+  getCachedNote,
+  saveNoteUpdate,
+} from "@/lib/offline/persist";
+import type { SyncStatus } from "@/types";
 
 const DEBOUNCE_MS = 800;
 
@@ -67,6 +74,9 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
     "saved"
   );
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | undefined>(
+    initialNote.syncStatus
+  );
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
@@ -74,22 +84,17 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   const doSave = useCallback(async (updates: Record<string, unknown>) => {
     setSaveStatus("saving");
     try {
-      const res = await fetch(`/api/notes/${noteId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      if (res.status === 401) {
+      const updated = await saveNoteUpdate(noteId, updates);
+      setSyncStatus(updated.syncStatus);
+      setSaveStatus("saved");
+      lastFailedPayloadRef.current = null;
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
         router.push(
           `/login?returnTo=${encodeURIComponent(`/notes/${noteId}/floating`)}`
         );
         return;
       }
-      if (!res.ok) throw new Error("Save failed");
-      const updated: Note = await res.json();
-      setSaveStatus("saved");
-      lastFailedPayloadRef.current = null;
-    } catch {
       setSaveStatus("error");
       lastFailedPayloadRef.current = updates;
     }
@@ -136,14 +141,44 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       const pending = { ...pendingUpdatesRef.current };
       if (Object.keys(pending).length > 0) {
-        fetch(`/api/notes/${noteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(pending),
-          keepalive: true,
-        }).catch(() => {});
+        if (navigator.onLine) {
+          fetch(`/api/notes/${noteId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pending),
+            keepalive: true,
+          }).catch(() => {});
+        } else {
+          void saveNoteUpdate(noteId, pending).catch(() => {});
+        }
       }
     };
+  }, [noteId]);
+
+  // 离线打开浮窗：若本地缓存比 SSR 快照新（离线编辑过），以本地为准
+  useEffect(() => {
+    void getCachedNote(noteId).then((cached) => {
+      if (!cached) return;
+      if (
+        new Date(cached.updatedAt).getTime() >
+        new Date(initialNote.updatedAt).getTime()
+      ) {
+        setTitle(cached.title);
+        setContent(cached.content);
+        setColor(cached.color as NoteColor);
+        setIsPinned(cached.isPinned);
+        setMode(cached.mode || "text");
+        const norm = normalizeChecklist(
+          cached.checklistItems || [],
+          cached.checklistGroups || []
+        );
+        setChecklistItems(norm.items);
+        setChecklistGroups(norm.groups);
+        setAttachments(cached.attachments || []);
+        setSyncStatus(cached.syncStatus);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
   const handleTitleChange = (value: string) => {
@@ -197,8 +232,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   const confirmDelete = async () => {
     setDeleteConfirmOpen(false);
     try {
-      const res = await fetch(`/api/notes/${noteId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      await deleteNoteOfflineAware(noteId);
       router.push("/");
     } catch {
       alert("删除失败");
@@ -253,7 +287,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           </svg>
         </button>
         <div className="flex-1" />
-        <SaveStatus status={saveStatus} onRetry={handleRetry} />
+        <SaveStatus status={saveStatus} onRetry={handleRetry} syncStatus={syncStatus} />
         <ImageUploadButton
           noteId={noteId}
           onUploaded={(uploaded) =>

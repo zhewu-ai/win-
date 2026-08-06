@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
+import OfflineBar from "@/components/OfflineBar";
 import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
+import { deleteNoteOfflineAware } from "@/lib/offline/persist";
 import type { Note } from "@/types";
 
 const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
@@ -62,8 +64,7 @@ export default function HomePage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      await deleteNoteOfflineAware(id);
       if (selectedNoteId === id) {
         setSelectedNoteId(null);
         setShowEditor(false);
@@ -102,6 +103,7 @@ export default function HomePage() {
 
   return (
     <div className="h-screen flex flex-col bg-page-bg">
+      <OfflineBar />
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
             单栏 → 编辑打开时隐藏，否则全宽显示；

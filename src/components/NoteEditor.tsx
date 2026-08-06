@@ -11,6 +11,7 @@ import AutoGrowTextarea from "./AutoGrowTextarea";
 import ConfirmDialog from "./ConfirmDialog";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
+import { saveNoteUpdate } from "@/lib/offline/persist";
 
 const DEBOUNCE_MS = 800;
 
@@ -107,16 +108,11 @@ export default function NoteEditor({
       if (!currentNoteIdRef.current) return;
       setSaveStatus("saving");
       try {
-        const res = await fetch(
-          `/api/notes/${currentNoteIdRef.current}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updates),
-          }
+        // 在线 PATCH + 镜像；离线/断网自动写入本地缓存（pending），返回合并后的便签
+        const updated = await saveNoteUpdate(
+          currentNoteIdRef.current,
+          updates
         );
-        if (!res.ok) throw new Error("Save failed");
-        const updated: Note = await res.json();
         onUpdate(updated);
         setSaveStatus("saved");
         lastFailedPayloadRef.current = null;
@@ -214,18 +210,23 @@ export default function NoteEditor({
     }
   }, [note?.id]);
 
-  // Cleanup on unmount: flush pending via keepalive fetch
+  // Cleanup on unmount: flush pending via keepalive fetch (online) or local write (offline)
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       const pending = { ...pendingUpdatesRef.current };
       if (Object.keys(pending).length > 0 && currentNoteIdRef.current) {
-        fetch(`/api/notes/${currentNoteIdRef.current}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(pending),
-          keepalive: true,
-        }).catch(() => {});
+        const id = currentNoteIdRef.current;
+        if (navigator.onLine) {
+          fetch(`/api/notes/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pending),
+            keepalive: true,
+          }).catch(() => {});
+        } else {
+          void saveNoteUpdate(id, pending).catch(() => {});
+        }
       }
     };
   }, []);
@@ -428,6 +429,7 @@ export default function NoteEditor({
               status={saveStatus}
               onRetry={handleRetry}
               showText={toolbarMode === "spacious"}
+              syncStatus={note.syncStatus}
             />
           </div>
         )}

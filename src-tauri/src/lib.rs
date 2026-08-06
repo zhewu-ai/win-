@@ -16,10 +16,16 @@ fn app_base_url() -> &'static str {
   }
 }
 
-// 仅允许加载可信域名，阻止任意外部 URL 在壳内打开
+// 仅允许加载可信域名，阻止任意外部 URL 在壳内打开。
+// 生产包主窗口与悬浮窗加载打包的 bootstrap 页（tauri:// 本地 origin），
+// 由其探测连通性后再跳转线上域名，故本地 origin 也需放行。
 fn allowed_url(url: &Url) -> bool {
   let s = url.as_str();
-  s.starts_with(PROD_URL) || s.starts_with(DEV_URL)
+  s.starts_with(PROD_URL)
+    || s.starts_with(DEV_URL)
+    || s.starts_with("tauri://")
+    || s.starts_with("http://tauri.localhost")
+    || s.starts_with("https://tauri.localhost")
 }
 
 fn restore_window_geom(
@@ -49,8 +55,15 @@ fn open_floating_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
     return Ok(());
   }
 
-  let url = format!("{}/notes/{}/floating", app_base_url(), id);
-  let parsed = Url::parse(&url).map_err(|e| e.to_string())?;
+  // 生产包加载打包的 bootstrap 页，由其按 hash 跳转线上浮窗路径；
+  // 开发模式直连本地 dev 地址以保留热更新。
+  let webview_url = if cfg!(debug_assertions) {
+    let url = format!("{}/notes/{}/floating", app_base_url(), id);
+    let parsed = Url::parse(&url).map_err(|e| e.to_string())?;
+    WebviewUrl::External(parsed)
+  } else {
+    WebviewUrl::App(format!("index.html#/notes/{}/floating", id).into())
+  };
 
   // 悬浮窗默认置顶；仅当用户手动取消置顶后才保存 false，下次按保存值恢复
   let saved = app.state::<WindowStateStore>().get(&label);
@@ -59,8 +72,8 @@ fn open_floating_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
     .and_then(|g| g.always_on_top)
     .unwrap_or(true);
 
-  let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
-    .title("便签")
+  let mut builder = WebviewWindowBuilder::new(&app, &label, webview_url)
+    .title("PinNote")
     .inner_size(360.0, 520.0)
     .min_inner_size(260.0, 340.0)
     .always_on_top(effective_aot)
@@ -115,14 +128,15 @@ pub fn run() {
       let store = WindowStateStore::load(app.handle());
       app.manage(store);
 
-      // 主窗口：生产包加载线上域名；默认不置顶（可由用户手动开启）
-      let main_url = Url::parse(app_base_url()).map_err(|e| e.to_string())?;
-      let main = WebviewWindowBuilder::new(
-        app.handle(),
-        "main",
-        WebviewUrl::External(main_url),
-      )
-      .title("全平台便签")
+      // 主窗口：生产包加载打包的 bootstrap 页（探测连通性 → 跳转线上域名 / 离线 fallback）；
+      // 开发模式直连本地地址以保留热更新。默认不置顶（可由用户手动开启）。
+      let main_url = if cfg!(debug_assertions) {
+        WebviewUrl::External(Url::parse(DEV_URL).map_err(|e| e.to_string())?)
+      } else {
+        WebviewUrl::App("index.html".into())
+      };
+      let main = WebviewWindowBuilder::new(app.handle(), "main", main_url)
+      .title("PinNote")
       .inner_size(1100.0, 760.0)
       .min_inner_size(320.0, 480.0)
       .center()

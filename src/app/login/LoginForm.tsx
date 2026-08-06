@@ -34,8 +34,12 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
       }
 
       router.push(safeReturnTo(returnTo));
-    } catch {
-      setError("登录失败，请检查网络连接");
+    } catch (e) {
+      setError(
+        e instanceof TypeError
+          ? "离线状态无法登录，联网后重试"
+          : "登录失败，请检查网络连接"
+      );
     } finally {
       setLoading(false);
     }
@@ -48,7 +52,7 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
         className="w-full max-w-xs bg-toolbar-bg rounded-[14px] border border-border-light p-6 shadow-2xl shadow-black/20"
       >
         <h1 className="text-login-title font-semibold text-center text-ink mb-1">
-          全平台便签
+          PinNote
         </h1>
         <p className="text-list-summary text-ink-muted text-center mb-6">
           请登录以继续

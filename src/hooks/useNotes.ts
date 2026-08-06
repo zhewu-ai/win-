@@ -2,6 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Note } from "@/types";
+import { getDB } from "@/lib/offline/db";
+import {
+  ApiError,
+  createNoteLocal,
+  createNoteRemote,
+  deleteNoteOfflineAware,
+  isNetworkError,
+  loadCachedNotes,
+  mirrorNote,
+  saveNoteUpdate,
+} from "@/lib/offline/persist";
 
 export function useNotes(archived = false) {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -22,12 +33,36 @@ export function useNotes(archived = false) {
         if (q) params.set("q", q);
 
         const res = await fetch(`/api/notes?${params}`);
-        if (!res.ok) throw new Error("Failed to fetch");
+        if (!res.ok) throw new ApiError(res.status, "Failed to fetch");
         const data = await res.json();
         setNotes(data.notes);
         setError(null);
-      } catch {
-        setError("加载便签失败");
+        // 在线成功 → 镜像到本地缓存
+        void Promise.all((data.notes as Note[]).map((n) => mirrorNote(n)));
+        // 全量拉取（无搜索）时以服务端为准清理本地已消失的 synced 便签：
+        // 避免并发镜像把刚同步删除/他端删除的便签重新带回离线列表。
+        if (!q) {
+          const serverIds = new Set((data.notes as Note[]).map((n) => n.id));
+          void getDB()
+            .notes.where("syncStatus")
+            .equals("synced")
+            .and(
+              (n) =>
+                n.isArchived === archived &&
+                n.serverId !== null &&
+                !serverIds.has(n.serverId)
+            )
+            .delete();
+        }
+      } catch (e) {
+        if (isNetworkError(e)) {
+          // 离线/断网 → 从本地缓存回填
+          const cached = await loadCachedNotes();
+          setNotes(cached);
+          setError(cached.length > 0 ? null : "离线，暂无本地便签缓存");
+        } else {
+          setError("加载便签失败");
+        }
       } finally {
         setLoading(false);
         fetchingRef.current = false;
@@ -36,29 +71,27 @@ export function useNotes(archived = false) {
     [archived]
   );
 
-  const createNote = useCallback(async (data?: Partial<Note>) => {
-    const res = await fetch("/api/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data || { title: "", content: "", color: "yellow" }),
-    });
-    if (!res.ok) throw new Error("Failed to create note");
-    const note = await res.json();
+  const createNote = useCallback(async (data?: Partial<Note>): Promise<Note> => {
+    let note: Note;
+    if (navigator.onLine) {
+      try {
+        note = await createNoteRemote(data);
+      } catch (e) {
+        if (isNetworkError(e)) note = await createNoteLocal(data);
+        else throw e;
+      }
+    } else {
+      note = await createNoteLocal(data);
+    }
     setNotes((prev) => [note, ...prev]);
-    return note as Note;
+    return note;
   }, []);
 
   const updateNote = useCallback(
     async (id: string, data: Partial<Note>): Promise<Note> => {
-      const res = await fetch(`/api/notes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to update note");
-      const updated = await res.json();
+      const updated = await saveNoteUpdate(id, data as Record<string, unknown>);
       setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
-      return updated as Note;
+      return updated;
     },
     []
   );
@@ -69,10 +102,7 @@ export function useNotes(archived = false) {
   }, []);
 
   const deleteNote = useCallback(async (id: string) => {
-    const res = await fetch(`/api/notes/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete note");
+    await deleteNoteOfflineAware(id);
     setNotes((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
