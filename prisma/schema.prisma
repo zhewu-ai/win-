@@ -11,6 +11,8 @@ model User {
   id           String   @id @default(cuid())
   username     String   @unique
   passwordHash String
+  displayName  String?
+  avatarColor  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   notes        Note[]

@@ -68,4 +68,6 @@ export type NoteColor = "yellow" | "blue" | "green" | "pink" | "gray";
 export interface User {
   id: string;
   username: string;
+  displayName?: string | null;
+  avatarColor?: string | null;
 }

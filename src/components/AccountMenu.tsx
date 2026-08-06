@@ -4,10 +4,30 @@ import { useState, useRef, useEffect } from "react";
 import { useTheme } from "@/hooks/useTheme";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import ConfirmDialog from "./ConfirmDialog";
+import type { User } from "@/types";
 
 interface Props {
   /** Tailwind classes for dropdown position, e.g. "top-full mt-1.5" (opens down) or "bottom-full mb-1.5" (opens up). */
   dropdownPos?: string;
+}
+
+const AVATAR_COLORS = ["yellow", "blue", "green", "pink", "gray"] as const;
+
+const AVATAR_BG: Record<string, string> = {
+  yellow: "bg-accent-yellow text-[#20242a]",
+  blue: "bg-accent-blue text-white",
+  green: "bg-accent-green text-[#20242a]",
+  pink: "bg-accent-pink text-[#20242a]",
+  gray: "bg-accent-gray text-[#20242a]",
+};
+
+/** 无 avatarColor 时按 username 哈希从预设色取一个稳定颜色。 */
+function hashColor(username: string): string {
+  let h = 0;
+  for (let i = 0; i < username.length; i++) {
+    h = (h * 31 + username.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
 export default function AccountMenu({
@@ -15,9 +35,27 @@ export default function AccountMenu({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
   const { pendingCount } = useSyncStatus();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.user) setUser(d.user);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -29,6 +67,12 @@ export default function AccountMenu({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const displayName = user?.displayName || user?.username || "…";
+  const initial = displayName.trim().charAt(0) || "?";
+  const avatarCls =
+    AVATAR_BG[user?.avatarColor || hashColor(user?.username || "guest")] ||
+    AVATAR_BG.gray;
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -45,6 +89,40 @@ export default function AccountMenu({
     }
   };
 
+  const openNameEditor = () => {
+    setNameInput(user?.displayName || "");
+    setNameError("");
+    setEditingName(true);
+  };
+
+  const saveName = async () => {
+    const value = nameInput.trim();
+    if (value.length > 40) {
+      setNameError("昵称不能超过 40 个字符");
+      return;
+    }
+    setSavingName(true);
+    setNameError("");
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: value }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setNameError(data.error || "保存失败");
+        return;
+      }
+      setUser((prev) => ({ ...(prev || ({} as User)), ...data.user }));
+      setEditingName(false);
+    } catch {
+      setNameError("保存失败，请检查网络");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   return (
     <div className="relative flex-shrink-0" ref={ref}>
       <button
@@ -53,17 +131,79 @@ export default function AccountMenu({
         title="账户菜单"
         aria-expanded={open}
       >
-        <span className="w-7 h-7 rounded-full bg-surface-strong text-ink-secondary text-sm font-bold flex items-center justify-center">
-          我
+        <span
+          className={`w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center ${avatarCls}`}
+        >
+          {initial}
         </span>
-        <span className="hidden sm:inline text-sm font-medium">个人便签</span>
+        <span className="hidden sm:inline text-sm font-medium max-w-[7rem] truncate">
+          {displayName}
+        </span>
         <svg className="hidden sm:block w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {open && (
-        <div className={`absolute right-0 w-48 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 ${dropdownPos}`}>
+        <div className={`absolute right-0 w-56 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 ${dropdownPos}`}>
+          {/* 当前用户信息 */}
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+            <span
+              className={`w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center ${avatarCls}`}
+            >
+              {initial}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink truncate">{displayName}</p>
+              <p className="text-[11px] text-ink-muted truncate">@{user?.username || ""}</p>
+            </div>
+          </div>
+
+          {editingName ? (
+            <div className="px-3.5 py-2.5">
+              <input
+                autoFocus
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveName();
+                  if (e.key === "Escape") setEditingName(false);
+                }}
+                placeholder="输入昵称（空则显示用户名）"
+                className="w-full px-2.5 py-1.5 text-sm text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted/60"
+              />
+              {nameError && (
+                <p className="mt-1 text-[11px] text-danger">{nameError}</p>
+              )}
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => void saveName()}
+                  disabled={savingName}
+                  className="flex-1 py-1.5 text-xs font-medium text-white bg-primary rounded-btn hover:brightness-110 active:brightness-95 disabled:opacity-50 transition-all"
+                >
+                  {savingName ? "保存中..." : "保存"}
+                </button>
+                <button
+                  onClick={() => setEditingName(false)}
+                  className="flex-1 py-1.5 text-xs text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={openNameEditor}
+              className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
+            >
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              修改昵称
+            </button>
+          )}
+
+          <div className="my-1 h-px bg-border-light/60" />
           <a
             href="/archive"
             onClick={() => setOpen(false)}
@@ -95,7 +235,7 @@ export default function AccountMenu({
             暗色
             {theme === "dark" && (
               <svg className="ml-auto w-4 h-4 text-ink-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             )}
           </button>
@@ -109,7 +249,7 @@ export default function AccountMenu({
             亮色
             {theme === "light" && (
               <svg className="ml-auto w-4 h-4 text-ink-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             )}
           </button>
