@@ -4,6 +4,12 @@ import { getSession } from "@/lib/auth";
 import sharp from "sharp";
 import path from "path";
 import fs from "fs/promises";
+import {
+  QUOTA_EXCEEDED_ERROR,
+  QUOTA_EXCEEDED_MESSAGE,
+  addStorageUsed,
+  getStorageState,
+} from "@/lib/storage";
 
 const ALLOWED_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -87,6 +93,19 @@ export async function POST(
     );
   }
 
+  // 额度检查：必须在写文件之前，超额度不落盘、不留孤儿文件
+  const storage = await getStorageState(session.userId);
+  if (storage.used + file.size > storage.quota) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: QUOTA_EXCEEDED_ERROR,
+        message: QUOTA_EXCEEDED_MESSAGE,
+      },
+      { status: 413 }
+    );
+  }
+
   // Determine file extension
   const ext = file.type.split("/")[1] || "jpg";
 
@@ -135,6 +154,8 @@ export async function POST(
       height,
     },
   });
+
+  await addStorageUsed(session.userId, file.size);
 
   return NextResponse.json({
     attachment: {

@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { serializeNote } from "@/lib/note-serializer";
+import { parseChecklistGroups, parseChecklistItems, serializeNote } from "@/lib/note-serializer";
 import path from "path";
 import fs from "fs/promises";
+import {
+  QUOTA_EXCEEDED_ERROR,
+  QUOTA_EXCEEDED_MESSAGE,
+  addStorageUsed,
+  getStorageState,
+  notePayloadSizeBytes,
+} from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +38,32 @@ export async function POST(
     );
   }
 
+  const newTitle = src.title ? `${src.title} 副本` : "副本";
+
+  // 额度检查：副本占用 = 新便签文本 + 附件（源缺失附件不重复计数）
+  const attSum = src.attachments.reduce((s, a) => s + a.size, 0);
+  const newTextSize = notePayloadSizeBytes({
+    title: newTitle,
+    content: src.content,
+    checklistItems: parseChecklistItems(src.checklistItems),
+    checklistGroups: parseChecklistGroups(src.checklistGroups),
+  });
+  const storage = await getStorageState(session.userId);
+  if (storage.used + newTextSize + attSum > storage.quota) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: QUOTA_EXCEEDED_ERROR,
+        message: QUOTA_EXCEEDED_MESSAGE,
+      },
+      { status: 413 }
+    );
+  }
+
   const newNote = await prisma.note.create({
     data: {
       userId: session.userId,
-      title: src.title ? `${src.title} 副本` : "副本",
+      title: newTitle,
       content: src.content,
       color: src.color,
       mode: src.mode,
@@ -51,6 +80,7 @@ export async function POST(
   const destDir = path.resolve(uploadDir, "notes", newNote.id);
   await fs.mkdir(destDir, { recursive: true });
 
+  let copiedBytes = 0;
   for (const att of src.attachments) {
     const filename = path.basename(att.storagePath);
     const destStorage = path.join("notes", newNote.id, filename);
@@ -78,7 +108,10 @@ export async function POST(
         height: att.height,
       },
     });
+    copiedBytes += att.size;
   }
+
+  await addStorageUsed(session.userId, newTextSize + copiedBytes);
 
   const full = await prisma.note.findUnique({
     where: { id: newNote.id },

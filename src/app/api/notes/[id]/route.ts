@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { serializeNote, validateChecklistItems, validateChecklistGroups } from "@/lib/note-serializer";
+import {
+  QUOTA_EXCEEDED_ERROR,
+  QUOTA_EXCEEDED_MESSAGE,
+  addStorageUsed,
+  getStorageState,
+  noteSizeBytes,
+} from "@/lib/storage";
 
 const VALID_COLORS = ["yellow", "blue", "green", "pink", "gray"];
 
@@ -97,11 +104,46 @@ export async function PATCH(
       );
     }
 
+    // 额度检查：编辑后用量 = used - oldSize + newSize，超额度则拒绝
+    const oldSize = noteSizeBytes(note);
+    const newSize = noteSizeBytes({
+      title:
+        updateData["title"] !== undefined
+          ? String(updateData["title"])
+          : note.title,
+      content:
+        updateData["content"] !== undefined
+          ? String(updateData["content"])
+          : note.content,
+      checklistItems:
+        updateData["checklistItems"] !== undefined
+          ? String(updateData["checklistItems"])
+          : note.checklistItems,
+      checklistGroups:
+        updateData["checklistGroups"] !== undefined
+          ? String(updateData["checklistGroups"])
+          : note.checklistGroups,
+    });
+    const delta = newSize - oldSize;
+    const storage = await getStorageState(session.userId);
+    if (storage.used + delta > storage.quota) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: QUOTA_EXCEEDED_ERROR,
+          message: QUOTA_EXCEEDED_MESSAGE,
+        },
+        { status: 413 }
+      );
+    }
+
     const updated = await prisma.note.update({
       where: { id: params.id },
       data: updateData,
       include: { attachments: true },
     });
+
+    await addStorageUsed(session.userId, delta);
 
     // Deserialize checklistItems for the response
     return NextResponse.json(serializeNote(updated as unknown as Record<string, unknown>));

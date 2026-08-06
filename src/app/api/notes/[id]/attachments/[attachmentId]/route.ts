@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import path from "path";
 import fs from "fs/promises";
+import { addStorageUsed } from "@/lib/storage";
 
 export async function DELETE(
   _request: Request,
@@ -30,6 +31,8 @@ export async function DELETE(
   await prisma.attachment.delete({
     where: { id: params.attachmentId },
   });
+
+  await addStorageUsed(session.userId, -attachment.size);
 
   // Delete local file; ignore if already missing
   const uploadDir = process.env.UPLOAD_DIR || "./uploads";

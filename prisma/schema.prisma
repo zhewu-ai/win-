@@ -8,15 +8,17 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  passwordHash String
-  displayName  String?
-  avatarColor  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  notes        Note[]
-  attachments  Attachment[]
+  id                String   @id @default(cuid())
+  username          String   @unique
+  passwordHash      String
+  displayName       String?
+  avatarColor       String?
+  storageQuotaBytes Int      @default(10485760)
+  storageUsedBytes  Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  notes             Note[]
+  attachments       Attachment[]
 }
 
 model Note {

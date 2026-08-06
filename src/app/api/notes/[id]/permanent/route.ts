@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import path from "path";
 import fs from "fs/promises";
+import { addStorageUsed, noteSizeBytes } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,12 @@ export async function DELETE(
   // Delete attachments from DB, then hard delete the note
   await prisma.attachment.deleteMany({ where: { noteId: params.id } });
   await prisma.note.delete({ where: { id: params.id } });
+
+  // 永久删除才释放空间：便签文本 + 附件
+  const released =
+    noteSizeBytes(note) +
+    note.attachments.reduce((s, att) => s + att.size, 0);
+  await addStorageUsed(session.userId, -released);
 
   return NextResponse.json({ ok: true });
 }

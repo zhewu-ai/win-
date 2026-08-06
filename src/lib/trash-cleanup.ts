@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { TRASH_RETENTION_DAYS } from "@/lib/format-time";
 import path from "path";
 import fs from "fs/promises";
+import { addStorageUsed, noteSizeBytes } from "@/lib/storage";
 
 /** Resolve a storage path strictly inside uploadDir; null if it escapes. */
 function safeResolve(uploadDir: string, rel: string): string | null {
@@ -57,6 +58,11 @@ export async function runTrashCleanup(force = false): Promise<number> {
       }
       await prisma.attachment.deleteMany({ where: { noteId: note.id } });
       await prisma.note.delete({ where: { id: note.id } });
+      // 回收站自动清理 = 永久删除，释放空间（便签文本 + 附件）
+      const released =
+        noteSizeBytes(note) +
+        note.attachments.reduce((s, att) => s + att.size, 0);
+      await addStorageUsed(note.userId, -released);
       purged++;
       console.log(
         `[trash-cleanup] purged expired note ${note.id} (deletedAt ${note.deletedAt})`

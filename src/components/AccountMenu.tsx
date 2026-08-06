@@ -30,6 +30,27 @@ function hashColor(username: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
+function formatUsageBytes(bytes: number): string {
+  if (bytes <= 0) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  const mb = bytes / (1024 * 1024);
+  return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
+}
+
+function storageBarColor(pct: number): string {
+  if (pct >= 100) return "bg-danger";
+  if (pct >= 95) return "bg-accent-pink";
+  if (pct >= 80) return "bg-accent-yellow";
+  return "bg-primary";
+}
+
+function storageStatus(pct: number): { text: string; cls: string } {
+  if (pct >= 100) return { text: "空间已满，无法上传图片", cls: "text-danger" };
+  if (pct >= 95) return { text: "空间即将用尽", cls: "text-accent-pink" };
+  if (pct >= 80) return { text: "空间快满", cls: "text-accent-yellow" };
+  return { text: "空间正常", cls: "text-ink-muted" };
+}
+
 export default function AccountMenu({
   dropdownPos = "top-full mt-1.5",
 }: Props) {
@@ -57,6 +78,17 @@ export default function AccountMenu({
     };
   }, []);
 
+  // 每次打开菜单刷新用户信息（存储用量随上传/删除变化）
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.user) setUser(d.user);
+      })
+      .catch(() => {});
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -73,6 +105,12 @@ export default function AccountMenu({
   const avatarCls =
     AVATAR_BG[user?.avatarColor || hashColor(user?.username || "guest")] ||
     AVATAR_BG.gray;
+  const quota = user?.storageQuotaBytes;
+  const used = user?.storageUsedBytes;
+  const pct =
+    quota && typeof used === "number" && quota > 0
+      ? Math.min(100, (used / quota) * 100)
+      : 0;
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -158,6 +196,29 @@ export default function AccountMenu({
               <p className="text-[11px] text-ink-muted truncate">@{user?.username || ""}</p>
             </div>
           </div>
+
+          {/* 存储空间：已用/总量 + 进度条 + 阈值提示。轻量，不挤压昵称/菜单项/退出按钮。 */}
+          {typeof quota === "number" &&
+            typeof used === "number" &&
+            quota > 0 && (
+              <div className="px-3.5 pt-1 pb-2.5 border-b border-border-light/60">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] text-ink-muted flex-shrink-0">存储空间</span>
+                  <span className="text-[11px] text-ink-secondary text-right">
+                    已用 {formatUsageBytes(used)} / {formatUsageBytes(quota)}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 rounded-full bg-surface-active overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${storageBarColor(pct)}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className={`mt-1 text-[11px] text-right ${storageStatus(pct).cls}`}>
+                  {storageStatus(pct).text}
+                </p>
+              </div>
+            )}
 
           {editingName ? (
             <div className="px-3.5 py-2.5">

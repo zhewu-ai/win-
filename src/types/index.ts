@@ -70,4 +70,6 @@ export interface User {
   username: string;
   displayName?: string | null;
   avatarColor?: string | null;
+  storageQuotaBytes?: number;
+  storageUsedBytes?: number;
 }

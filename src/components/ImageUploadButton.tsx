@@ -54,7 +54,10 @@ const ImageUploadButton = forwardRef<ImageUploadHandle, Props>(
 
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || "Upload failed");
+            // 额度超限时优先展示服务端友好文案（STORAGE_QUOTA_EXCEEDED → message）
+            const friendly =
+              typeof data.message === "string" ? data.message : undefined;
+            throw new Error(friendly || data.error || "Upload failed");
           }
 
           const data = await res.json();
