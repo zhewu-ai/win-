@@ -213,9 +213,10 @@
   flex-shrink: 0;
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -1px 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(18, 26, 40, 0.12);
 }
-/* selected 渐变卡上的色点：白色细环把色点与同色渐变分开，仍可见但不抢主视觉 */
+/* selected 渐变卡上的色点：变白色，与卡片自身的彩色渐变区分开，清晰但不抢主视觉 */
 .card-color-dot-selected {
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), inset 0 -1px 1px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(255, 255, 255, 0.55);
+  background: #fff;
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(18, 26, 40, 0.16);
 }
 
 @keyframes toolbar-pop {
