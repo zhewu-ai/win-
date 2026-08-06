@@ -109,7 +109,7 @@ export default function ArchivePage() {
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border-light bg-toolbar-bg z-10 min-h-[52px]">
         <button
           onClick={() => router.push("/")}
-          className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:bg-white/[0.08] rounded-btn transition-colors"
+          className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:bg-surface-hover rounded-btn transition-colors"
           title="返回主页"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -158,7 +158,7 @@ export default function ArchivePage() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="h-16 rounded-card bg-white/[0.06] animate-pulse"
+                  className="h-16 rounded-card bg-surface-hover animate-pulse"
                 />
               ))}
             </div>
@@ -238,7 +238,7 @@ export default function ArchivePage() {
                 {selectedNote.attachments && selectedNote.attachments.length > 0 && (
                   <div className="ml-5 mt-6 grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {selectedNote.attachments.map((att) => (
-                      <div key={att.id} className="aspect-square rounded-thumb overflow-hidden bg-black/[0.03] cursor-pointer" onClick={() => setPreviewAtt(att)}>
+                      <div key={att.id} className="aspect-square rounded-thumb overflow-hidden bg-surface-hover cursor-pointer" onClick={() => setPreviewAtt(att)}>
                         <img src={att.url} alt={att.filename} className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
                       </div>
                     ))}
@@ -324,7 +324,7 @@ export default function ArchivePage() {
             {selectedNote.attachments && selectedNote.attachments.length > 0 && (
               <div className="ml-5 mt-4 grid grid-cols-3 gap-2">
                 {selectedNote.attachments.map((att) => (
-                  <div key={att.id} className="aspect-square rounded-thumb overflow-hidden bg-black/[0.03] cursor-pointer" onClick={() => setPreviewAtt(att)}>
+                  <div key={att.id} className="aspect-square rounded-thumb overflow-hidden bg-surface-hover cursor-pointer" onClick={() => setPreviewAtt(att)}>
                     <img src={att.url} alt={att.filename} className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
                   </div>
                 ))}
@@ -411,7 +411,7 @@ function ArchiveNoteItem({
   return (
     <div
       className={`relative rounded-card transition-colors ${
-        isSelected ? selected : "hover:bg-white/[0.045]"
+        isSelected ? selected : "hover:bg-surface-hover"
       }`}
     >
       <button

@@ -51,7 +51,7 @@ export default function ImageAttachments({
     <div>
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         {attachments.map((att) => (
-          <div key={att.id} className="relative group aspect-square rounded-thumb overflow-hidden bg-white/[0.07] ring-1 ring-white/10">
+          <div key={att.id} className="relative group aspect-square rounded-thumb overflow-hidden bg-surface-hover ring-1 ring-border-soft">
             <img
               src={att.url}
               alt={att.filename}

@@ -235,7 +235,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
           onClick={() => router.push("/")}
-          className="p-1 hover:bg-black/[0.04] rounded-btn transition-colors"
+          className="p-1 hover:bg-surface-hover rounded-btn transition-colors"
           title="返回"
         >
           <svg
@@ -265,7 +265,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           className={`text-xs px-2 py-1 rounded-btn transition-colors ${
             mode === "checklist"
               ? "bg-primary/10 text-primary"
-              : "text-ink-secondary hover:bg-black/[0.04]"
+              : "text-ink-secondary hover:bg-surface-hover"
           }`}
           title="切换模式"
         >
@@ -276,7 +276,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           className={`p-1 rounded-btn transition-colors ${
             isPinned
               ? "text-primary bg-primary/10"
-              : "text-ink-muted hover:bg-black/[0.04]"
+              : "text-ink-muted hover:bg-surface-hover"
           }`}
           title={isPinned ? "取消置顶" : "置顶"}
         >
@@ -300,7 +300,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
             className={`p-1 rounded-btn transition-colors ${
               alwaysOnTop
                 ? "text-primary bg-primary/10"
-                : "text-ink-muted hover:bg-black/[0.04]"
+                : "text-ink-muted hover:bg-surface-hover"
             }`}
             title={alwaysOnTop ? "取消窗口置顶" : "窗口置顶"}
           >
@@ -347,7 +347,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
           placeholder="无标题便签"
-          className="w-full text-lg font-semibold border-none outline-none bg-transparent placeholder:text-[#C7C7CC]"
+          className="w-full text-lg font-semibold border-none outline-none bg-transparent placeholder:text-ink-muted/60"
         />
 
         <ColorPicker selected={color} onChange={handleColorChange} />
@@ -357,7 +357,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
             value={content}
             onChange={handleContentChange}
             placeholder="开始记录..."
-            className="w-full border-none outline-none bg-transparent text-sm leading-relaxed placeholder:text-[#C7C7CC]"
+            className="w-full border-none outline-none bg-transparent text-sm leading-relaxed placeholder:text-ink-muted/60"
             minHeight={120}
           />
         ) : (

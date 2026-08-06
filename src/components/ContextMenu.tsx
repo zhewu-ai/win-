@@ -239,7 +239,7 @@ export default function ContextMenuProvider({
         createPortal(
           <div
             ref={menuRef}
-            className="fixed z-[9999] min-w-[176px] rounded-card border border-border-light bg-[#2A2527] shadow-lg shadow-black/40 py-1 select-none"
+            className="fixed z-[9999] min-w-[176px] rounded-card border border-border-light bg-toolbar-bg shadow-lg shadow-black/40 py-1 select-none"
             style={{ left: menu.x, top: menu.y }}
           >
             {menu.type === "text"
@@ -259,7 +259,7 @@ export default function ContextMenuProvider({
                             ? "text-ink-muted/40 cursor-default"
                             : item.danger
                             ? "text-danger hover:bg-danger/10"
-                            : "text-ink hover:bg-white/[0.06]"
+                            : "text-ink hover:bg-surface-hover"
                         }`}
                       >
                         {item.label}
@@ -273,7 +273,7 @@ export default function ContextMenuProvider({
                       <button
                         key={item.key}
                         onClick={duplicateNote}
-                        className="w-full text-left px-3 py-[7px] text-[13px] text-ink hover:bg-white/[0.06] transition-colors"
+                        className="w-full text-left px-3 py-[7px] text-[13px] text-ink hover:bg-surface-hover transition-colors"
                       >
                         {item.label}
                       </button>

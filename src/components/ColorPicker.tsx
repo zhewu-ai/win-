@@ -47,7 +47,7 @@ export default function ColorPicker({
   const ballCls = (value: NoteColor) =>
     `w-5 h-5 ${COLORS.find((c) => c.value === value)?.bg} rounded-full transition-all ${
       selected === value
-        ? "ring-2 ring-white/45 ring-offset-2 ring-offset-toolbar-bg scale-110"
+        ? "ring-2 ring-ring-selected ring-offset-2 ring-offset-toolbar-bg scale-110"
         : "hover:scale-110 opacity-85 hover:opacity-100"
     }`;
 
@@ -71,7 +71,7 @@ export default function ColorPicker({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="flex items-center justify-center w-icon-btn h-icon-btn rounded-btn text-ink-muted hover:text-ink hover:bg-white/[0.08] transition-colors"
+            className="flex items-center justify-center w-icon-btn h-icon-btn rounded-btn text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
             title="选择颜色"
             aria-expanded={open}
           >
@@ -89,7 +89,7 @@ export default function ColorPicker({
                   }}
                   className={`w-5 h-5 ${c.bg} rounded-full transition-transform ${
                     selected === c.value
-                      ? "ring-2 ring-white/45 ring-offset-2 ring-offset-toolbar-bg scale-110"
+                      ? "ring-2 ring-ring-selected ring-offset-2 ring-offset-toolbar-bg scale-110"
                       : "hover:scale-110"
                   }`}
                   title={c.value}

@@ -59,7 +59,7 @@ export default function ImageUploadButton({ noteId, onUploaded }: Props) {
         className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
           error
             ? "text-danger hover:bg-danger/10"
-            : "text-ink-muted hover:text-ink hover:bg-white/[0.08]"
+            : "text-ink-muted hover:text-ink hover:bg-surface-hover"
         } ${uploading ? "opacity-60 animate-pulse" : ""}`}
         title={error ? "上传失败，点击重试" : uploading ? "上传中..." : "添加图片"}
       >
@@ -76,7 +76,7 @@ export default function ImageUploadButton({ noteId, onUploaded }: Props) {
         onChange={handleFileChange}
       />
       {error && (
-        <span className="absolute bottom-full mb-1 right-0 whitespace-nowrap text-[11px] text-danger bg-white rounded-btn px-1.5 py-0.5 shadow-sm border border-danger/20">
+        <span className="absolute bottom-full mb-1 right-0 whitespace-nowrap text-[11px] text-danger bg-panel-bg rounded-btn px-1.5 py-0.5 shadow-sm border border-danger/20">
           上传失败
         </span>
       )}

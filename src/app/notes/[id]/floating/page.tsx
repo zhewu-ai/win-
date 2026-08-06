@@ -29,7 +29,7 @@ export default async function FloatingPage({
   const serialized = serializeNote(note as unknown as Record<string, unknown>);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-page-bg">
       <FloatingNoteClient
         initialNote={serialized as unknown as Note}
         noteId={params.id}

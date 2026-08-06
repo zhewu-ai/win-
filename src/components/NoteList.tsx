@@ -180,7 +180,7 @@ export default function NoteList({
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-20 rounded-card bg-black/[0.04] animate-pulse"
+            className="h-20 rounded-card bg-surface-hover animate-pulse"
           />
         ))}
       </div>
@@ -276,7 +276,7 @@ export default function NoteList({
               <img
                 src={thumbnail.url}
                 alt={thumbnail.filename}
-                className="w-[54px] h-[54px] rounded-[4px] object-cover flex-shrink-0 ring-1 ring-white/10"
+                className="w-[54px] h-[54px] rounded-[4px] object-cover flex-shrink-0 ring-1 ring-border-soft"
               />
             )}
           </div>

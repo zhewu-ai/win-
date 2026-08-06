@@ -49,7 +49,7 @@ export default function ConfirmDialog({
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-white/[0.08] transition-colors"
+            className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-surface-hover transition-colors"
           >
             取消
           </button>

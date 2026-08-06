@@ -6,36 +6,37 @@ const config: Config = {
     extend: {
       colors: {
         page: {
-          bg: "#191919",
+          bg: "rgb(var(--page-bg-rgb) / <alpha-value>)",
         },
         sidebar: {
-          bg: "#241E20",
+          bg: "rgb(var(--sidebar-bg-rgb) / <alpha-value>)",
         },
         toolbar: {
-          bg: "#221C1E",
+          bg: "rgb(var(--toolbar-bg-rgb) / <alpha-value>)",
         },
         panel: {
-          bg: "#1A1A1A",
+          bg: "rgb(var(--panel-bg-rgb) / <alpha-value>)",
         },
         border: {
-          light: "#3B3335",
+          light: "rgb(var(--border-light-rgb) / <alpha-value>)",
+          soft: "var(--border-soft)",
         },
         ink: {
-          DEFAULT: "#F5F4F2",
-          secondary: "#C9C4C0",
-          muted: "#8F8986",
+          DEFAULT: "rgb(var(--ink-rgb) / <alpha-value>)",
+          secondary: "rgb(var(--ink-secondary-rgb) / <alpha-value>)",
+          muted: "rgb(var(--ink-muted-rgb) / <alpha-value>)",
         },
         primary: {
-          DEFAULT: "#B99A28",
+          DEFAULT: "rgb(var(--primary-rgb) / <alpha-value>)",
         },
         danger: {
-          DEFAULT: "#FF3B30",
+          DEFAULT: "rgb(var(--danger-rgb) / <alpha-value>)",
         },
         success: {
-          DEFAULT: "#34C759",
+          DEFAULT: "rgb(var(--success-rgb) / <alpha-value>)",
         },
         selection: {
-          yellow: "#B08A20",
+          yellow: "rgb(var(--selection-yellow-rgb) / <alpha-value>)",
         },
         sel: {
           yellow: "#B08A20",
@@ -58,8 +59,17 @@ const config: Config = {
           pink: "#F27BA5",
           gray: "#9E9A97",
         },
+        surface: {
+          hover: "var(--surface-hover)",
+          active: "var(--surface-active)",
+          strong: "var(--surface-strong)",
+          focus: "var(--surface-focus)",
+        },
+        ring: {
+          selected: "var(--ring-selected)",
+        },
         search: {
-          bg: "rgba(255,255,255,0.08)",
+          bg: "var(--search-bg)",
         },
       },
       borderRadius: {
@@ -74,7 +84,8 @@ const config: Config = {
         "list-title": ["14px", { lineHeight: "1.4", fontWeight: "600" }],
         "list-summary": ["13px", { lineHeight: "1.45", fontWeight: "400" }],
         "list-meta": ["12px", { lineHeight: "1.4", fontWeight: "400" }],
-        "edit-title": ["30px", { lineHeight: "1.22", fontWeight: "750" }],
+        "edit-title": ["clamp(20px, 2.2vw, 22px)", { lineHeight: "1.3", fontWeight: "700" }],
+        "login-title": ["30px", { lineHeight: "1.22", fontWeight: "750" }],
         "edit-body": ["17px", { lineHeight: "1.65", fontWeight: "400" }],
         toolbar: ["13px", { lineHeight: "1.4", fontWeight: "500" }],
       },

@@ -8,6 +8,7 @@ interface Props {
   placeholder?: string;
   className?: string;
   minHeight?: number;
+  maxHeight?: number;
   innerRef?: React.Ref<HTMLTextAreaElement>;
   onFocus?: React.FocusEventHandler<HTMLTextAreaElement>;
   onBlur?: React.FocusEventHandler<HTMLTextAreaElement>;
@@ -21,6 +22,7 @@ export default function AutoGrowTextarea({
   placeholder,
   className,
   minHeight,
+  maxHeight,
   innerRef,
   onFocus,
   onBlur,
@@ -39,7 +41,8 @@ export default function AutoGrowTextarea({
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    const target = maxHeight ? Math.min(el.scrollHeight, maxHeight) : el.scrollHeight;
+    el.style.height = `${target}px`;
   };
 
   useEffect(() => {
@@ -47,7 +50,7 @@ export default function AutoGrowTextarea({
     window.addEventListener("resize", syncHeight);
     return () => window.removeEventListener("resize", syncHeight);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [value, maxHeight]);
 
   return (
     <textarea
@@ -62,8 +65,9 @@ export default function AutoGrowTextarea({
       onPaste={onPaste}
       className={className}
       style={{
-        overflow: "hidden",
+        overflow: maxHeight ? "auto" : "hidden",
         minHeight,
+        maxHeight,
         resize: "none",
       }}
     />

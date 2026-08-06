@@ -47,7 +47,7 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
         onSubmit={handleSubmit}
         className="w-full max-w-xs bg-toolbar-bg rounded-[14px] border border-border-light p-6 shadow-2xl shadow-black/20"
       >
-        <h1 className="text-edit-title font-semibold text-center text-ink mb-1">
+        <h1 className="text-login-title font-semibold text-center text-ink mb-1">
           全平台便签
         </h1>
         <p className="text-list-summary text-ink-muted text-center mb-6">
@@ -68,7 +68,7 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-3 py-2.5 text-ink bg-search-bg border border-white/5 rounded-input outline-none focus:bg-white/10 focus:border-white/10 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-ink-muted"
+            className="w-full px-3 py-2.5 text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:bg-surface-focus focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted"
             placeholder="请输入用户名"
             required
             autoFocus
@@ -83,7 +83,7 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2.5 text-ink bg-search-bg border border-white/5 rounded-input outline-none focus:bg-white/10 focus:border-white/10 focus:ring-1 focus:ring-white/10 transition-all placeholder:text-ink-muted"
+            className="w-full px-3 py-2.5 text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:bg-surface-focus focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted"
             placeholder="请输入密码"
             required
           />

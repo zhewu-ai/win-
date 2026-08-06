@@ -110,11 +110,11 @@ export default function HomePage() {
           className={`${
             mode === "single"
               ? !showEditor
-                ? "flex w-full border-r border-black"
+                ? "flex w-full border-r border-border-light"
                 : "hidden"
               : sidebarCollapsed
                 ? "flex w-0 opacity-0 overflow-hidden pointer-events-none"
-                : "flex w-[350px] border-r border-black"
+                : "flex w-[350px] border-r border-border-light"
           } flex-shrink-0 flex-col bg-sidebar-bg transition-[width,opacity] duration-150 ease-out`}
         >
           <Sidebar
@@ -133,7 +133,7 @@ export default function HomePage() {
         {mode !== "single" && sidebarCollapsed && (
           <button
             onClick={toggleSidebar}
-            className="w-7 flex-shrink-0 items-center justify-center bg-sidebar-bg border-r border-black text-ink-muted hover:text-ink hover:bg-white/[0.05] transition-colors flex"
+            className="w-7 flex-shrink-0 items-center justify-center bg-sidebar-bg border-r border-border-light text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors flex"
             title="展开侧边栏"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

@@ -13,8 +13,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body className="h-screen overflow-hidden">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("sticky-notes.theme");var th=t||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.dataset.theme=th}catch(e){}`,
+          }}
+        />
         <ContextMenuProvider>{children}</ContextMenuProvider>
       </body>
     </html>
