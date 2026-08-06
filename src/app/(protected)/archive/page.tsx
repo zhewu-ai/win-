@@ -398,11 +398,14 @@ function ArchiveNoteItem({
   onDelete: (id: string) => void;
 }) {
   const accent = ACCENT[note.color] || "bg-accent-gray";
+  const selectedCls = ACCENT[note.color]
+    ? `card-selected card-selected-${note.color}`
+    : "card-selected card-selected-gray";
 
   return (
     <div
       className={`relative rounded-card transition-colors ${
-        isSelected ? "card-selected" : "card-surface"
+        isSelected ? selectedCls : "card-surface"
       }`}
     >
       <button
@@ -410,7 +413,9 @@ function ArchiveNoteItem({
         className="w-full text-left"
       >
         <span
-          className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full ${accent}`}
+          className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full ${
+            isSelected ? "card-selected-bar" : accent
+          }`}
         />
         <div className="pl-4 pr-3.5 py-3">
           <div className="flex items-start gap-2.5">

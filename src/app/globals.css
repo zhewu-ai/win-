@@ -54,12 +54,17 @@
     --card-shadow: 0 1px 2px rgba(38, 48, 66, 0.06);
     --card-shadow-hover: 0 6px 18px rgba(36, 43, 60, 0.08);
 
-    /* 便签色球（保留 5 色键，按 M9 调色） */
+    /* 便签色球（保留 5 色键，按 M9 调色）；-deep 为渐变深端，选中卡用 */
     --accent-yellow: #f0c33e;
+    --accent-yellow-deep: #d4a51f;
     --accent-blue: #4276dc;
+    --accent-blue-deep: #275bcc;
     --accent-green: #34b7ad;
+    --accent-green-deep: #26968f;
     --accent-pink: #e8799c;
+    --accent-pink-deep: #c65f82;
     --accent-gray: #bebfc2;
+    --accent-gray-deep: #9a9da2;
   }
 
   [data-theme="dark"] {
@@ -110,12 +115,17 @@
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     --card-shadow-hover: 0 6px 18px rgba(0, 0, 0, 0.28);
 
-    /* 便签色球（保留 5 色键，按 M9 调色，暗色保持明亮不闷） */
+    /* 便签色球（保留 5 色键，按 M9 调色，暗色保持明亮不闷）；-deep 为渐变深端，选中卡用 */
     --accent-yellow: #f2c94c;
+    --accent-yellow-deep: #cfae2e;
     --accent-blue: #5d8cff;
+    --accent-blue-deep: #3569e6;
     --accent-green: #42c9bd;
+    --accent-green-deep: #2f9e95;
     --accent-pink: #ef87a8;
+    --accent-pink-deep: #c7678b;
     --accent-gray: #8f949d;
+    --accent-gray-deep: #6f767f;
   }
 
   body {
@@ -178,16 +188,26 @@
     box-shadow: var(--card-shadow-hover);
     transform: translateY(-1px);
   }
-  /* 选中卡片：蓝色渐变 + 白字，作为明确视觉锚点 */
-  .card-selected {
-    color: #fff;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
-    box-shadow: 0 14px 30px rgba(45, 102, 219, 0.28);
-  }
-  .card-selected:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 34px rgba(45, 102, 219, 0.32);
-  }
+}
+
+/* 选中卡样式：独立于 @layer utilities，避免 Tailwind JIT 按字面量类名裁剪未使用的颜色。
+   颜色类由 template literal 动态拼出（card-selected-${note.color}），Tailwind 无法识别为已使用。 */
+.card-selected {
+  box-shadow: 0 14px 30px rgba(18, 26, 40, 0.16);
+}
+.card-selected:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px rgba(18, 26, 40, 0.2);
+}
+/* 选中卡片：按便签自身颜色渐变，浅色（黄/绿/粉/灰）用深字保可读，蓝用白字 */
+.card-selected-yellow { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-yellow) 0%, var(--accent-yellow-deep) 100%); }
+.card-selected-blue { color: #fff; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.18), transparent 30%), linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-blue-deep) 100%); }
+.card-selected-green { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-deep) 100%); }
+.card-selected-pink { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-pink) 0%, var(--accent-pink-deep) 100%); }
+.card-selected-gray { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-gray) 0%, var(--accent-gray-deep) 100%); }
+/* 选中卡左侧色条：跟随文字色（深字卡→深条，蓝卡→白条） */
+.card-selected-bar {
+  background: color-mix(in srgb, currentColor 32%, transparent);
 }
 
 @keyframes toolbar-pop {

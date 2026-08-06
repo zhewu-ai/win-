@@ -222,6 +222,9 @@ export default function NoteList({
 
   function NoteItem({ note }: { note: Note }) {
     const accent = ACCENT[note.color] || "bg-accent-gray";
+    const selectedCls = ACCENT[note.color]
+      ? `card-selected card-selected-${note.color}`
+      : "card-selected card-selected-gray";
     const autoTitle = getAutoTitle(note);
     const summaryLines = getSummaryLines(note);
     const progress = getTodoProgress(note);
@@ -234,12 +237,12 @@ export default function NoteList({
         onClick={() => onSelect(note.id)}
         data-note-id={note.id}
         className={`relative w-full text-left rounded-card ${
-          isSelected ? "card-selected" : "card-surface"
+          isSelected ? selectedCls : "card-surface"
         }`}
       >
         <span
           className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${
-            isSelected ? "bg-white/40" : accent
+            isSelected ? "card-selected-bar" : accent
           }`}
         />
         <div className="pl-6 pr-5 py-4">

@@ -6,6 +6,7 @@ import SWRegister from "@/components/SWRegister";
 export const metadata: Metadata = {
   title: "PinNote",
   description: "PinNote 全平台便签 Web MVP",
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({

@@ -51,6 +51,11 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
         onSubmit={handleSubmit}
         className="w-full max-w-xs bg-toolbar-bg rounded-[14px] border border-border-light p-6 shadow-2xl shadow-black/20"
       >
+        <img
+          src="/icon.png"
+          alt="PinNote"
+          className="w-14 h-14 rounded-xl mx-auto mb-3 object-cover shadow-md shadow-black/10"
+        />
         <h1 className="text-login-title font-semibold text-center text-ink mb-1">
           PinNote
         </h1>
