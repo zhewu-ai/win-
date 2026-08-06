@@ -67,9 +67,9 @@ export default function NoteEditor({
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  // 工具栏按编辑区实际容器宽度分三档（≥520 舒展 / 360-520 紧凑 / <360 极简）
+  // 工具栏按编辑区实际容器宽度分三档（≥560 舒展 / 380-779 紧凑 / <380 极简）
+  // 迟滞：进入各档与退出各档阈值分开，退出 spacious 需 >780（桥接侧边栏自动收起时编辑区约跳到 720 的跳变，避免一次收窄中反复“收起→展开→再收起”）
   const [toolbarMode, setToolbarMode] = useState<"spacious" | "compact" | "minimal">("compact");
-  // 迟滞判定用：进入 520/360，退出 500/340，避免断点边缘微调时反复横跳
   const toolbarModeRef = useRef<"spacious" | "compact" | "minimal">("compact");
   const editorRootRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -321,15 +321,21 @@ export default function NoteEditor({
     if (!note) return;
     const el = editorRootRef.current;
     if (!el) return;
+    // 方向性迟滞：同一档的进入/退出阈值分开，且退出 spacious 需 >780，桥接侧边栏
+    // 自动收起时编辑区从 ~370 跳到 ~720 的跳变，避免一次连续收窄中出现
+    // “compact → spacious → compact” 的来回切换。
     const update = (w: number) => {
       const cur = toolbarModeRef.current;
       let next = cur;
-      if (w >= 520) {
-        next = "spacious";
-      } else if (w >= 360) {
-        next = cur === "spacious" && w >= 500 ? "spacious" : "compact";
+      if (cur === "spacious") {
+        if (w < 380) next = "minimal";
+        else if (w < 560) next = "compact";
+      } else if (cur === "compact") {
+        if (w >= 780) next = "spacious";
+        else if (w < 380) next = "minimal";
       } else {
-        next = cur === "compact" && w >= 340 ? "compact" : "minimal";
+        // minimal
+        if (w >= 440) next = w >= 780 ? "spacious" : "compact";
       }
       toolbarModeRef.current = next;
       setToolbarMode(next);
@@ -458,8 +464,8 @@ export default function NoteEditor({
   return (
     <div ref={editorRootRef} className="flex-1 flex flex-col h-full bg-panel-bg">
       {/* Editor toolbar - always single line; low-freq ops live in "more" menu.
-          整体断点：640px 以上展开（模式文字/色球/保存文案），以下整组变图标。 */}
-      <div className="flex items-center gap-1 px-2 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px] sm:gap-1.5 sm:px-4">
+          固定 padding/gap，不用 sm: 媒体断点，避免 640px 附近内容整体横移一跳。 */}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px]">
         {showBackButton && (
           <button
             onClick={onBack}
@@ -472,10 +478,10 @@ export default function NoteEditor({
           </button>
         )}
 
-        {/* Mode switch */}
+        {/* Mode switch：只保留图标，模式用 tooltip 表达，避免收窄时文字消失/出现造成跳变 */}
         <button
           onClick={handleModeSwitch}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-btn text-toolbar transition-colors ${
+          className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
             mode === "checklist"
               ? "bg-surface-strong text-ink"
               : "text-ink-muted hover:text-ink hover:bg-surface-hover"
@@ -483,19 +489,13 @@ export default function NoteEditor({
           title={mode === "checklist" ? "切换到普通便签" : "切换到待办清单"}
         >
           {mode === "checklist" ? (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className={`${toolbarMode === "spacious" ? "inline" : "hidden"} toolbar-item`}>便签</span>
-            </>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
           ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              <span className={`${toolbarMode === "spacious" ? "inline" : "hidden"} toolbar-item`}>待办</span>
-            </>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
           )}
         </button>
 

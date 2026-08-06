@@ -41,6 +41,13 @@
     --danger-rgb: 255 59 48;
     --success-rgb: 52 199 89;
     --selection-yellow-rgb: 176 138 32;
+
+    /* 侧边栏列表项 hover/active 底色：暗色为带色相的深色叠层 */
+    --tint-yellow: #4A3D20;
+    --tint-blue: #28384E;
+    --tint-green: #274034;
+    --tint-pink: #46303A;
+    --tint-gray: #383432;
   }
 
   [data-theme="light"] {
@@ -80,6 +87,13 @@
     --danger-rgb: 255 59 48;
     --success-rgb: 52 199 89;
     --selection-yellow-rgb: 168 125 31;
+
+    /* 亮色 hover 用浅色中性背景，避免深色叠层导致文字识别差 */
+    --tint-yellow: rgba(0, 0, 0, 0.045);
+    --tint-blue: rgba(0, 0, 0, 0.045);
+    --tint-green: rgba(0, 0, 0, 0.045);
+    --tint-pink: rgba(0, 0, 0, 0.045);
+    --tint-gray: rgba(0, 0, 0, 0.045);
   }
 
   body {

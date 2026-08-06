@@ -46,11 +46,11 @@ const config: Config = {
           gray: "#6B6663",
         },
         tint: {
-          yellow: "#4A3D20",
-          blue: "#28384E",
-          green: "#274034",
-          pink: "#46303A",
-          gray: "#383432",
+          yellow: "var(--tint-yellow)",
+          blue: "var(--tint-blue)",
+          green: "var(--tint-green)",
+          pink: "var(--tint-pink)",
+          gray: "var(--tint-gray)",
         },
         accent: {
           yellow: "#E3C24A",

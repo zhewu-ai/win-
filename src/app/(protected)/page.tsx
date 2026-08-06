@@ -119,14 +119,14 @@ export default function HomePage() {
       <OfflineBar />
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
-            单栏 → 编辑打开时隐藏，否则全宽显示；
+            单栏 → 编辑打开时收起（复用 width/opacity 动画），否则全宽显示；
             双栏 → 固定 350px，仅随用户手动折叠状态隐藏（w-0+opacity 过渡动画），不随窗口缩放自动变化。 */}
         <div
           className={`${
             mode === "single"
               ? !showEditor
                 ? "flex w-full border-r border-border-light"
-                : "hidden"
+                : "flex w-0 opacity-0 overflow-hidden pointer-events-none"
               : sidebarCollapsed
                 ? "flex w-0 opacity-0 overflow-hidden pointer-events-none"
                 : "flex w-[350px] border-r border-border-light"
