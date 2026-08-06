@@ -68,10 +68,6 @@ function getTodoProgress(note: Note): { done: number; total: number } | null {
   };
 }
 
-function getImageCount(note: Note): number {
-  return note.attachments?.length || 0;
-}
-
 function getDateSection(dateStr: string): { label: string; rank: number } {
   const date = new Date(dateStr);
   const now = new Date();
@@ -225,12 +221,13 @@ export default function NoteList({
     const selectedCls = ACCENT[note.color]
       ? `card-selected card-selected-${note.color}`
       : "card-selected card-selected-gray";
+    const isSelected = selectedId === note.id;
+    const dotCls = isSelected
+      ? "card-color-dot card-color-dot-selected"
+      : "card-color-dot";
     const autoTitle = getAutoTitle(note);
     const summaryLines = getSummaryLines(note);
     const progress = getTodoProgress(note);
-    const imageCount = getImageCount(note);
-    const isSelected = selectedId === note.id;
-    const thumbnail = note.attachments?.[0];
 
     return (
       <button
@@ -240,12 +237,7 @@ export default function NoteList({
           isSelected ? selectedCls : "card-surface"
         }`}
       >
-        <span
-          className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${
-            isSelected ? "card-selected-bar" : accent
-          }`}
-        />
-        <div className="pl-6 pr-5 py-4">
+        <div className="px-5 py-4">
           {/* Title row */}
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
@@ -257,13 +249,7 @@ export default function NoteList({
                 <HighlightText text={autoTitle} query={searchQuery || ""} />
               </p>
             </div>
-            {thumbnail && (
-              <img
-                src={thumbnail.url}
-                alt={thumbnail.filename}
-                className="w-[54px] h-[54px] rounded-[4px] object-cover flex-shrink-0 ring-1 ring-border-soft"
-              />
-            )}
+            <span className={`${dotCls} ${accent} mt-0.5`} aria-hidden="true" />
           </div>
 
           {/* Summary lines */}
@@ -282,8 +268,19 @@ export default function NoteList({
             </div>
           )}
 
-          {/* Meta row */}
-          <div className="flex items-center gap-3 mt-2">
+          {/* Meta row: 待办进度在左，最后修改日期在右 */}
+          <div className="flex items-center justify-between gap-3 mt-2">
+            <div className="flex items-center gap-3">
+              {progress && (
+                <span
+                  className={`text-[13px] leading-tight font-semibold ${
+                    isSelected ? "text-white/[0.72]" : "text-ink-muted"
+                  }`}
+                >
+                  {progress.done}/{progress.total}
+                </span>
+              )}
+            </div>
             <span
               className={`text-[13px] leading-tight font-semibold ${
                 isSelected ? "text-white/[0.72]" : "text-ink-muted"
@@ -291,24 +288,6 @@ export default function NoteList({
             >
               {formatNoteTime(note.updatedAt)}
             </span>
-            {imageCount > 0 && (
-              <span
-                className={`text-[13px] leading-tight font-semibold ${
-                  isSelected ? "text-white/[0.72]" : "text-ink-muted"
-                }`}
-              >
-                {imageCount} 图
-              </span>
-            )}
-            {progress && (
-              <span
-                className={`text-[13px] leading-tight font-semibold ${
-                  isSelected ? "text-white/[0.72]" : "text-ink-muted"
-                }`}
-              >
-                {progress.done}/{progress.total}
-              </span>
-            )}
           </div>
         </div>
       </button>

@@ -7,6 +7,7 @@ import ImagePreview from "@/components/ImagePreview";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import type { Attachment } from "@/types";
+import { formatNoteTime } from "@/lib/format-time";
 
 const ACCENT: Record<string, string> = {
   yellow: "bg-accent-yellow",
@@ -401,6 +402,10 @@ function ArchiveNoteItem({
   const selectedCls = ACCENT[note.color]
     ? `card-selected card-selected-${note.color}`
     : "card-selected card-selected-gray";
+  const dotCls = isSelected
+    ? "card-color-dot card-color-dot-selected"
+    : "card-color-dot";
+  const progress = getTodoProgress(note);
 
   return (
     <div
@@ -412,12 +417,7 @@ function ArchiveNoteItem({
         onClick={() => onSelect(note.id)}
         className="w-full text-left"
       >
-        <span
-          className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full ${
-            isSelected ? "card-selected-bar" : accent
-          }`}
-        />
-        <div className="pl-4 pr-3.5 py-3">
+        <div className="px-4 py-3">
           <div className="flex items-start gap-2.5">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
@@ -434,28 +434,36 @@ function ArchiveNoteItem({
                   {getAutoTitle(note)}
                 </span>
               </div>
-              {getTodoProgress(note) && (
+              {progress && (
                 <p className={`text-list-meta mt-0.5 ${isSelected ? "text-white/[0.75]" : "text-ink-muted"}`}>
-                  待办 {getTodoProgress(note)?.done}/{getTodoProgress(note)?.total}
+                  待办 {progress.done}/{progress.total}
                 </p>
               )}
             </div>
+            <span className={`${dotCls} ${accent} mt-0.5`} aria-hidden="true" />
           </div>
         </div>
       </button>
-      <div className="flex gap-2 px-4 pb-2.5">
-        <button
-          onClick={() => onUnarchive(note.id)}
-          className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.85] hover:text-white" : "text-primary hover:text-primary/80"}`}
+      <div className="flex items-center justify-between gap-2 px-4 pb-2.5">
+        <div className="flex gap-2">
+          <button
+            onClick={() => onUnarchive(note.id)}
+            className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.85] hover:text-white" : "text-primary hover:text-primary/80"}`}
+          >
+            取消归档
+          </button>
+          <button
+            onClick={() => onDelete(note.id)}
+            className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.85] hover:text-white" : "text-danger hover:text-danger/80"}`}
+          >
+            删除
+          </button>
+        </div>
+        <span
+          className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.7]" : "text-ink-muted"}`}
         >
-          取消归档
-        </button>
-        <button
-          onClick={() => onDelete(note.id)}
-          className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.85] hover:text-white" : "text-danger hover:text-danger/80"}`}
-        >
-          删除
-        </button>
+          {formatNoteTime(note.updatedAt)}
+        </span>
       </div>
     </div>
   );

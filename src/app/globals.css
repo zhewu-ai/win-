@@ -205,9 +205,17 @@
 .card-selected-green { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-deep) 100%); }
 .card-selected-pink { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-pink) 0%, var(--accent-pink-deep) 100%); }
 .card-selected-gray { color: #20242a; background: radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.2), transparent 30%), linear-gradient(135deg, var(--accent-gray) 0%, var(--accent-gray-deep) 100%); }
-/* 选中卡左侧色条：跟随文字色（深字卡→深条，蓝卡→白条） */
-.card-selected-bar {
-  background: color-mix(in srgb, currentColor 32%, transparent);
+/* 卡片右上角颜色圆点：小色球质感（非按钮）。颜色由 Tailwind bg-accent-* 提供 */
+.card-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -1px 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(18, 26, 40, 0.12);
+}
+/* selected 渐变卡上的色点：白色细环把色点与同色渐变分开，仍可见但不抢主视觉 */
+.card-color-dot-selected {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), inset 0 -1px 1px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(255, 255, 255, 0.55);
 }
 
 @keyframes toolbar-pop {

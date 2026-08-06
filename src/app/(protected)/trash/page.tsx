@@ -174,12 +174,10 @@ export default function TrashPage() {
               return (
                 <div
                   key={note.id}
-                  className="relative flex items-center gap-3 rounded-card px-4 py-3 hover:bg-surface-hover transition-colors"
+                  className="flex items-center gap-3 rounded-card px-4 py-3 hover:bg-surface-hover transition-colors"
                 >
-                  <span
-                    className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full ${accent}`}
-                  />
-                  <div className="flex-1 min-w-0 pl-1">
+                  <span className={`card-color-dot ${accent}`} aria-hidden="true" />
+                  <div className="flex-1 min-w-0">
                     <p className="text-list-title text-ink truncate">
                       {autoTitle}
                     </p>
