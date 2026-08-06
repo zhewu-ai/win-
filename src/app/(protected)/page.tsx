@@ -7,6 +7,7 @@ import OfflineBar from "@/components/OfflineBar";
 import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { deleteNoteOfflineAware } from "@/lib/offline/persist";
+import { getDraft } from "@/lib/offline/draft";
 import type { Note } from "@/types";
 
 const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
@@ -100,6 +101,18 @@ export default function HomePage() {
     window.addEventListener("sticky-notes:changed", onChanged);
     return () => window.removeEventListener("sticky-notes:changed", onChanged);
   }, [fetchNotes, searchQuery, selectedNoteId]);
+
+  // 防丢：重开后存在未同步草稿时自动打开对应便签，交给编辑器恢复
+  useEffect(() => {
+    if (loading) return;
+    const d = getDraft();
+    if (!d || selectedNoteId) return;
+    const target = notes.find((n) => n.id === d.noteId);
+    if (target) {
+      setSelectedNoteId(d.noteId);
+      setShowEditor(true);
+    }
+  }, [loading, notes, selectedNoteId]);
 
   return (
     <div className="h-screen flex flex-col bg-page-bg">

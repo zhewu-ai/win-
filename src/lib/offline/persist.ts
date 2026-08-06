@@ -24,6 +24,22 @@ export function isNetworkError(e: unknown): boolean {
   );
 }
 
+/** 带超时的 fetch：断网黑洞/服务器无响应时 ~8s 后以 AbortError 结束，
+ * 走调用方的 isNetworkError 本地降级路径，避免保存请求无限挂起。 */
+const FETCH_TIMEOUT_MS = 8000;
+
+export function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
 function now(): string {
   return new Date().toISOString();
 }
@@ -147,12 +163,16 @@ export async function saveNoteUpdate(
     return mapFromLocal(await applyLocalUpdate(id, updates));
   }
   try {
-    const res = await fetch(`/api/notes/${id}`, {
+    const res = await fetchWithTimeout(`/api/notes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     });
     if (res.status === 401) throw new ApiError(401, "Unauthorized");
+    if (res.status >= 500) {
+      // 服务器 5xx：不丢输入，转本地待同步（防丢保护触发条件）
+      return mapFromLocal(await applyLocalUpdate(id, updates));
+    }
     if (!res.ok) throw new ApiError(res.status, "Save failed");
     const updated: Note = await res.json();
     await mirrorNote(updated);
@@ -167,7 +187,7 @@ export async function saveNoteUpdate(
 
 /** 在线创建 + 镜像。调用方负责把结果插入内存列表。 */
 export async function createNoteRemote(data?: Partial<Note>): Promise<Note> {
-  const res = await fetch("/api/notes", {
+  const res = await fetchWithTimeout("/api/notes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(
@@ -218,7 +238,7 @@ export async function createNoteLocal(data?: Partial<Note>): Promise<Note> {
 export async function deleteNoteOfflineAware(id: string): Promise<void> {
   if (typeof navigator !== "undefined" && navigator.onLine) {
     try {
-      const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      const res = await fetchWithTimeout(`/api/notes/${id}`, { method: "DELETE" });
       if (res.status === 401) throw new ApiError(401, "Unauthorized");
       if (!res.ok) throw new ApiError(res.status, "Delete failed");
       await deleteNoteRow(id);

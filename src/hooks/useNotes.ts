@@ -73,15 +73,15 @@ export function useNotes(archived = false) {
 
   const createNote = useCallback(async (data?: Partial<Note>): Promise<Note> => {
     let note: Note;
-    if (navigator.onLine) {
-      try {
-        note = await createNoteRemote(data);
-      } catch (e) {
-        if (isNetworkError(e)) note = await createNoteLocal(data);
-        else throw e;
+    try {
+      note = await createNoteRemote(data);
+    } catch (e) {
+      // 网络错误或服务器 5xx：转本地新建（pendingCreate），避免新建意图丢失
+      if (isNetworkError(e) || (e instanceof ApiError && e.status >= 500)) {
+        note = await createNoteLocal(data);
+      } else {
+        throw e;
       }
-    } else {
-      note = await createNoteLocal(data);
     }
     setNotes((prev) => [note, ...prev]);
     return note;

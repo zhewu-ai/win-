@@ -1,6 +1,6 @@
 import type { LocalNote } from "./db";
 import { getDB, putNote } from "./db";
-import { ApiError, isNetworkError } from "./persist";
+import { ApiError, fetchWithTimeout, isNetworkError } from "./persist";
 
 const PATCH_FIELDS = [
   "title",
@@ -43,7 +43,7 @@ async function patchNote(
   serverId: string,
   body: Record<string, unknown>
 ): Promise<Response> {
-  return fetch(`/api/notes/${serverId}`, {
+  return fetchWithTimeout(`/api/notes/${serverId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -52,7 +52,7 @@ async function patchNote(
 
 /** pendingCreate：POST 建服务端记录 → 再 PATCH 补 POST 不接受的字段 → 回填 serverId。 */
 async function syncCreate(local: LocalNote): Promise<boolean> {
-  const res = await fetch("/api/notes", {
+  const res = await fetchWithTimeout("/api/notes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -103,7 +103,9 @@ async function syncDelete(local: LocalNote): Promise<boolean> {
     await getDB().notes.delete(local.localId);
     return true;
   }
-  const res = await fetch(`/api/notes/${local.serverId}`, { method: "DELETE" });
+  const res = await fetchWithTimeout(`/api/notes/${local.serverId}`, {
+    method: "DELETE",
+  });
   if (res.status === 401) throw new ApiError(401, "Unauthorized");
   if (!res.ok) throw new ApiError(res.status, "Sync delete failed");
   await getDB().notes.delete(local.localId);

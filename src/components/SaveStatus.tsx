@@ -4,7 +4,7 @@ import { useSyncStatus } from "@/hooks/useSyncStatus";
 import type { SyncStatus } from "@/types";
 
 interface Props {
-  status: "saved" | "saving" | "error";
+  status: "saved" | "saving" | "error" | "localError";
   onRetry?: () => void;
   showText?: boolean;
   syncStatus?: SyncStatus;
@@ -24,6 +24,15 @@ export default function SaveStatus({
       <span className="text-list-meta text-ink-muted/60 flex items-center gap-1 whitespace-nowrap">
         <span className="w-1.5 h-1.5 bg-ink-muted/40 rounded-full animate-pulse" />
         <span className={textCls}>保存中</span>
+      </span>
+    );
+  }
+
+  if (status === "localError") {
+    return (
+      <span className="text-list-meta text-danger flex items-center gap-1 whitespace-nowrap">
+        <span className="w-1.5 h-1.5 bg-danger rounded-full animate-pulse" />
+        <span className={textCls}>保存失败，请不要关闭窗口</span>
       </span>
     );
   }
@@ -56,11 +65,11 @@ export default function SaveStatus({
   let label = "已同步";
   let dotCls = "bg-ink-muted/30";
   if (syncStatus === "syncError") {
-    label = "同步失败";
+    label = "同步失败，内容已保存在本地";
     dotCls = "bg-danger";
   } else if (pending) {
     if (!isOnline) {
-      label = "已保存到本地";
+      label = "已保存到本地，等待联网同步";
       dotCls = "bg-primary/70";
     } else if (isSyncing) {
       label = "同步中";

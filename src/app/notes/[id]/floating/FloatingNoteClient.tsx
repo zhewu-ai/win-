@@ -22,6 +22,8 @@ import {
   getCachedNote,
   saveNoteUpdate,
 } from "@/lib/offline/persist";
+import { clearDraft, getDraft } from "@/lib/offline/draft";
+import { useDraftRecovery } from "@/hooks/useDraftRecovery";
 import type { SyncStatus } from "@/types";
 
 const DEBOUNCE_MS = 800;
@@ -71,9 +73,9 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   );
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
-    "saved"
-  );
+  const [saveStatus, setSaveStatus] = useState<
+    "saved" | "saving" | "error" | "localError"
+  >("saved");
   const [syncStatus, setSyncStatus] = useState<SyncStatus | undefined>(
     initialNote.syncStatus
   );
@@ -81,24 +83,50 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
 
-  const doSave = useCallback(async (updates: Record<string, unknown>) => {
-    setSaveStatus("saving");
-    try {
-      const updated = await saveNoteUpdate(noteId, updates);
-      setSyncStatus(updated.syncStatus);
-      setSaveStatus("saved");
-      lastFailedPayloadRef.current = null;
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        router.push(
-          `/login?returnTo=${encodeURIComponent(`/notes/${noteId}/floating`)}`
-        );
-        return;
+  // 防丢保护：关闭/刷新前同步写 localStorage 草稿镜像
+  const { restored, setRestored, confirmSaved, writeDraft } = useDraftRecovery({
+    noteId,
+    getDraftState: () => ({
+      noteId,
+      title,
+      content,
+      mode,
+      color,
+      isPinned,
+      isArchived: initialNote.isArchived,
+      checklistItems,
+      checklistGroups,
+      updatedAt: new Date().toISOString(),
+    }),
+  });
+
+  const doSave = useCallback(
+    async (updates: Record<string, unknown>) => {
+      setSaveStatus("saving");
+      try {
+        const updated = await saveNoteUpdate(noteId, updates);
+        setSyncStatus(updated.syncStatus);
+        setSaveStatus("saved");
+        lastFailedPayloadRef.current = null;
+        confirmSaved(noteId, updated.updatedAt);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          router.push(
+            `/login?returnTo=${encodeURIComponent(`/notes/${noteId}/floating`)}`
+          );
+          return;
+        }
+        lastFailedPayloadRef.current = updates;
+        // 服务器未保存成功：先落本地草稿镜像；本地也失败才提示“不要关闭窗口”
+        if (!writeDraft()) {
+          setSaveStatus("localError");
+        } else {
+          setSaveStatus("error");
+        }
       }
-      setSaveStatus("error");
-      lastFailedPayloadRef.current = updates;
-    }
-  }, [noteId, router]);
+    },
+    [noteId, router, confirmSaved, writeDraft]
+  );
 
   const saveRef = useRef(doSave);
   saveRef.current = doSave;
@@ -136,33 +164,92 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      const pending = { ...pendingUpdatesRef.current };
-      if (Object.keys(pending).length > 0) {
-        if (navigator.onLine) {
-          fetch(`/api/notes/${noteId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(pending),
-            keepalive: true,
-          }).catch(() => {});
-        } else {
-          void saveNoteUpdate(noteId, pending).catch(() => {});
-        }
+  // 离开前 flush 未保存内容：在线走 keepalive PATCH，离线/断网走本地写（pending）
+  const flushOnLeave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = undefined;
+    }
+    const pending = { ...pendingUpdatesRef.current };
+    pendingUpdatesRef.current = {};
+    if (Object.keys(pending).length > 0) {
+      if (navigator.onLine) {
+        fetch(`/api/notes/${noteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pending),
+          keepalive: true,
+        }).catch(() => {});
+      } else {
+        void saveNoteUpdate(noteId, pending).catch(() => {});
       }
-    };
+    }
   }, [noteId]);
 
-  // 离线打开浮窗：若本地缓存比 SSR 快照新（离线编辑过），以本地为准
+  useEffect(() => {
+    return () => {
+      flushOnLeave();
+    };
+  }, [flushOnLeave]);
+
+  // 窗口关闭/刷新（unmount 不保证执行）：flush 未保存内容，草稿镜像由 useDraftRecovery 的 pagehide 兜底
+  useEffect(() => {
+    const onPageHide = () => {
+      flushOnLeave();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, [flushOnLeave]);
+
+  // 离线打开浮窗：本地缓存比 SSR 快照新则以本地为准；存在本地草稿镜像则优先恢复（防丢）
   useEffect(() => {
     void getCachedNote(noteId).then((cached) => {
-      if (!cached) return;
-      if (
+      const useCached =
+        cached &&
         new Date(cached.updatedAt).getTime() >
-        new Date(initialNote.updatedAt).getTime()
-      ) {
+          new Date(initialNote.updatedAt).getTime();
+      const draft = getDraft();
+
+      if (draft && draft.noteId === noteId) {
+        const src: Note = useCached ? cached! : initialNote;
+        const same =
+          draft.title === src.title &&
+          draft.content === src.content &&
+          JSON.stringify(draft.checklistItems) ===
+            JSON.stringify(src.checklistItems || []) &&
+          JSON.stringify(draft.checklistGroups) ===
+            JSON.stringify(src.checklistGroups || []);
+        if (!same) {
+          // 恢复未同步草稿并回推服务器
+          setTitle(draft.title);
+          setContent(draft.content);
+          setColor(draft.color as NoteColor);
+          setIsPinned(draft.isPinned);
+          setMode(draft.mode);
+          const norm = normalizeChecklist(
+            draft.checklistItems,
+            draft.checklistGroups
+          );
+          setChecklistItems(norm.items);
+          setChecklistGroups(norm.groups);
+          setSyncStatus("pendingUpdate");
+          setRestored(draft);
+          saveRef.current({
+            title: draft.title,
+            content: draft.content,
+            mode: draft.mode,
+            color: draft.color,
+            isPinned: draft.isPinned,
+            checklistItems: draft.checklistItems,
+            checklistGroups: draft.checklistGroups,
+          });
+          return;
+        }
+        // 内容已同步，清理过期草稿
+        clearDraft(noteId);
+      }
+
+      if (useCached) {
         setTitle(cached.title);
         setContent(cached.content);
         setColor(cached.color as NoteColor);
@@ -231,6 +318,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
 
   const confirmDelete = async () => {
     setDeleteConfirmOpen(false);
+    clearDraft(noteId);
     try {
       await deleteNoteOfflineAware(noteId);
       router.push("/");
@@ -373,6 +461,22 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           </svg>
         </button>
       </div>
+
+      {restored && (
+        <div className="flex items-center gap-2 px-3 py-1.5 mb-2 bg-primary/10 border border-primary/20 rounded-card text-xs text-primary">
+          <span>发现未同步内容，已从本地恢复</span>
+          <button
+            onClick={() => setRestored(null)}
+            className="ml-auto flex items-center justify-center w-5 h-5 rounded-btn hover:bg-primary/15 text-primary"
+            title="关闭提示"
+            aria-label="关闭提示"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Editor body */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin space-y-3 [scrollbar-gutter:stable]">

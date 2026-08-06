@@ -11,15 +11,15 @@ export default function OfflineBar() {
   let text: string;
   let clickable = false;
   if (hasError) {
-    text = "同步失败，点击重试";
+    text = "同步失败，内容已保存在本地，点击重试";
     clickable = true;
   } else if (isSyncing) {
     text = "正在同步…";
   } else if (!isOnline) {
     text =
       pendingCount > 0
-        ? "离线模式，修改已保存到本地"
-        : "当前离线，暂无本地便签缓存";
+        ? "离线模式，修改已保存到本地，等待联网同步"
+        : "当前离线，PinNote 需要网络同步，请连接网络后继续";
   } else {
     text = `等待同步（${pendingCount}）`;
   }

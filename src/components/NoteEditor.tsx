@@ -12,6 +12,8 @@ import ConfirmDialog from "./ConfirmDialog";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
 import { saveNoteUpdate } from "@/lib/offline/persist";
+import { clearDraft, getDraft } from "@/lib/offline/draft";
+import { useDraftRecovery } from "@/hooks/useDraftRecovery";
 
 const DEBOUNCE_MS = 800;
 
@@ -59,9 +61,9 @@ export default function NoteEditor({
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [checklistGroups, setChecklistGroups] = useState<ChecklistGroup[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
-    "saved"
-  );
+  const [saveStatus, setSaveStatus] = useState<
+    "saved" | "saving" | "error" | "localError"
+  >("saved");
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -77,6 +79,26 @@ export default function NoteEditor({
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const prevNoteIdRef = useRef<string | null>(null);
   const moreRef = useRef<HTMLDivElement>(null);
+
+  // 防丢保护：关闭/刷新前同步写 localStorage 草稿镜像；保存成功且服务器追上后清理
+  const { restored, setRestored, confirmSaved, writeDraft } = useDraftRecovery({
+    noteId: note?.id ?? null,
+    getDraftState: () => {
+      if (!currentNoteIdRef.current) return null;
+      return {
+        noteId: currentNoteIdRef.current,
+        title,
+        content,
+        mode,
+        color,
+        isPinned,
+        isArchived,
+        checklistItems,
+        checklistGroups,
+        updatedAt: new Date().toISOString(),
+      };
+    },
+  });
 
   // Close "more" menu on outside click
   useEffect(() => {
@@ -116,12 +138,18 @@ export default function NoteEditor({
         onUpdate(updated);
         setSaveStatus("saved");
         lastFailedPayloadRef.current = null;
+        confirmSaved(currentNoteIdRef.current, updated.updatedAt);
       } catch {
-        setSaveStatus("error");
         lastFailedPayloadRef.current = updates;
+        // 服务器未保存成功：先落本地草稿镜像；本地也失败才提示“不要关闭窗口”
+        if (!writeDraft()) {
+          setSaveStatus("localError");
+        } else {
+          setSaveStatus("error");
+        }
       }
     },
-    [onUpdate]
+    [confirmSaved, onUpdate, writeDraft]
   );
 
   // Use ref to avoid stale closure in debounced callbacks
@@ -210,26 +238,83 @@ export default function NoteEditor({
     }
   }, [note?.id]);
 
+  // 防丢：打开便签时检查本地草稿镜像，比服务器内容新则恢复并提示
+  useEffect(() => {
+    if (!note) return;
+    const d = getDraft();
+    if (!d || d.noteId !== note.id) return;
+    const same =
+      d.title === note.title &&
+      d.content === note.content &&
+      JSON.stringify(d.checklistItems) ===
+        JSON.stringify(note.checklistItems || []) &&
+      JSON.stringify(d.checklistGroups) ===
+        JSON.stringify(note.checklistGroups || []);
+    if (same) {
+      // 内容已同步，清理过期草稿
+      clearDraft(note.id);
+      return;
+    }
+    setTitle(d.title);
+    setContent(d.content);
+    setColor(d.color as NoteColor);
+    setIsPinned(d.isPinned);
+    setIsArchived(d.isArchived);
+    setMode(d.mode);
+    setChecklistItems(d.checklistItems);
+    setChecklistGroups(d.checklistGroups);
+    setRestored(d);
+    // 立即回推服务器（在线 PATCH / 离线落 pending），保证下次打开即已同步
+    saveRef.current({
+      title: d.title,
+      content: d.content,
+      mode: d.mode,
+      color: d.color,
+      isPinned: d.isPinned,
+      isArchived: d.isArchived,
+      checklistItems: d.checklistItems,
+      checklistGroups: d.checklistGroups,
+    });
+  }, [note?.id]);
+
+  // 离开前 flush 未保存内容：在线走 keepalive PATCH，离线/断网走本地写（pending）
+  const flushOnLeave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = undefined;
+    }
+    const pending = { ...pendingUpdatesRef.current };
+    pendingUpdatesRef.current = {};
+    if (Object.keys(pending).length > 0 && currentNoteIdRef.current) {
+      const id = currentNoteIdRef.current;
+      if (navigator.onLine) {
+        fetch(`/api/notes/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pending),
+          keepalive: true,
+        }).catch(() => {});
+      } else {
+        void saveNoteUpdate(id, pending).catch(() => {});
+      }
+    }
+  }, []);
+
   // Cleanup on unmount: flush pending via keepalive fetch (online) or local write (offline)
   useEffect(() => {
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      const pending = { ...pendingUpdatesRef.current };
-      if (Object.keys(pending).length > 0 && currentNoteIdRef.current) {
-        const id = currentNoteIdRef.current;
-        if (navigator.onLine) {
-          fetch(`/api/notes/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(pending),
-            keepalive: true,
-          }).catch(() => {});
-        } else {
-          void saveNoteUpdate(id, pending).catch(() => {});
-        }
-      }
+      flushOnLeave();
     };
-  }, []);
+  }, [flushOnLeave]);
+
+  // 窗口关闭/刷新（unmount 不保证执行）：flush 未保存内容，草稿镜像由 useDraftRecovery 的 pagehide 兜底
+  useEffect(() => {
+    const onPageHide = () => {
+      flushOnLeave();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, [flushOnLeave]);
 
   // 用 ResizeObserver 跟踪编辑区真实宽度 → 工具栏三态；首帧前校正避免错位闪动
   useLayoutEffect(() => {
@@ -317,6 +402,7 @@ export default function NoteEditor({
     setDeleteConfirmOpen(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     pendingUpdatesRef.current = {};
+    if (currentNoteIdRef.current) clearDraft(currentNoteIdRef.current);
     onDelete(currentNoteIdRef.current!);
   };
 
@@ -554,6 +640,21 @@ export default function NoteEditor({
       </div>
 
       {/* Editor body */}
+      {restored && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-b border-primary/20 text-sm text-primary">
+          <span>发现未同步内容，已从本地恢复</span>
+          <button
+            onClick={() => setRestored(null)}
+            className="ml-auto flex items-center justify-center w-5 h-5 rounded-btn hover:bg-primary/15 text-primary"
+            title="关闭提示"
+            aria-label="关闭提示"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
       <div
         className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]"
         onKeyDown={handleKeyDown}
