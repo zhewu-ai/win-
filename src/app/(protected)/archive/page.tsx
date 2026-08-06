@@ -16,14 +16,6 @@ const ACCENT: Record<string, string> = {
   gray: "bg-accent-gray",
 };
 
-const SELECTED: Record<string, string> = {
-  yellow: "bg-sel-yellow",
-  blue: "bg-sel-blue",
-  green: "bg-sel-green",
-  pink: "bg-sel-pink",
-  gray: "bg-sel-gray",
-};
-
 export default function ArchivePage() {
   const router = useRouter();
   // 整体布局模式：<720 单栏（列表↔详情切换）；≥720 双栏（舒展/紧凑）
@@ -406,12 +398,11 @@ function ArchiveNoteItem({
   onDelete: (id: string) => void;
 }) {
   const accent = ACCENT[note.color] || "bg-accent-gray";
-  const selected = SELECTED[note.color] || "bg-sel-gray";
 
   return (
     <div
       className={`relative rounded-card transition-colors ${
-        isSelected ? selected : "hover:bg-surface-hover"
+        isSelected ? "card-selected" : "card-surface"
       }`}
     >
       <button
@@ -434,12 +425,12 @@ function ArchiveNoteItem({
                     <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                   </svg>
                 )}
-                <span className="text-list-title text-ink truncate">
+                <span className={`text-list-title truncate ${isSelected ? "text-white" : "text-ink"}`}>
                   {getAutoTitle(note)}
                 </span>
               </div>
               {getTodoProgress(note) && (
-                <p className="text-list-meta text-ink-muted mt-0.5">
+                <p className={`text-list-meta mt-0.5 ${isSelected ? "text-white/[0.75]" : "text-ink-muted"}`}>
                   待办 {getTodoProgress(note)?.done}/{getTodoProgress(note)?.total}
                 </p>
               )}
@@ -450,13 +441,13 @@ function ArchiveNoteItem({
       <div className="flex gap-2 px-4 pb-2.5">
         <button
           onClick={() => onUnarchive(note.id)}
-          className="text-list-meta text-primary hover:text-primary/80 transition-colors"
+          className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.85] hover:text-white" : "text-primary hover:text-primary/80"}`}
         >
           取消归档
         </button>
         <button
           onClick={() => onDelete(note.id)}
-          className="text-list-meta text-danger hover:text-danger/80 transition-colors"
+          className={`text-list-meta transition-colors ${isSelected ? "text-white/[0.85] hover:text-white" : "text-danger hover:text-danger/80"}`}
         >
           删除
         </button>

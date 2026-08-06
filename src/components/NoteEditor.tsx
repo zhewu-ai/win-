@@ -532,7 +532,7 @@ export default function NoteEditor({
             onClick={handleWindowPinToggle}
             className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
               windowAlwaysOnTop
-                ? "text-[#E3C24A] bg-surface-strong"
+                ? "text-primary bg-surface-strong"
                 : "text-ink-muted hover:text-ink hover:bg-surface-hover"
             }`}
             title={windowAlwaysOnTop ? "取消窗口置顶" : "窗口置顶"}

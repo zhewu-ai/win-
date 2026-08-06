@@ -418,7 +418,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
 
   const insertDivider = (atIndex: number, key: string) => (
     <div key={key} className="relative group/ins h-1">
-      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-transparent group-hover/ins:bg-[#E3C24A]/40 transition-colors" />
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-transparent group-hover/ins:bg-primary/40 transition-colors" />
       <button
         onClick={() => insertHeadingAt(atIndex)}
         title="在此插入小标题"
@@ -466,10 +466,10 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
   const dropIndicator = (row: ChecklistItem) => (
     <>
       {dropTarget?.id === row.id && dropTarget.before && (
-        <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-[#E3C24A]" />
+        <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-primary" />
       )}
       {dropTarget?.id === row.id && !dropTarget.before && (
-        <div className="absolute -bottom-[3px] left-0 right-0 h-[3px] rounded-full bg-[#E3C24A]" />
+        <div className="absolute -bottom-[3px] left-0 right-0 h-[3px] rounded-full bg-primary" />
       )}
     </>
   );
@@ -486,7 +486,7 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
         onClick={() => handleToggle(row.id)}
         className={`flex-shrink-0 mt-0.5 w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
           row.checked
-            ? "bg-[#E3C24A] border-[#E3C24A] text-[#1A1A1A]"
+            ? "bg-primary border-primary text-white"
             : "border-ink-muted/55 hover:border-ink-secondary"
         }`}
         title={row.checked ? "标记为未完成" : "标记为已完成"}

@@ -27,8 +27,16 @@ export default function Sidebar({
 }: Props) {
   return (
     <div className="flex flex-col h-full min-h-0 bg-sidebar-bg">
+      {/* Brand */}
+      <div className="flex items-center gap-2 px-4 pt-3 pb-1 flex-shrink-0 select-none">
+        <span className="flex items-center justify-center w-5 h-5 rounded-[6px] bg-primary/15 text-primary font-bold text-[13px] leading-none">
+          P
+        </span>
+        <span className="text-[15px] font-semibold tracking-tight text-ink">PinNote</span>
+      </div>
+
       {/* Search */}
-      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-2 flex-shrink-0">
+      <div className="flex items-center gap-1.5 px-3 pt-1 pb-2 flex-shrink-0">
         <div className="flex-1 relative min-w-0">
           <svg
             className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
@@ -48,7 +56,7 @@ export default function Sidebar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="搜索便签..."
-            className="w-full pl-9 pr-8 py-1.5 text-sm text-ink bg-search-bg rounded-input border border-border-soft outline-none focus:bg-surface-focus focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted"
+            className="w-full pl-9 pr-8 py-2 text-sm text-ink bg-search-bg rounded-input border border-border-light/60 outline-none focus:bg-panel-bg focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all placeholder:text-ink-muted"
           />
           {searchQuery && (
             <button

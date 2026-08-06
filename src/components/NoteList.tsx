@@ -19,22 +19,6 @@ const ACCENT: Record<string, string> = {
   gray: "bg-accent-gray",
 };
 
-const SELECTED: Record<string, string> = {
-  yellow: "bg-sel-yellow",
-  blue: "bg-sel-blue",
-  green: "bg-sel-green",
-  pink: "bg-sel-pink",
-  gray: "bg-sel-gray",
-};
-
-const TINT: Record<string, string> = {
-  yellow: "hover:bg-tint-yellow active:bg-tint-yellow",
-  blue: "hover:bg-tint-blue active:bg-tint-blue",
-  green: "hover:bg-tint-green active:bg-tint-green",
-  pink: "hover:bg-tint-pink active:bg-tint-pink",
-  gray: "hover:bg-tint-gray active:bg-tint-gray",
-};
-
 function getAutoTitle(note: Note): string {
   if (note.title) return note.title;
   if (note.mode === "text") {
@@ -137,7 +121,7 @@ function HighlightText({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((p, i) =>
         p.match ? (
-          <mark key={i} className="bg-amber-200/70 rounded-sm px-0.5 text-inherit">
+          <mark key={i} className="bg-selection-yellow/25 rounded-sm px-0.5 text-inherit">
             {p.text}
           </mark>
         ) : (
@@ -238,8 +222,6 @@ export default function NoteList({
 
   function NoteItem({ note }: { note: Note }) {
     const accent = ACCENT[note.color] || "bg-accent-gray";
-    const selected = SELECTED[note.color] || "bg-sel-gray";
-    const tint = TINT[note.color] || "hover:bg-tint-gray active:bg-tint-gray";
     const autoTitle = getAutoTitle(note);
     const summaryLines = getSummaryLines(note);
     const progress = getTodoProgress(note);
@@ -251,13 +233,13 @@ export default function NoteList({
       <button
         onClick={() => onSelect(note.id)}
         data-note-id={note.id}
-        className={`relative w-full text-left rounded-[8px] transition-colors duration-150 ${
-          isSelected ? `${selected} text-white` : tint
+        className={`relative w-full text-left rounded-card ${
+          isSelected ? "card-selected" : "card-surface"
         }`}
       >
         <span
           className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${
-            isSelected ? "bg-white/35" : accent
+            isSelected ? "bg-white/40" : accent
           }`}
         />
         <div className="pl-6 pr-5 py-4">
@@ -331,14 +313,14 @@ export default function NoteList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin bg-sidebar-bg [scrollbar-gutter:stable]">
+    <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2.5 scrollbar-thin bg-sidebar-bg [scrollbar-gutter:stable]">
       {pinned.length > 0 && (
         <div>
           <SectionHeader
             label="置顶"
             icon="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
           />
-          <div className="space-y-0.5">
+          <div className="space-y-2.5">
             {pinned.map((note) => (
               <NoteItem key={note.id} note={note} />
             ))}
@@ -358,7 +340,7 @@ export default function NoteList({
             label={group.label}
             icon="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
-          <div className="space-y-0.5">
+          <div className="space-y-2.5">
             {group.notes.map((note) => (
               <NoteItem key={note.id} note={note} />
             ))}
