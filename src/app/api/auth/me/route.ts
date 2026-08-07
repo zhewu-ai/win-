@@ -90,6 +90,7 @@ export async function PATCH(request: Request) {
       storageUsedBytes: true,
       role: true,
       status: true,
+      mustChangePassword: true,
     },
   });
 

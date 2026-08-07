@@ -62,11 +62,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // 重新 bcrypt hash 保存，明文绝不出现在响应/日志
+  // 重新 bcrypt hash 保存，明文绝不出现在响应/日志；改密成功后清除强制改密标记
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash },
+    data: { passwordHash, mustChangePassword: false },
   });
 
   return NextResponse.json({ ok: true, message: "密码已修改" });

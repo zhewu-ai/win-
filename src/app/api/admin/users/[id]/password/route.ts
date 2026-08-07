@@ -49,11 +49,11 @@ export async function PATCH(
     );
   }
 
-  // 重新 bcrypt hash，绝不在响应/日志输出明文
+  // 重新 bcrypt hash，绝不在响应/日志输出明文；重置密码后要求用户尽快修改
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
     where: { id: params.id },
-    data: { passwordHash },
+    data: { passwordHash, mustChangePassword: true },
   });
 
   return NextResponse.json({ ok: true, message: "密码已重置" });

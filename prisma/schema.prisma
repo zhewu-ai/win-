@@ -22,6 +22,7 @@ model User {
   storageUsedBytes  Int      @default(0)
   role              String   @default("user")
   status            String   @default("active")
+  mustChangePassword Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   notes             Note[]

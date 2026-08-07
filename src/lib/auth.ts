@@ -22,6 +22,7 @@ const CURRENT_USER_SELECT = {
   storageUsedBytes: true,
   role: true,
   status: true,
+  mustChangePassword: true,
 } as const;
 
 export async function getCurrentUser() {

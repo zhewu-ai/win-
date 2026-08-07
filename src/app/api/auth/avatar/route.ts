@@ -11,6 +11,32 @@ export const dynamic = "force-dynamic";
 
 const ALLOWED_AVATAR_MIMES = ["image/jpeg", "image/png", "image/webp"];
 const AVATAR_MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
+const AVATAR_MAX_DIMENSION = 4096;
+const AVATAR_OUTPUT_DIMENSION = 512;
+const AVATAR_TARGET_BYTES = 256 * 1024;
+// 从高到低降质，找到第一个 ≤256KB 的输出
+const AVATAR_WEBP_QUALITY_STEPS = [80, 70, 60, 50, 40, 30, 20, 10, 5];
+
+/**
+ * 服务端缩放 + 压缩：等比缩放到不超过 512x512，输出 webp 且 ≤256KB。
+ * 全流程在内存完成，只返回最终 Buffer，调用方确认额度后再落盘。
+ */
+async function compressAvatar(buffer: Buffer): Promise<Buffer> {
+  let last: Buffer | null = null;
+  for (const quality of AVATAR_WEBP_QUALITY_STEPS) {
+    last = await sharp(buffer)
+      .rotate()
+      .resize(AVATAR_OUTPUT_DIMENSION, AVATAR_OUTPUT_DIMENSION, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality })
+      .toBuffer();
+    if (last.length <= AVATAR_TARGET_BYTES) return last;
+  }
+  // 极低质量仍超 256KB 时兜底（512x512 的 webp 几乎不可能出现）
+  return last ?? Buffer.alloc(0);
+}
 
 // 与 /api/auth/me 返回字段一致，但绝不返回 avatarStoragePath / passwordHash
 const AVATAR_USER_SELECT = {
@@ -26,6 +52,7 @@ const AVATAR_USER_SELECT = {
   storageUsedBytes: true,
   role: true,
   status: true,
+  mustChangePassword: true,
 } as const;
 
 function avatarDir(uploadDir: string): string {
@@ -79,14 +106,30 @@ export async function POST(request: Request) {
 
   // 用 sharp 校验真实图片，拦截伪装成图片的可执行文件
   const buffer = Buffer.from(await file.arrayBuffer());
-  try {
-    await sharp(buffer).metadata();
-  } catch {
+  const metadata = await sharp(buffer).metadata().catch(() => null);
+  if (!metadata) {
     return NextResponse.json(
       { ok: false, error: "UNSUPPORTED_AVATAR_TYPE", message: "文件不是有效图片" },
       { status: 400 }
     );
   }
+
+  // 原始图片尺寸上限：先拒绝超大图，避免无保护解码
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  if (width > AVATAR_MAX_DIMENSION || height > AVATAR_MAX_DIMENSION) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "AVATAR_DIMENSIONS_TOO_LARGE",
+        message: "头像图片尺寸不能超过 4096 x 4096",
+      },
+      { status: 413 }
+    );
+  }
+
+  // 服务端压缩：等比缩放到 ≤512x512、webp 输出 ≤256KB，全流程在内存完成
+  const compressed = await compressAvatar(buffer);
 
   // 读取当前头像占用（替换时要先释放旧头像额度）
   const current = await prisma.user.findUnique({
@@ -96,9 +139,9 @@ export async function POST(request: Request) {
 
   const oldAvatarSize = current?.avatarSize ?? 0;
 
-  // 额度检查：必须在写文件之前，超额不落盘、不留孤儿文件
+  // 额度检查：按压缩后大小计算，必须在写文件之前，超额不落盘、不留孤儿文件
   const storage = await getStorageState(session.userId);
-  if (storage.used - oldAvatarSize + file.size > storage.quota) {
+  if (storage.used - oldAvatarSize + compressed.length > storage.quota) {
     return NextResponse.json(
       {
         ok: false,
@@ -109,14 +152,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const ext = file.type.split("/")[1] || "jpg";
   const filename =
-    Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + "." + ext;
+    Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + ".webp";
   const dir = avatarDir(process.env.UPLOAD_DIR || "./uploads");
   await fs.mkdir(dir, { recursive: true });
   const filePath = path.join(dir, filename);
 
-  await fs.writeFile(filePath, buffer);
+  await fs.writeFile(filePath, compressed);
 
   const storagePath = `avatars/${filename}`;
   const url = `/api/files/${storagePath}`;
@@ -127,8 +169,8 @@ export async function POST(request: Request) {
       data: {
         avatarUrl: url,
         avatarStoragePath: storagePath,
-        avatarMimeType: file.type,
-        avatarSize: file.size,
+        avatarMimeType: "image/webp",
+        avatarSize: compressed.length,
       },
     });
   } catch (e) {
@@ -142,7 +184,7 @@ export async function POST(request: Request) {
     await unlinkQuiet(path.resolve(process.env.UPLOAD_DIR || "./uploads", current.avatarStoragePath));
   }
 
-  await addStorageUsed(session.userId, file.size - oldAvatarSize);
+  await addStorageUsed(session.userId, compressed.length - oldAvatarSize);
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },

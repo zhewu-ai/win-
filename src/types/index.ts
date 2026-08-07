@@ -78,6 +78,7 @@ export interface User {
   storageUsedBytes?: number;
   role?: "admin" | "user";
   status?: "active" | "disabled";
+  mustChangePassword?: boolean;
 }
 
 export interface AdminInvite {

@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import ReleaseNoteModal from "@/components/ReleaseNoteModal";
+import MustChangePasswordBanner from "@/components/MustChangePasswordBanner";
 
 export default async function ProtectedLayout({
   children,
@@ -14,6 +15,7 @@ export default async function ProtectedLayout({
     <>
       {children}
       <ReleaseNoteModal />
+      <MustChangePasswordBanner />
     </>
   );
 }

@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
       await tx.user.update({
         where: { id: user.id },
-        data: { passwordHash },
+        data: { passwordHash, mustChangePassword: false },
       });
 
       // 清理该用户其它未使用 token
