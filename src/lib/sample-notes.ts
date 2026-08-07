@@ -47,9 +47,24 @@ const SAMPLES: SampleNoteInput[] = [
       "（这是一条示例便签，你可以删除）",
     ].join("\n"),
   },
+  {
+    title: "x月x日 xx镜头反馈（新用户引导案例）",
+    mode: "checklist",
+    color: "yellow",
+    content: [
+      "# c4d中修改",
+      "背板太黄",
+      "deco小碎光太多",
+      "屏幕适当补一些光",
+      "deco上pos太强",
+      "# ae中修改",
+      "背板纹理减弱",
+      "cd光比太大",
+    ].join("\n"),
+  },
 ];
 
-/** 为新注册用户生成 3 条示例便签（仅注册时调用一次），返回所占存储字节数。 */
+/** 为新注册用户生成 4 条示例便签（仅注册时调用一次），返回所占存储字节数。 */
 export async function createSampleNotes(
   tx: Prisma.TransactionClient,
   userId: string
