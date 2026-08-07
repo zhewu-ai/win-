@@ -24,6 +24,21 @@ model User {
   attachments       Attachment[]
   createdInvites    InviteCode[] @relation("InviteCreatedBy")
   usedInvites       InviteCode[] @relation("InviteUsedBy")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model InviteCode {

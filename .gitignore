@@ -14,6 +14,8 @@ src-tauri/gen/
 
 # 运行时数据（用户上传图片，不入库）
 uploads/
+# 运行时数据库与本地邮件落盘（不入库）
+data/
 
 # macOS
 .DS_Store

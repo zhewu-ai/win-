@@ -107,7 +107,16 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
           {loading ? "登录中..." : "登录"}
         </button>
 
-        <p className="mt-4 text-center text-list-meta text-ink-muted">
+        <p className="mt-3 text-center text-list-meta text-ink-muted">
+          <Link
+            href="/forgot-password"
+            className="text-ink font-medium hover:underline"
+          >
+            忘记密码？
+          </Link>
+        </p>
+
+        <p className="mt-3 text-center text-list-meta text-ink-muted">
           没有账号？
           <Link
             href="/register"
