@@ -88,3 +88,26 @@ export interface AdminInvite {
   createdAt: string;
   usedBy?: { id: string; username: string; displayName: string | null; email: string | null } | null;
 }
+
+export type FeedbackType = "bug" | "feature" | "other";
+export type FeedbackStatus = "open" | "reviewing" | "resolved" | "closed";
+
+export interface FeedbackTicket {
+  id: string;
+  type: FeedbackType;
+  title: string;
+  content: string;
+  status: FeedbackStatus;
+  pageUrl: string | null;
+  userAgent: string | null;
+  appVersion: string | null;
+  adminNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    username: string;
+    email: string | null;
+    displayName: string | null;
+  };
+}

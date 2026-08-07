@@ -7,6 +7,7 @@ import { useSyncStatus } from "@/hooks/useSyncStatus";
 import ConfirmDialog from "./ConfirmDialog";
 import ChangePasswordModal from "./ChangePasswordModal";
 import ChangeAvatarModal from "./ChangeAvatarModal";
+import FeedbackModal from "./FeedbackModal";
 import UserAvatar from "./UserAvatar";
 import type { User } from "@/types";
 
@@ -43,6 +44,7 @@ export default function AccountMenu({
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [changeAvatarOpen, setChangeAvatarOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -285,6 +287,18 @@ export default function AccountMenu({
               管理用户
             </Link>
           )}
+          {user?.role === "admin" && (
+            <Link
+              href="/admin/feedback"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+            >
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              用户反馈
+            </Link>
+          )}
           <button
             onClick={() => {
               setOpen(false);
@@ -296,6 +310,18 @@ export default function AccountMenu({
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
             修改密码
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setFeedbackOpen(true);
+            }}
+            className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+          >
+            <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            反馈问题
           </button>
           <div className="px-3.5 pt-2 pb-1 text-[11px] text-ink-muted">外观</div>
           <button
@@ -361,6 +387,11 @@ export default function AccountMenu({
         user={user}
         onClose={() => setChangeAvatarOpen(false)}
         onUserUpdated={(updated) => setUser(updated)}
+      />
+
+      <FeedbackModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
       />
     </div>
   );
