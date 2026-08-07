@@ -15,6 +15,19 @@ export const ADMIN_USER_SELECT = {
   updatedAt: true,
 } as const;
 
+/** 管理员用户列表用：额外返回每用户业务数据计数，用于删除废用户时展示影响范围。 */
+export const ADMIN_USER_SELECT_WITH_COUNTS = {
+  ...ADMIN_USER_SELECT,
+  _count: {
+    select: {
+      notes: true,
+      attachments: true,
+      feedbackTickets: true,
+      announcementReads: true,
+    },
+  },
+} as const;
+
 export const MIN_QUOTA_BYTES = 1024 * 1024; // 1 MB
 export const MAX_QUOTA_BYTES = 500 * 1024 * 1024; // 500 MB
 export const MIN_PASSWORD_LENGTH = 8;

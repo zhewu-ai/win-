@@ -19,6 +19,12 @@ interface AdminUser {
   storageUsedBytes: number;
   createdAt: string;
   updatedAt: string;
+  _count: {
+    notes: number;
+    attachments: number;
+    feedbackTickets: number;
+    announcementReads: number;
+  };
 }
 
 function formatBytes(bytes: number): string {
@@ -182,7 +188,11 @@ export default function AdminUsersClient({
         return;
       }
       setUsers((prev) =>
-        prev.map((u) => (u.id === disableTarget.id ? data.user : u))
+        prev.map((u) =>
+          u.id === disableTarget.id
+            ? { ...data.user, _count: u._count }
+            : u
+        )
       );
     } catch {
       alert("禁用失败，请检查网络");
@@ -205,7 +215,9 @@ export default function AdminUsersClient({
         return;
       }
       setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? data.user : u))
+        prev.map((u) =>
+          u.id === user.id ? { ...data.user, _count: u._count } : u
+        )
       );
     } catch {
       alert("启用失败，请检查网络");
@@ -236,15 +248,7 @@ export default function AdminUsersClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data?.error === "USER_HAS_DATA") {
-          setDeleteError(
-            `该用户已有数据，不能直接删除。便签 ${data.counts?.notes ?? 0}、附件 ${
-              data.counts?.attachments ?? 0
-            } 等，请先禁用保留数据。`
-          );
-        } else {
-          setDeleteError(data?.message || data?.error || "删除失败");
-        }
+        setDeleteError(data?.message || data?.error || "删除失败");
         return;
       }
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
@@ -478,7 +482,7 @@ export default function AdminUsersClient({
                         <button
                           onClick={() => openDelete(u)}
                           className="px-2 py-1 text-[11px] font-normal text-ink-muted/70 hover:text-danger hover:bg-danger/5 rounded-btn transition-colors"
-                          title="仅用于删除已禁用且无业务数据的废账号"
+                          title="删除已禁用的普通用户，并级联清理其个人数据"
                         >
                           删除用户
                         </button>
@@ -717,7 +721,7 @@ export default function AdminUsersClient({
       <ConfirmDialog
         open={deleteTarget !== null && !deleteConfirmOpen}
         title="删除用户"
-        message={`删除用户后不可恢复。仅当这是废弃账号且无有效数据时使用。\n\n确认删除用户「${
+        message={`删除用户后不可恢复。此操作会同时清理该用户的便签、附件、反馈记录和公告已读记录。\n\n确认删除用户「${
           deleteTarget?.displayName || deleteTarget?.username || ""
         }」？`}
         confirmLabel="下一步"
@@ -739,7 +743,14 @@ export default function AdminUsersClient({
           >
             <h3 className="text-base font-bold text-ink">确认删除</h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-              删除用户后不可恢复。请输入
+              将永久删除该用户及其{" "}
+              {deleteTarget._count?.notes ?? 0} 条便签、{" "}
+              {deleteTarget._count?.attachments ?? 0} 个附件、{" "}
+              {deleteTarget._count?.feedbackTickets ?? 0} 条反馈记录、{" "}
+              {deleteTarget._count?.announcementReads ?? 0} 条公告已读记录。
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+              请输入
               <span className="font-mono font-semibold text-danger"> DELETE </span>
               {deleteTarget.email
                 ? "或该用户邮箱，确认永久删除。"
