@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useTheme } from "@/hooks/useTheme";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import ConfirmDialog from "./ConfirmDialog";
@@ -285,6 +286,18 @@ export default function AccountMenu({
             </svg>
             回收站
           </a>
+          {user?.role === "admin" && (
+            <Link
+              href="/admin/users"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+            >
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              管理用户
+            </Link>
+          )}
           <div className="px-3.5 pt-2 pb-1 text-[11px] text-ink-muted">外观</div>
           <button
             onClick={() => setTheme("dark")}

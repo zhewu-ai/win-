@@ -1,0 +1,492 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import ConfirmDialog from "@/components/ConfirmDialog";
+
+interface AdminUser {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarColor: string | null;
+  role: "admin" | "user";
+  status: "active" | "disabled";
+  storageQuotaBytes: number;
+  storageUsedBytes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const AVATAR_COLORS = ["yellow", "blue", "green", "pink", "gray"] as const;
+const AVATAR_BG: Record<string, string> = {
+  yellow: "bg-accent-yellow text-[#20242a]",
+  blue: "bg-accent-blue text-white",
+  green: "bg-accent-green text-[#20242a]",
+  pink: "bg-accent-pink text-[#20242a]",
+  gray: "bg-accent-gray text-[#20242a]",
+};
+
+function hashColor(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  const mb = bytes / (1024 * 1024);
+  return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const QUOTA_PRESETS_MB = [10, 50, 100, 500];
+
+export default function AdminUsersClient({
+  currentUserId,
+}: {
+  currentUserId: string;
+}) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [disableTarget, setDisableTarget] = useState<AdminUser | null>(null);
+  const [disableBusy, setDisableBusy] = useState(false);
+
+  const [quotaTarget, setQuotaTarget] = useState<AdminUser | null>(null);
+  const [quotaInput, setQuotaInput] = useState("");
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+  const [quotaBusy, setQuotaBusy] = useState(false);
+
+  const [pwTarget, setPwTarget] = useState<AdminUser | null>(null);
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwBusy, setPwBusy] = useState(false);
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/admin/users");
+      const data = await res.json();
+      if (!res.ok) {
+        setLoadError(data.error || "加载失败");
+        return;
+      }
+      setUsers(data.users || []);
+    } catch {
+      setLoadError("加载失败，请检查网络");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
+
+  const confirmDisable = async () => {
+    if (!disableTarget) return;
+    setDisableBusy(true);
+    try {
+      const res = await fetch(`/api/admin/users/${disableTarget.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "disabled" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || data.error || "禁用失败");
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) => (u.id === disableTarget.id ? data.user : u))
+      );
+    } catch {
+      alert("禁用失败，请检查网络");
+    } finally {
+      setDisableBusy(false);
+      setDisableTarget(null);
+    }
+  };
+
+  const toggleEnable = async (user: AdminUser) => {
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "active" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || data.error || "启用失败");
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? data.user : u))
+      );
+    } catch {
+      alert("启用失败，请检查网络");
+    }
+  };
+
+  const openQuota = (user: AdminUser) => {
+    setQuotaTarget(user);
+    setQuotaInput(String(Math.round(user.storageQuotaBytes / (1024 * 1024))));
+    setQuotaError(null);
+  };
+
+  const saveQuota = async () => {
+    if (!quotaTarget) return;
+    const mb = Number(quotaInput);
+    if (!Number.isInteger(mb) || mb <= 0) {
+      setQuotaError("请输入有效的整数 MB");
+      return;
+    }
+    const bytes = mb * 1024 * 1024;
+    if (bytes > 500 * 1024 * 1024) {
+      setQuotaError("额度不能超过 500 MB");
+      return;
+    }
+    if (bytes < quotaTarget.storageUsedBytes) {
+      setQuotaError("新额度不能低于当前已用空间");
+      return;
+    }
+    setQuotaBusy(true);
+    try {
+      const res = await fetch(`/api/admin/users/${quotaTarget.id}/quota`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storageQuotaBytes: bytes }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setQuotaError(data.message || data.error || "调整失败");
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) => (u.id === quotaTarget.id ? data.user : u))
+      );
+      setQuotaTarget(null);
+    } catch {
+      setQuotaError("调整失败，请检查网络");
+    } finally {
+      setQuotaBusy(false);
+    }
+  };
+
+  const openPw = (user: AdminUser) => {
+    setPwTarget(user);
+    setPw1("");
+    setPw2("");
+    setPwError(null);
+    setPwSuccess(false);
+  };
+
+  const savePw = async () => {
+    if (!pwTarget) return;
+    if (pw1.length < 8) {
+      setPwError("密码至少 8 位");
+      return;
+    }
+    if (pw1 !== pw2) {
+      setPwError("两次输入不一致");
+      return;
+    }
+    setPwBusy(true);
+    try {
+      const res = await fetch(`/api/admin/users/${pwTarget.id}/password`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: pw1 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPwError(data.message || data.error || "重置失败");
+        return;
+      }
+      setPwSuccess(true);
+    } catch {
+      setPwError("重置失败，请检查网络");
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* 顶栏 */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border-light bg-toolbar-bg z-10 min-h-[52px] flex-shrink-0">
+        <Link
+          href="/"
+          className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          返回
+        </Link>
+        <h1 className="text-sm font-semibold text-ink">用户管理</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable] p-4">
+        {loading && (
+          <p className="text-sm text-ink-muted py-6 text-center">加载中…</p>
+        )}
+        {!loading && loadError && (
+          <div className="text-sm text-danger py-6 text-center">
+            {loadError}
+            <button
+              onClick={() => void fetchUsers()}
+              className="ml-2 underline hover:text-ink"
+            >
+              重试
+            </button>
+          </div>
+        )}
+        {!loading && !loadError && users.length === 0 && (
+          <p className="text-sm text-ink-muted py-6 text-center">暂无用户</p>
+        )}
+
+        {!loading && !loadError && users.length > 0 && (
+          <ul className="space-y-2 max-w-2xl">
+            {users.map((u) => {
+              const isSelf = u.id === currentUserId;
+              const avatarCls =
+                AVATAR_BG[u.avatarColor || hashColor(u.username)] ||
+                AVATAR_BG.gray;
+              const displayName = u.displayName || u.username;
+              return (
+                <li
+                  key={u.id}
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 px-3.5 py-3 bg-toolbar-bg border border-border-light rounded-card"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span
+                      className={`flex-shrink-0 w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center ${avatarCls}`}
+                    >
+                      {displayName.trim().charAt(0) || "?"}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-ink truncate">
+                          {displayName}
+                        </span>
+                        {u.role === "admin" && (
+                          <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-accent-blue/15 text-accent-blue">
+                            管理员
+                          </span>
+                        )}
+                        <span
+                          className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${
+                            u.status === "active"
+                              ? "bg-accent-green/15 text-accent-green"
+                              : "bg-danger/15 text-danger"
+                          }`}
+                        >
+                          {u.status === "active" ? "正常" : "已禁用"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-ink-muted truncate">
+                        @{u.username} · 已用 {formatBytes(u.storageUsedBytes)} /{" "}
+                        {formatBytes(u.storageQuotaBytes)}
+                      </p>
+                      <p className="text-[11px] text-ink-muted/70">
+                        创建于 {formatDateTime(u.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {u.status === "active" ? (
+                      <button
+                        onClick={() => setDisableTarget(u)}
+                        disabled={isSelf}
+                        className="px-2.5 py-1.5 text-xs font-medium text-danger rounded-btn hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title={isSelf ? "不能禁用自己" : "禁用该用户"}
+                      >
+                        禁用
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => void toggleEnable(u)}
+                        className="px-2.5 py-1.5 text-xs font-medium text-accent-green rounded-btn hover:bg-accent-green/10 transition-colors"
+                      >
+                        启用
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openQuota(u)}
+                      className="px-2.5 py-1.5 text-xs font-medium text-ink-secondary rounded-btn hover:bg-surface-hover transition-colors"
+                    >
+                      调整额度
+                    </button>
+                    <button
+                      onClick={() => openPw(u)}
+                      className="px-2.5 py-1.5 text-xs font-medium text-ink-secondary rounded-btn hover:bg-surface-hover transition-colors"
+                    >
+                      重置密码
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* 禁用二次确认 */}
+      <ConfirmDialog
+        open={disableTarget !== null}
+        title="禁用用户"
+        message={`禁用后，该用户（${disableTarget?.displayName || disableTarget?.username || ""}）将无法登录和访问便签。确认禁用？`}
+        confirmLabel={disableBusy ? "禁用中…" : "禁用"}
+        onConfirm={() => void confirmDisable()}
+        onCancel={() => setDisableTarget(null)}
+      />
+
+      {/* 调整额度 */}
+      {quotaTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !quotaBusy && setQuotaTarget(null)}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-modal bg-toolbar-bg border border-border-light shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3 className="text-base font-bold text-ink">调整额度</h3>
+            <p className="mt-1.5 text-xs text-ink-muted">
+              {quotaTarget.displayName || quotaTarget.username} · 当前已用{" "}
+              {formatBytes(quotaTarget.storageUsedBytes)} · 当前额度{" "}
+              {formatBytes(quotaTarget.storageQuotaBytes)}
+            </p>
+            <div className="mt-3 flex gap-1.5 flex-wrap">
+              {QUOTA_PRESETS_MB.map((mb) => (
+                <button
+                  key={mb}
+                  onClick={() => setQuotaInput(String(mb))}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-btn transition-colors ${
+                    quotaInput === String(mb)
+                      ? "bg-primary text-white"
+                      : "text-ink-secondary bg-surface-hover hover:bg-surface-active"
+                  }`}
+                >
+                  {mb} MB
+                </button>
+              ))}
+            </div>
+            <div className="mt-3">
+              <label className="text-[11px] text-ink-muted">
+                新额度（MB）
+              </label>
+              <input
+                value={quotaInput}
+                onChange={(e) => setQuotaInput(e.target.value)}
+                inputMode="numeric"
+                placeholder="如 50"
+                className="mt-1 w-full px-2.5 py-1.5 text-sm text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted/60"
+              />
+            </div>
+            {quotaError && (
+              <p className="mt-1.5 text-[11px] text-danger">{quotaError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setQuotaTarget(null)}
+                disabled={quotaBusy}
+                className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-surface-hover transition-colors disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void saveQuota()}
+                disabled={quotaBusy}
+                className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-white bg-primary hover:brightness-110 active:brightness-95 disabled:opacity-50 transition-all"
+              >
+                {quotaBusy ? "保存中…" : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重置密码 */}
+      {pwTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !pwBusy && setPwTarget(null)}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-modal bg-toolbar-bg border border-border-light shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3 className="text-base font-bold text-ink">重置密码</h3>
+            <p className="mt-1.5 text-xs text-ink-muted">
+              为 {pwTarget.displayName || pwTarget.username} 设置新密码
+            </p>
+            {pwSuccess ? (
+              <p className="mt-4 text-sm font-medium text-accent-green">
+                密码已重置
+              </p>
+            ) : (
+              <>
+                <div className="mt-3">
+                  <input
+                    type="password"
+                    value={pw1}
+                    onChange={(e) => setPw1(e.target.value)}
+                    placeholder="新密码（至少 8 位）"
+                    autoFocus
+                    className="w-full px-2.5 py-1.5 text-sm text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted/60"
+                  />
+                </div>
+                <div className="mt-2">
+                  <input
+                    type="password"
+                    value={pw2}
+                    onChange={(e) => setPw2(e.target.value)}
+                    placeholder="再次确认新密码"
+                    className="w-full px-2.5 py-1.5 text-sm text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted/60"
+                  />
+                </div>
+                {pwError && (
+                  <p className="mt-1.5 text-[11px] text-danger">{pwError}</p>
+                )}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    onClick={() => setPwTarget(null)}
+                    disabled={pwBusy}
+                    className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-surface-hover transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => void savePw()}
+                    disabled={pwBusy}
+                    className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-white bg-primary hover:brightness-110 active:brightness-95 disabled:opacity-50 transition-all"
+                  >
+                    {pwBusy ? "重置中…" : "重置密码"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { authOrResponse } from "@/lib/auth";
 import path from "path";
 import fs from "fs/promises";
 import { addStorageUsed } from "@/lib/storage";
@@ -9,10 +9,8 @@ export async function DELETE(
   _request: Request,
   { params }: { params: { id: string; attachmentId: string } }
 ) {
-  const session = await getSession();
-  if (!session.userId) {
-    return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
-  }
+  const session = await authOrResponse();
+  if (session instanceof NextResponse) return session;
 
   // Find attachment and verify ownership
   const attachment = await prisma.attachment.findFirst({

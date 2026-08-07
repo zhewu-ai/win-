@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { authOrResponse } from "@/lib/auth";
 import { serializeNote, validateChecklistItems } from "@/lib/note-serializer";
 import {
   QUOTA_EXCEEDED_ERROR,
@@ -14,13 +14,8 @@ const VALID_COLORS = ["yellow", "blue", "green", "pink", "gray"];
 
 export async function GET(request: Request) {
   try {
-    const session = await getSession();
-    if (!session.userId) {
-      return NextResponse.json(
-        { ok: false, error: "UNAUTHORIZED" },
-        { status: 401 }
-      );
-    }
+    const session = await authOrResponse();
+    if (session instanceof NextResponse) return session;
 
     const { searchParams } = new URL(request.url);
     const archivedParam = searchParams.get("archived");
@@ -64,13 +59,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
-    if (!session.userId) {
-      return NextResponse.json(
-        { ok: false, error: "UNAUTHORIZED" },
-        { status: 401 }
-      );
-    }
+    const session = await authOrResponse();
+    if (session instanceof NextResponse) return session;
 
     const body = await request.json();
     const color = body.color || "yellow";

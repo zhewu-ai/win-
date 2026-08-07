@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { authOrResponse } from "@/lib/auth";
 import { parseChecklistGroups, parseChecklistItems, serializeNote } from "@/lib/note-serializer";
 import path from "path";
 import fs from "fs/promises";
@@ -18,13 +18,8 @@ export async function POST(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const session = await getSession();
-  if (!session.userId) {
-    return NextResponse.json(
-      { ok: false, error: "UNAUTHORIZED" },
-      { status: 401 }
-    );
-  }
+  const session = await authOrResponse();
+  if (session instanceof NextResponse) return session;
 
   const src = await prisma.note.findFirst({
     where: { id: params.id, userId: session.userId, deletedAt: null },

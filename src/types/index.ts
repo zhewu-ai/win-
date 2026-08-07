@@ -72,4 +72,6 @@ export interface User {
   avatarColor?: string | null;
   storageQuotaBytes?: number;
   storageUsedBytes?: number;
+  role?: "admin" | "user";
+  status?: "active" | "disabled";
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { authOrResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import path from "path";
 import fs from "fs/promises";
@@ -10,10 +10,8 @@ export async function GET(
   _request: Request,
   { params }: { params: { path: string[] } }
 ) {
-  const session = await getSession();
-  if (!session.userId) {
-    return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
-  }
+  const session = await authOrResponse();
+  if (session instanceof NextResponse) return session;
 
   const rawPath = params.path.join("/");
   const uploadDir = process.env.UPLOAD_DIR || "./uploads";

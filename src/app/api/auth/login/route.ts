@@ -22,6 +22,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // 被禁用账号不能登录
+    if (user.status !== "active") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "ACCOUNT_DISABLED",
+          message: "账号已被禁用，请联系管理员",
+        },
+        { status: 403 }
+      );
+    }
+
     const session = await getSession();
     session.userId = user.id;
     await session.save();

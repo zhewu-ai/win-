@@ -85,6 +85,8 @@ export async function PATCH(request: Request) {
       avatarColor: true,
       storageQuotaBytes: true,
       storageUsedBytes: true,
+      role: true,
+      status: true,
     },
   });
 
