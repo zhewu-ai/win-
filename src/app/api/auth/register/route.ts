@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { hashInviteCode } from "@/lib/invites";
+import { createSampleNotes } from "@/lib/sample-notes";
 import bcrypt from "bcryptjs";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
     const now = new Date();
 
     let user: { id: string } | null = null;
+    let sampleBytes = 0;
     try {
       user = await prisma.$transaction(async (tx) => {
         const invite = await tx.inviteCode.findUnique({ where: { codeHash } });
@@ -103,6 +105,15 @@ export async function POST(request: Request) {
           where: { id: invite.id },
           data: { status: "used", usedById: created.id, usedAt: now },
         });
+
+        // 新用户示例便签：仅注册时生成一次，老用户不补发
+        sampleBytes = await createSampleNotes(tx, created.id);
+        if (sampleBytes > 0) {
+          await tx.user.update({
+            where: { id: created.id },
+            data: { storageUsedBytes: { increment: sampleBytes } },
+          });
+        }
 
         return created;
       });
@@ -146,7 +157,7 @@ export async function POST(request: Request) {
         role: "user",
         status: "active",
         storageQuotaBytes: DEFAULT_QUOTA_BYTES,
-        storageUsedBytes: 0,
+        storageUsedBytes: sampleBytes,
       },
     });
   } catch {

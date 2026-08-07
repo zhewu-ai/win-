@@ -31,6 +31,8 @@ model User {
   usedInvites       InviteCode[] @relation("InviteUsedBy")
   passwordResetTokens PasswordResetToken[]
   feedbackTickets   FeedbackTicket[]
+  announcements     Announcement[]
+  announcementReads AnnouncementRead[]
 }
 
 model PasswordResetToken {
@@ -104,6 +106,7 @@ model Note {
   windowWidth  Int?
   windowHeight Int?
   alwaysOnTop  Boolean   @default(false)
+  isSample     Boolean   @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
@@ -134,4 +137,35 @@ model Attachment {
 
   @@index([userId])
   @@index([noteId])
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String
+  content     String
+  version     String?
+  status      String    @default("draft") // draft | published | archived
+  publishedAt DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id])
+  reads     AnnouncementRead[]
+
+  @@index([status])
+  @@index([publishedAt])
+}
+
+model AnnouncementRead {
+  id             String   @id @default(cuid())
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([announcementId, userId])
+  @@index([userId])
 }

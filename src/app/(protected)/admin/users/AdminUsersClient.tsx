@@ -64,6 +64,13 @@ export default function AdminUsersClient({
   const [disableTarget, setDisableTarget] = useState<AdminUser | null>(null);
   const [disableBusy, setDisableBusy] = useState(false);
 
+  // 删除废用户（仅 disabled + 非 admin + 非本人 + 无业务数据）
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteInputValue, setDeleteInputValue] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
   const [quotaTarget, setQuotaTarget] = useState<AdminUser | null>(null);
   const [quotaInput, setQuotaInput] = useState("");
   const [quotaError, setQuotaError] = useState<string | null>(null);
@@ -202,6 +209,50 @@ export default function AdminUsersClient({
       );
     } catch {
       alert("启用失败，请检查网络");
+    }
+  };
+
+  const openDelete = (user: AdminUser) => {
+    setDeleteTarget(user);
+    setDeleteConfirmOpen(false);
+    setDeleteInputValue("");
+    setDeleteError(null);
+  };
+
+  const closeDelete = () => {
+    setDeleteTarget(null);
+    setDeleteConfirmOpen(false);
+    setDeleteInputValue("");
+    setDeleteError(null);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data?.error === "USER_HAS_DATA") {
+          setDeleteError(
+            `该用户已有数据，不能直接删除。便签 ${data.counts?.notes ?? 0}、附件 ${
+              data.counts?.attachments ?? 0
+            } 等，请先禁用保留数据。`
+          );
+        } else {
+          setDeleteError(data?.message || data?.error || "删除失败");
+        }
+        return;
+      }
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+      closeDelete();
+    } catch {
+      setDeleteError("删除失败，请检查网络");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -421,6 +472,18 @@ export default function AdminUsersClient({
                     >
                       重置密码
                     </button>
+                    {u.status === "disabled" && u.role === "user" && !isSelf && (
+                      <>
+                        <span className="w-px h-4 bg-border-light" aria-hidden="true" />
+                        <button
+                          onClick={() => openDelete(u)}
+                          className="px-2 py-1 text-[11px] font-normal text-ink-muted/70 hover:text-danger hover:bg-danger/5 rounded-btn transition-colors"
+                          title="仅用于删除已禁用且无业务数据的废账号"
+                        >
+                          删除用户
+                        </button>
+                      </>
+                    )}
                   </div>
                 </li>
               );
@@ -646,6 +709,79 @@ export default function AdminUsersClient({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 删除废用户：第一层确认 */}
+      <ConfirmDialog
+        open={deleteTarget !== null && !deleteConfirmOpen}
+        title="删除用户"
+        message={`删除用户后不可恢复。仅当这是废弃账号且无有效数据时使用。\n\n确认删除用户「${
+          deleteTarget?.displayName || deleteTarget?.username || ""
+        }」？`}
+        confirmLabel="下一步"
+        onConfirm={() => setDeleteConfirmOpen(true)}
+        onCancel={() => closeDelete()}
+      />
+
+      {/* 删除废用户：第二层输入确认 */}
+      {deleteTarget && deleteConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !deleteBusy && closeDelete()}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-modal bg-toolbar-bg border border-border-light shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+          >
+            <h3 className="text-base font-bold text-ink">确认删除</h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+              删除用户后不可恢复。请输入
+              <span className="font-mono font-semibold text-danger"> DELETE </span>
+              {deleteTarget.email
+                ? "或该用户邮箱，确认永久删除。"
+                : "，确认永久删除。"}
+            </p>
+            <input
+              type="text"
+              value={deleteInputValue}
+              onChange={(e) => setDeleteInputValue(e.target.value)}
+              autoFocus
+              placeholder={deleteTarget.email || "DELETE"}
+              className="mt-3 w-full px-3 py-2 text-sm rounded-input bg-search-bg border border-border-light outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 placeholder:text-ink-muted/60"
+            />
+            {deleteError && (
+              <p className="mt-2 text-[11px] text-danger break-words">
+                {deleteError}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => closeDelete()}
+                disabled={deleteBusy}
+                className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-surface-hover transition-colors disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void confirmDeleteUser()}
+                disabled={
+                  deleteBusy ||
+                  !(
+                    deleteInputValue === "DELETE" ||
+                    (!!deleteTarget.email &&
+                      deleteInputValue.toLowerCase() ===
+                        deleteTarget.email.toLowerCase())
+                  )
+                }
+                className="px-3.5 py-1.5 rounded-btn text-sm font-semibold text-white bg-danger hover:bg-danger/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {deleteBusy ? "删除中…" : "永久删除"}
+              </button>
+            </div>
           </div>
         </div>
       )}
