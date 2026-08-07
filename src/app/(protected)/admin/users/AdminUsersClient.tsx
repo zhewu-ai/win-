@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import UserAvatar from "@/components/UserAvatar";
 import type { AdminInvite } from "@/types";
 
 interface AdminUser {
@@ -11,27 +12,13 @@ interface AdminUser {
   email: string | null;
   displayName: string | null;
   avatarColor: string | null;
+  avatarUrl: string | null;
   role: "admin" | "user";
   status: "active" | "disabled";
   storageQuotaBytes: number;
   storageUsedBytes: number;
   createdAt: string;
   updatedAt: string;
-}
-
-const AVATAR_COLORS = ["yellow", "blue", "green", "pink", "gray"] as const;
-const AVATAR_BG: Record<string, string> = {
-  yellow: "bg-accent-yellow text-[#20242a]",
-  blue: "bg-accent-blue text-white",
-  green: "bg-accent-green text-[#20242a]",
-  pink: "bg-accent-pink text-[#20242a]",
-  gray: "bg-accent-gray text-[#20242a]",
-};
-
-function hashColor(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
 function formatBytes(bytes: number): string {
@@ -365,9 +352,6 @@ export default function AdminUsersClient({
               <ul className="mt-3 space-y-2 max-w-2xl">
                 {filteredUsers.map((u) => {
               const isSelf = u.id === currentUserId;
-              const avatarCls =
-                AVATAR_BG[u.avatarColor || hashColor(u.username)] ||
-                AVATAR_BG.gray;
               const displayName = u.displayName || u.username;
               return (
                 <li
@@ -375,11 +359,7 @@ export default function AdminUsersClient({
                   className="flex flex-col sm:flex-row sm:items-center gap-3 px-3.5 py-3 bg-toolbar-bg border border-border-light rounded-card"
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span
-                      className={`flex-shrink-0 w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center ${avatarCls}`}
-                    >
-                      {displayName.trim().charAt(0) || "?"}
-                    </span>
+                    <UserAvatar user={u} size="md" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-semibold text-ink truncate">

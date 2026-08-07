@@ -5,6 +5,8 @@ export const ADMIN_USER_SELECT = {
   email: true,
   displayName: true,
   avatarColor: true,
+  avatarUrl: true,
+  avatarSize: true,
   role: true,
   status: true,
   storageQuotaBytes: true,

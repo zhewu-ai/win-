@@ -6,30 +6,13 @@ import { useTheme } from "@/hooks/useTheme";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import ConfirmDialog from "./ConfirmDialog";
 import ChangePasswordModal from "./ChangePasswordModal";
+import ChangeAvatarModal from "./ChangeAvatarModal";
+import UserAvatar from "./UserAvatar";
 import type { User } from "@/types";
 
 interface Props {
   /** Tailwind classes for dropdown position, e.g. "top-full mt-1.5" (opens down) or "bottom-full mb-1.5" (opens up). */
   dropdownPos?: string;
-}
-
-const AVATAR_COLORS = ["yellow", "blue", "green", "pink", "gray"] as const;
-
-const AVATAR_BG: Record<string, string> = {
-  yellow: "bg-accent-yellow text-[#20242a]",
-  blue: "bg-accent-blue text-white",
-  green: "bg-accent-green text-[#20242a]",
-  pink: "bg-accent-pink text-[#20242a]",
-  gray: "bg-accent-gray text-[#20242a]",
-};
-
-/** 无 avatarColor 时按 username 哈希从预设色取一个稳定颜色。 */
-function hashColor(username: string): string {
-  let h = 0;
-  for (let i = 0; i < username.length; i++) {
-    h = (h * 31 + username.charCodeAt(i)) >>> 0;
-  }
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
 function formatUsageBytes(bytes: number): string {
@@ -59,6 +42,7 @@ export default function AccountMenu({
   const [open, setOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
+  const [changeAvatarOpen, setChangeAvatarOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -104,10 +88,6 @@ export default function AccountMenu({
   }, [open]);
 
   const displayName = user?.displayName || user?.username || "…";
-  const initial = displayName.trim().charAt(0) || "?";
-  const avatarCls =
-    AVATAR_BG[user?.avatarColor || hashColor(user?.username || "guest")] ||
-    AVATAR_BG.gray;
   const quota = user?.storageQuotaBytes;
   const used = user?.storageUsedBytes;
   const pct =
@@ -172,11 +152,7 @@ export default function AccountMenu({
         title="账户菜单"
         aria-expanded={open}
       >
-        <span
-          className={`w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center ${avatarCls}`}
-        >
-          {initial}
-        </span>
+        <UserAvatar user={user} size="sm" />
         <span className="hidden sm:inline text-sm font-medium max-w-[7rem] truncate">
           {displayName}
         </span>
@@ -189,11 +165,7 @@ export default function AccountMenu({
         <div className={`absolute right-0 w-56 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 ${dropdownPos}`}>
           {/* 当前用户信息 */}
           <div className="flex items-center gap-2.5 px-3.5 py-2.5">
-            <span
-              className={`w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center ${avatarCls}`}
-            >
-              {initial}
-            </span>
+            <UserAvatar user={user} size="md" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-ink truncate">{displayName}</p>
               <p className="text-[11px] text-ink-muted truncate">@{user?.username || ""}</p>
@@ -266,6 +238,19 @@ export default function AccountMenu({
               修改昵称
             </button>
           )}
+
+          <button
+            onClick={() => {
+              setOpen(false);
+              setChangeAvatarOpen(true);
+            }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
+          >
+            <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            更换头像
+          </button>
 
           <div className="my-1 h-px bg-border-light/60" />
           <a
@@ -369,6 +354,13 @@ export default function AccountMenu({
       <ChangePasswordModal
         open={changePwOpen}
         onClose={() => setChangePwOpen(false)}
+      />
+
+      <ChangeAvatarModal
+        open={changeAvatarOpen}
+        user={user}
+        onClose={() => setChangeAvatarOpen(false)}
+        onUserUpdated={(updated) => setUser(updated)}
       />
     </div>
   );

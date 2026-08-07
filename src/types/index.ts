@@ -71,6 +71,9 @@ export interface User {
   email?: string | null;
   displayName?: string | null;
   avatarColor?: string | null;
+  avatarUrl?: string | null;
+  avatarMimeType?: string | null;
+  avatarSize?: number;
   storageQuotaBytes?: number;
   storageUsedBytes?: number;
   role?: "admin" | "user";

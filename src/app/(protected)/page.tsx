@@ -76,6 +76,29 @@ export default function HomePage() {
     }
   };
 
+  const handleBulkDelete = async (ids: string[]) => {
+    try {
+      const res = await fetch("/api/notes/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.message || data.error || "删除便签失败");
+        return;
+      }
+      // 当前正在编辑的便签被批量删除后清空编辑区
+      if (selectedNoteId && data.deletedIds.includes(selectedNoteId)) {
+        setSelectedNoteId(null);
+        setShowEditor(false);
+      }
+      fetchNotes(searchQuery || undefined);
+    } catch {
+      alert("删除便签失败");
+    }
+  };
+
   const handleArchive = async (id: string) => {
     if (selectedNoteId === id) {
       setSelectedNoteId(null);
@@ -136,6 +159,7 @@ export default function HomePage() {
             notes={notes}
             selectedId={selectedNoteId}
             onSelect={handleSelect}
+            onBulkDelete={handleBulkDelete}
             loading={loading}
             searchQuery={searchQuery}
             onSearchChange={handleSearchChange}

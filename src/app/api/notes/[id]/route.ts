@@ -25,6 +25,7 @@ export async function PATCH(
       userId: session.userId,
       deletedAt: null,
     },
+    include: { attachments: true },
   });
 
   if (!note) {
@@ -96,6 +97,23 @@ export async function PATCH(
       return NextResponse.json(
         { ok: false, error: "NO_FIELDS_TO_UPDATE" },
         { status: 400 }
+      );
+    }
+
+    // M10.8 无变化检测：请求字段与当前行完全一致时不执行 update。
+    // @updatedAt 在任何 prisma.note.update 时都会刷新，因此必须跳过 update 才能让
+    // updatedAt 只代表"真实修改时间"。结构化字段（checklistItems/Groups）已在此前
+    // 归一化为与库中一致的 JSON 字符串，可直接按值比较。
+    let noop = true;
+    for (const [key, value] of Object.entries(updateData)) {
+      if (note[key as keyof typeof note] !== value) {
+        noop = false;
+        break;
+      }
+    }
+    if (noop) {
+      return NextResponse.json(
+        serializeNote(note as unknown as Record<string, unknown>)
       );
     }
 

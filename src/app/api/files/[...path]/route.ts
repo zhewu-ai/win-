@@ -27,6 +27,7 @@ export async function GET(
   // Parse noteId from URL pattern: notes/{noteId}/{filename}
   // Verify attachment DB record belongs to current user
   const segments = params.path;
+  let avatarServe = false;
   if (segments.length >= 2 && segments[0] === "notes") {
     const noteId = segments[1];
     const attachment = await prisma.attachment.findFirst({
@@ -39,6 +40,25 @@ export async function GET(
     if (!attachment) {
       return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 });
     }
+  } else if (segments.length === 2 && segments[0] === "avatars") {
+    // 头像：仅本人或管理员可读（管理员用户列表需要展示他人头像）
+    const owner = await prisma.user.findFirst({
+      where: { avatarStoragePath: rawPath },
+      select: { id: true },
+    });
+    if (!owner) {
+      return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
+    }
+    if (owner.id !== session.userId) {
+      const sessionUser = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { role: true },
+      });
+      if (sessionUser?.role !== "admin") {
+        return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 });
+      }
+    }
+    avatarServe = true;
   } else {
     // Unknown path pattern — reject
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 });
@@ -63,11 +83,16 @@ export async function GET(
   };
   const mimeType = mimeMap[ext] || "application/octet-stream";
 
+  // 头像删除后旧 URL 应立即失效：不缓存（no-store）。附件保留现有私有缓存。
+  const cacheControl = avatarServe
+    ? "private, no-store"
+    : "private, max-age=86400";
+
   return new NextResponse(new Uint8Array(fileBuffer), {
     status: 200,
     headers: {
       "Content-Type": mimeType,
-      "Cache-Control": "private, max-age=86400",
+      "Cache-Control": cacheControl,
     },
   });
 }

@@ -8,6 +8,7 @@ interface Props {
   notes: Note[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onBulkDelete: (ids: string[]) => Promise<void>;
   loading?: boolean;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -19,6 +20,7 @@ export default function Sidebar({
   notes,
   selectedId,
   onSelect,
+  onBulkDelete,
   loading,
   searchQuery,
   onSearchChange,
@@ -81,6 +83,7 @@ export default function Sidebar({
           notes={notes}
           selectedId={selectedId}
           onSelect={onSelect}
+          onBulkDelete={onBulkDelete}
           loading={loading}
           searchQuery={searchQuery}
         />
