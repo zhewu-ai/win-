@@ -72,6 +72,7 @@ export default function AdminUsersClient({
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [disableTarget, setDisableTarget] = useState<AdminUser | null>(null);
   const [disableBusy, setDisableBusy] = useState(false);
@@ -300,6 +301,16 @@ export default function AdminUsersClient({
     }
   };
 
+  const q = search.trim().toLowerCase();
+  const filteredUsers = users.filter((u) => {
+    if (!q) return true;
+    return (
+      (u.email || "").toLowerCase().includes(q) ||
+      u.username.toLowerCase().includes(q) ||
+      (u.displayName || "").toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="flex flex-col h-full">
       {/* 顶栏 */}
@@ -336,8 +347,23 @@ export default function AdminUsersClient({
         )}
 
         {!loading && !loadError && users.length > 0 && (
-          <ul className="space-y-2 max-w-2xl">
-            {users.map((u) => {
+          <>
+            <div className="max-w-2xl">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索邮箱 / 用户名 / 昵称"
+                className="w-full px-3 py-2 text-sm text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:bg-surface-focus focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted/60"
+              />
+            </div>
+            {filteredUsers.length === 0 ? (
+              <p className="text-sm text-ink-muted py-6 text-center">
+                无匹配用户
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2 max-w-2xl">
+                {filteredUsers.map((u) => {
               const isSelf = u.id === currentUserId;
               const avatarCls =
                 AVATAR_BG[u.avatarColor || hashColor(u.username)] ||
@@ -418,8 +444,10 @@ export default function AdminUsersClient({
                   </div>
                 </li>
               );
-            })}
-          </ul>
+                })}
+              </ul>
+            )}
+          </>
         )}
 
         {/* 邀请码 */}
