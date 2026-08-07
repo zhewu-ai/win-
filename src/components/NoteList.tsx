@@ -134,7 +134,7 @@ function HighlightText({ text, query }: { text: string; query: string }) {
 
 function SectionHeader({ icon, label }: { icon: string; label: string }) {
   return (
-    <div className="flex items-center gap-1.5 px-5 pt-5 pb-2 first:pt-4">
+    <div className="flex items-center gap-1.5 px-5 pt-5 pb-2 first:pt-1">
       <svg
         className="hidden w-3.5 h-3.5 text-ink-muted"
         fill="none"
@@ -418,20 +418,24 @@ export default function NoteList({
           </button>
         </div>
       ) : (
-        <div className="flex justify-end px-3 pt-1.5 flex-shrink-0">
+        <div className="flex justify-end px-3 pt-1 flex-shrink-0">
           <button
             onClick={() => {
               setSelectionMode(true);
               setSelectedSet(new Set());
             }}
-            className="text-xs font-medium text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn px-1.5 py-1 transition-colors"
+            title="选择便签"
+            aria-label="选择便签"
+            className="flex items-center justify-center w-7 h-7 text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
           >
-            选择
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h.01M12 12h.01M19 12h.01" />
+            </svg>
           </button>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2.5 scrollbar-thin [scrollbar-gutter:stable]">
+      <div className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-2.5 scrollbar-thin [scrollbar-gutter:stable]">
         {pinned.length > 0 && (
           <div>
             <SectionHeader

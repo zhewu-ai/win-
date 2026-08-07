@@ -9,6 +9,8 @@ import ChangePasswordModal from "./ChangePasswordModal";
 import ChangeAvatarModal from "./ChangeAvatarModal";
 import FeedbackModal from "./FeedbackModal";
 import UserAvatar from "./UserAvatar";
+import { isTauri } from "@/lib/tauri";
+import { DESKTOP_APP_DOWNLOAD_URL } from "@/lib/downloads";
 import type { User } from "@/types";
 
 interface Props {
@@ -323,6 +325,20 @@ export default function AccountMenu({
             </svg>
             反馈问题
           </button>
+          {!isTauri() && (
+            <a
+              href={DESKTOP_APP_DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="hidden md:flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+            >
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              下载桌面版
+            </a>
+          )}
           <div className="px-3.5 pt-2 pb-1 text-[11px] text-ink-muted">外观</div>
           <button
             onClick={() => setTheme("dark")}

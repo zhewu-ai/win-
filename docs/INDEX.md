@@ -23,6 +23,9 @@
 - [交付报告-M10_8_修改密码多选删除头像更新时间准确性_20260807.md](./交付报告-M10_8_修改密码多选删除头像更新时间准确性_20260807.md)：M10.8 交付报告。
 - [交付报告-M10_8_用户反馈工单_20260807.md](./交付报告-M10_8_用户反馈工单_20260807.md)：M10.8 补交：用户反馈工单（用户提交 + 管理员后台）。
 - [交付报告-M10_8_收尾_强制改密与头像压缩_20260807.md](./交付报告-M10_8_收尾_强制改密与头像压缩_20260807.md)：M10.8 收尾：临时密码提示 mustChangePassword + 头像服务端缩放压缩。
+- [SPEC_M10_9_DESKTOP_APP_DOWNLOAD_ENTRY_20260807.md](./SPEC_M10_9_DESKTOP_APP_DOWNLOAD_ENTRY_20260807.md)：M10.9 桌面应用下载入口 + 左栏选择按钮微调。
+- [交付报告-M10_9_桌面下载入口与左栏选择按钮_20260807.md](./交付报告-M10_9_桌面下载入口与左栏选择按钮_20260807.md)：M10.9 交付报告。
+- [SPEC_M10_10_BETA_OPERATIONS_AND_ONBOARDING_20260807.md](./SPEC_M10_10_BETA_OPERATIONS_AND_ONBOARDING_20260807.md)：M10.10 内测运营与新手引导：归档/回收站批量操作、手动公告、删除废用户、示例便签。
 - [SPEC_M9_VISUAL_SKIN_INTEGRATION_20260807.md](./SPEC_M9_VISUAL_SKIN_INTEGRATION_20260807.md)：M9 视觉换皮集成说明。
 - [SPEC_M9_NOTE_CARD_POLISH_FEEDBACK_20260807.md](./SPEC_M9_NOTE_CARD_POLISH_FEEDBACK_20260807.md)：M9 左侧便签卡片视觉补充反馈。
 - [SPEC_M8_8_SCOPE_ADJUSTMENT_LOSS_PREVENTION_20260806.md](./SPEC_M8_8_SCOPE_ADJUSTMENT_LOSS_PREVENTION_20260806.md)：M8.8 离线范围调整与断网防丢保护。
