@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 function safeReturnTo(path?: string): string {
@@ -71,14 +72,14 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
 
         <div className="mb-4">
           <label className="block text-toolbar font-medium text-ink mb-1.5">
-            用户名
+            邮箱或用户名
           </label>
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="w-full px-3 py-2.5 text-ink bg-search-bg border border-border-soft rounded-input outline-none focus:bg-surface-focus focus:border-surface-focus focus:ring-1 focus:ring-surface-focus transition-all placeholder:text-ink-muted"
-            placeholder="请输入用户名"
+            placeholder="请输入邮箱或用户名"
             required
             autoFocus
           />
@@ -105,6 +106,16 @@ export default function LoginForm({ returnTo }: { returnTo?: string }) {
         >
           {loading ? "登录中..." : "登录"}
         </button>
+
+        <p className="mt-4 text-center text-list-meta text-ink-muted">
+          没有账号？
+          <Link
+            href="/register"
+            className="text-ink font-medium hover:underline"
+          >
+            使用邀请码注册
+          </Link>
+        </p>
       </form>
     </div>
   );

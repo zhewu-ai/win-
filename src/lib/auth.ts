@@ -12,6 +12,7 @@ export async function getSession() {
 const CURRENT_USER_SELECT = {
   id: true,
   username: true,
+  email: true,
   displayName: true,
   avatarColor: true,
   storageQuotaBytes: true,

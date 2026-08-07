@@ -68,10 +68,20 @@ export type NoteColor = "yellow" | "blue" | "green" | "pink" | "gray";
 export interface User {
   id: string;
   username: string;
+  email?: string | null;
   displayName?: string | null;
   avatarColor?: string | null;
   storageQuotaBytes?: number;
   storageUsedBytes?: number;
   role?: "admin" | "user";
   status?: "active" | "disabled";
+}
+
+export interface AdminInvite {
+  id: string;
+  status: "active" | "revoked" | "used" | "expired";
+  expiresAt: string;
+  usedAt: string | null;
+  createdAt: string;
+  usedBy?: { id: string; username: string; displayName: string | null; email: string | null } | null;
 }

@@ -14,7 +14,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    const identifier = String(username).trim();
+    // 兼容老账号 username 与新账号 email（email 入库前已小写归一化）
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ username: identifier }, { email: identifier.toLowerCase() }],
+      },
+    });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return NextResponse.json(
         { ok: false, error: "INVALID_CREDENTIALS" },

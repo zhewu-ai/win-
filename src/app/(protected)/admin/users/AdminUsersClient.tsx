@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import type { AdminInvite } from "@/types";
 
 interface AdminUser {
   id: string;
   username: string;
+  email: string | null;
   displayName: string | null;
   avatarColor: string | null;
   role: "admin" | "user";
@@ -48,6 +50,20 @@ function formatDateTime(iso: string): string {
 
 const QUOTA_PRESETS_MB = [10, 50, 100, 500];
 
+const INVITE_STATUS: Record<AdminInvite["status"], string> = {
+  active: "bg-accent-green/15 text-accent-green",
+  used: "bg-accent-blue/15 text-accent-blue",
+  revoked: "bg-danger/15 text-danger",
+  expired: "bg-surface-active text-ink-muted",
+};
+
+const INVITE_STATUS_TEXT: Record<AdminInvite["status"], string> = {
+  active: "未使用",
+  used: "已使用",
+  revoked: "已作废",
+  expired: "已过期",
+};
+
 export default function AdminUsersClient({
   currentUserId,
 }: {
@@ -72,6 +88,15 @@ export default function AdminUsersClient({
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwBusy, setPwBusy] = useState(false);
 
+  const [invites, setInvites] = useState<AdminInvite[]>([]);
+  const [newInvite, setNewInvite] = useState<{
+    id: string;
+    code: string;
+    expiresAt: string;
+  } | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -93,6 +118,59 @@ export default function AdminUsersClient({
   useEffect(() => {
     void fetchUsers();
   }, [fetchUsers]);
+
+  const fetchInvites = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/invites");
+      const data = await res.json();
+      if (res.ok && data.invites) setInvites(data.invites);
+    } catch {
+      // 邀请码加载失败不阻塞用户列表
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchInvites();
+  }, [fetchInvites]);
+
+  const handleGenerate = async () => {
+    setInviteBusy(true);
+    setInviteError(null);
+    try {
+      const res = await fetch("/api/admin/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiresInDays: 7 }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setInviteError(data.error || "生成失败");
+        return;
+      }
+      setNewInvite(data.invite);
+      void fetchInvites();
+    } catch {
+      setInviteError("生成失败，请检查网络");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const revokeInvite = async (inv: AdminInvite) => {
+    try {
+      const res = await fetch(`/api/admin/invites/${inv.id}/revoke`, {
+        method: "PATCH",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.message || data.error || "作废失败");
+        return;
+      }
+      void fetchInvites();
+    } catch {
+      alert("作废失败，请检查网络");
+    }
+  };
 
   const confirmDisable = async () => {
     if (!disableTarget) return;
@@ -297,7 +375,8 @@ export default function AdminUsersClient({
                         </span>
                       </div>
                       <p className="text-[11px] text-ink-muted truncate">
-                        @{u.username} · 已用 {formatBytes(u.storageUsedBytes)} /{" "}
+                        {u.email || `@${u.username}`} · 已用{" "}
+                        {formatBytes(u.storageUsedBytes)} /{" "}
                         {formatBytes(u.storageQuotaBytes)}
                       </p>
                       <p className="text-[11px] text-ink-muted/70">
@@ -342,6 +421,81 @@ export default function AdminUsersClient({
             })}
           </ul>
         )}
+
+        {/* 邀请码 */}
+        <div className="mt-8 max-w-2xl">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-ink">邀请码</h2>
+            <button
+              onClick={() => void handleGenerate()}
+              disabled={inviteBusy}
+              className="px-2.5 py-1.5 text-xs font-medium text-white bg-primary rounded-btn hover:brightness-110 active:brightness-95 disabled:opacity-50 transition-all"
+            >
+              {inviteBusy ? "生成中…" : "生成邀请码"}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-ink-muted">
+            邀请码单次使用、7 天有效。生成后请复制给需要注册的用户。
+          </p>
+
+          {inviteError && (
+            <p className="mt-2 text-[11px] text-danger">{inviteError}</p>
+          )}
+
+          {newInvite && (
+            <div className="mt-3 p-3 bg-accent-green/10 border border-accent-green/30 rounded-card">
+              <p className="text-xs font-medium text-ink">
+                邀请码只显示一次，请现在复制给用户。
+              </p>
+              <code className="mt-1.5 block text-sm font-mono font-semibold tracking-wide text-ink break-all">
+                {newInvite.code}
+              </code>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-ink-muted">
+                  过期时间：{formatDateTime(newInvite.expiresAt)}
+                </p>
+                <button
+                  onClick={() => setNewInvite(null)}
+                  className="text-[11px] font-medium text-ink-secondary hover:text-ink underline"
+                >
+                  知道了
+                </button>
+              </div>
+            </div>
+          )}
+
+          <ul className="mt-3 space-y-1.5">
+            {invites.map((inv) => (
+              <li
+                key={inv.id}
+                className="flex items-center gap-2 px-3 py-2 bg-toolbar-bg border border-border-light rounded-card"
+              >
+                <span
+                  className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${INVITE_STATUS[inv.status]}`}
+                >
+                  {INVITE_STATUS_TEXT[inv.status]}
+                </span>
+                <span className="text-[11px] text-ink-secondary min-w-0 truncate">
+                  创建于 {formatDateTime(inv.createdAt)} · 过期{" "}
+                  {formatDateTime(inv.expiresAt)}
+                  {inv.usedBy &&
+                    ` · 使用人 ${inv.usedBy.displayName || inv.usedBy.username}`}
+                </span>
+                {inv.status === "active" && (
+                  <button
+                    onClick={() => void revokeInvite(inv)}
+                    className="ml-auto flex-shrink-0 text-[11px] font-medium text-danger hover:bg-danger/10 rounded-btn px-1.5 py-0.5 transition-colors"
+                  >
+                    作废
+                  </button>
+                )}
+              </li>
+            ))}
+            {invites.length === 0 && (
+              <li className="text-[11px] text-ink-muted py-1">暂无邀请码</li>
+            )}
+          </ul>
+        </div>
       </div>
 
       {/* 禁用二次确认 */}

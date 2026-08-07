@@ -2,6 +2,7 @@
 export const ADMIN_USER_SELECT = {
   id: true,
   username: true,
+  email: true,
   displayName: true,
   avatarColor: true,
   role: true,
