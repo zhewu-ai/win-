@@ -62,6 +62,12 @@ export default function SaveStatus({
     syncStatus === "pendingUpdate" ||
     syncStatus === "pendingDelete";
 
+  // M10.13 常态隐藏：本机已保存且无待同步、无同步失败 → 不渲染、不占位，
+  // 把稳定位置让给刷新按钮，避免「已保存」低价值文案长期占用工具栏。
+  if (!pending && syncStatus !== "syncError") {
+    return null;
+  }
+
   let label = "已保存";
   let dotCls = "bg-ink-muted/30";
   if (syncStatus === "syncError") {

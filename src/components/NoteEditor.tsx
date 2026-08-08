@@ -569,6 +569,17 @@ export default function NoteEditor({
 
         <div className="flex-1" />
 
+        {/* 保存状态：常态（已保存+无待同步）返回 null 不占位；仅过程/异常态显示。
+            放在刷新按钮左侧，状态出现时不影响右侧按钮组（minimal 时省略）。 */}
+        {toolbarMode !== "minimal" && (
+          <SaveStatus
+            status={saveStatus}
+            onRetry={handleRetry}
+            showText={toolbarMode === "spacious"}
+            syncStatus={note.syncStatus}
+          />
+        )}
+
         {/* 手动刷新：拉取服务器最新列表；刷新中禁用并旋转，避免重复请求 */}
         <button
           onClick={() => onRefresh?.()}
@@ -587,18 +598,6 @@ export default function NoteEditor({
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
-
-        {/* 保存状态预留固定宽度，状态变化不推动右侧图标横移（minimal 时省略） */}
-        {toolbarMode !== "minimal" && (
-          <div className="w-14 flex items-center justify-end flex-shrink-0 toolbar-item">
-            <SaveStatus
-              status={saveStatus}
-              onRetry={handleRetry}
-              showText={toolbarMode === "spacious"}
-              syncStatus={note.syncStatus}
-            />
-          </div>
-        )}
 
         {/* 置顶便签：从更多菜单提升到主工具栏（原图片按钮位置） */}
         <button
