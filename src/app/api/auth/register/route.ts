@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { hashInviteCode } from "@/lib/invites";
 import { createSampleNotes } from "@/lib/sample-notes";
+import { rateLimit } from "@/lib/rateLimit";
 import bcrypt from "bcryptjs";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -63,6 +64,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // 公开接口频控：IP 5 次/10 分钟，防止低成本 CPU DoS（爆破/垃圾注册）
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (!rateLimit(`register:ip:${ip}`, 5, 600_000)) {
+      return NextResponse.json(
+        { ok: false, error: "RATE_LIMITED" },
+        { status: 429 }
+      );
+    }
+
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json(
@@ -71,9 +82,47 @@ export async function POST(request: Request) {
       );
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
     const codeHash = hashInviteCode(inviteCodeRaw);
     const now = new Date();
+
+    // 邀请码 hash 频控：防止对同一邀请码反复探测
+    if (!rateLimit(`register:invite:${codeHash}`, 5, 600_000)) {
+      return NextResponse.json(
+        { ok: false, error: "RATE_LIMITED" },
+        { status: 429 }
+      );
+    }
+
+    // 先校验邀请码存在且可用，再执行 bcrypt，避免无效邀请码消耗 CPU
+    const invitePre = await prisma.inviteCode.findUnique({
+      where: { codeHash },
+    });
+    if (!invitePre) {
+      return NextResponse.json(
+        { ok: false, error: "INVALID_INVITE_CODE" },
+        { status: 400 }
+      );
+    }
+    if (invitePre.status === "revoked") {
+      return NextResponse.json(
+        { ok: false, error: "INVITE_REVOKED" },
+        { status: 400 }
+      );
+    }
+    if (invitePre.status === "used") {
+      return NextResponse.json(
+        { ok: false, error: "INVITE_USED" },
+        { status: 400 }
+      );
+    }
+    if (invitePre.status === "expired" || invitePre.expiresAt <= now) {
+      return NextResponse.json(
+        { ok: false, error: "INVITE_EXPIRED" },
+        { status: 400 }
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
 
     let user: { id: string } | null = null;
     let sampleBytes = 0;

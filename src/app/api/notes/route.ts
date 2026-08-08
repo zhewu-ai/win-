@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
-import { serializeNote, validateChecklistItems } from "@/lib/note-serializer";
+import {
+  serializeNote,
+  validateChecklistItems,
+  validateNoteTextFields,
+} from "@/lib/note-serializer";
 import { recordUserActivity } from "@/lib/activity";
 import {
   QUOTA_EXCEEDED_ERROR,
@@ -12,6 +16,7 @@ import {
 } from "@/lib/storage";
 
 const VALID_COLORS = ["yellow", "blue", "green", "pink", "gray"];
+const SEARCH_MAX_LEN = 100;
 
 export async function GET(request: Request) {
   try {
@@ -21,7 +26,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const archivedParam = searchParams.get("archived");
     const isArchived = archivedParam ? archivedParam === "true" : false;
-    const q = searchParams.get("q") || "";
+    const q = (searchParams.get("q") || "").slice(0, SEARCH_MAX_LEN);
 
     const where: Record<string, unknown> = {
       userId: session.userId,
@@ -77,6 +82,23 @@ export async function POST(request: Request) {
     if (mode !== "text" && mode !== "checklist") {
       return NextResponse.json(
         { ok: false, error: "INVALID_MODE" },
+        { status: 400 }
+      );
+    }
+
+    // 输入上限：标题/正文类型与长度
+    const textError = validateNoteTextFields(body);
+    if (textError) {
+      return NextResponse.json(
+        { ok: false, error: textError },
+        { status: 400 }
+      );
+    }
+
+    // isPinned 必须为 boolean
+    if (body.isPinned !== undefined && typeof body.isPinned !== "boolean") {
+      return NextResponse.json(
+        { ok: false, error: "INVALID_IS_PINNED" },
         { status: 400 }
       );
     }

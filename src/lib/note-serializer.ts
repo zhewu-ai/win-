@@ -1,5 +1,28 @@
 import type { ChecklistGroup, ChecklistItem } from "@/types";
 
+// 输入上限（安全审计 P1-5）：防超大 payload 拖垮解析/序列化/渲染
+export const NOTE_TITLE_MAX = 200;
+export const NOTE_CONTENT_MAX = 50000;
+export const CHECKLIST_ITEMS_MAX = 500;
+export const CHECKLIST_ITEM_TEXT_MAX = 1000;
+export const CHECKLIST_GROUPS_MAX = 100;
+export const CHECKLIST_GROUP_TITLE_MAX = 200;
+
+/** 校验便签标题/正文长度上限。返回错误码或 null。 */
+export function validateNoteTextFields(
+  body: Record<string, unknown>
+): string | null {
+  if (body.title !== undefined) {
+    if (typeof body.title !== "string") return "INVALID_TITLE";
+    if (body.title.length > NOTE_TITLE_MAX) return "TITLE_TOO_LONG";
+  }
+  if (body.content !== undefined) {
+    if (typeof body.content !== "string") return "INVALID_CONTENT";
+    if (body.content.length > NOTE_CONTENT_MAX) return "CONTENT_TOO_LONG";
+  }
+  return null;
+}
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -160,6 +183,9 @@ export function validateChecklistItems(
   if (!Array.isArray(items)) {
     return "checklistItems must be an array";
   }
+  if (items.length > CHECKLIST_ITEMS_MAX) {
+    return `checklistItems exceeds max of ${CHECKLIST_ITEMS_MAX} items`;
+  }
   for (const item of items) {
     if (typeof item !== "object" || item === null) {
       return "each checklist item must be an object";
@@ -170,6 +196,9 @@ export function validateChecklistItems(
     }
     if (typeof obj.text !== "string") {
       return "each checklist item must have a string text";
+    }
+    if (obj.text.length > CHECKLIST_ITEM_TEXT_MAX) {
+      return `checklist item text exceeds max of ${CHECKLIST_ITEM_TEXT_MAX} chars`;
     }
     if (typeof obj.checked !== "boolean") {
       return "each checklist item must have a boolean checked";
@@ -185,6 +214,9 @@ export function validateChecklistGroups(
   if (!Array.isArray(groups)) {
     return "checklistGroups must be an array";
   }
+  if (groups.length > CHECKLIST_GROUPS_MAX) {
+    return `checklistGroups exceeds max of ${CHECKLIST_GROUPS_MAX} groups`;
+  }
   for (const group of groups) {
     if (typeof group !== "object" || group === null) {
       return "each checklist group must be an object";
@@ -195,6 +227,9 @@ export function validateChecklistGroups(
     }
     if (typeof obj.title !== "string") {
       return "each checklist group must have a string title";
+    }
+    if (obj.title.length > CHECKLIST_GROUP_TITLE_MAX) {
+      return `checklist group title exceeds max of ${CHECKLIST_GROUP_TITLE_MAX} chars`;
     }
   }
   return null;

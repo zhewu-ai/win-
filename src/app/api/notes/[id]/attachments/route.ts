@@ -122,37 +122,54 @@ export async function POST(
   // Ensure directory exists
   await fs.mkdir(noteDir, { recursive: true });
 
-  // Write file to disk
+  // 真实图片校验：sharp 解析头部，失败/无尺寸直接 400，伪装文件不落盘
   const buffer = Buffer.from(await file.arrayBuffer());
-  await fs.writeFile(path.join(noteDir, filename), buffer);
-
-  // Get image dimensions via sharp
-  let width: number | null = null;
-  let height: number | null = null;
-  try {
-    const metadata = await sharp(buffer).metadata();
-    width = metadata.width ?? null;
-    height = metadata.height ?? null;
-  } catch {
-    // Non-critical: dimensions remain null
+  const metadata = await sharp(buffer).metadata().catch(() => null);
+  if (!metadata) {
+    return NextResponse.json(
+      { ok: false, error: "INVALID_IMAGE_FILE", message: "文件不是有效图片" },
+      { status: 400 }
+    );
+  }
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  // 原始尺寸上限：先拒绝超大图，避免解码/存储滥用
+  const MAX_IMAGE_DIMENSION = 8192;
+  if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "IMAGE_TOO_LARGE",
+        message: `图片尺寸不能超过 ${MAX_IMAGE_DIMENSION} x ${MAX_IMAGE_DIMENSION}`,
+      },
+      { status: 413 }
+    );
   }
 
-  // Create DB record
-  const attachment = await prisma.attachment.create({
-    data: {
-      id: attachmentId,
-      userId: session.userId,
-      noteId: params.id,
-      type: "image",
-      url,
-      storagePath,
-      filename: file.name,
-      mimeType: file.type,
-      size: file.size,
-      width,
-      height,
-    },
-  });
+  // Write file to disk
+  await fs.writeFile(path.join(noteDir, filename), buffer);
+
+  // Create DB record（写库失败删除已写文件，避免孤儿文件）
+  const attachment = await prisma.attachment
+    .create({
+      data: {
+        id: attachmentId,
+        userId: session.userId,
+        noteId: params.id,
+        type: "image",
+        url,
+        storagePath,
+        filename: file.name,
+        mimeType: file.type,
+        size: file.size,
+        width,
+        height,
+      },
+    })
+    .catch(async (e: unknown) => {
+      await fs.unlink(path.join(noteDir, filename)).catch(() => {});
+      throw e;
+    });
 
   await addStorageUsed(session.userId, file.size);
 

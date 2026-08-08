@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
 import { recordUserActivity } from "@/lib/activity";
-import { serializeNote, validateChecklistItems, validateChecklistGroups } from "@/lib/note-serializer";
+import { serializeNote, validateChecklistItems, validateChecklistGroups, validateNoteTextFields } from "@/lib/note-serializer";
 import {
   QUOTA_EXCEEDED_ERROR,
   QUOTA_EXCEEDED_MESSAGE,
@@ -57,6 +57,59 @@ export async function PATCH(
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
         updateData[field] = body[field];
+      }
+    }
+
+    // 输入上限与类型校验（P1-5）
+    const textError = validateNoteTextFields(body);
+    if (textError) {
+      return NextResponse.json(
+        { ok: false, error: textError },
+        { status: 400 }
+      );
+    }
+    for (const f of ["isPinned", "isArchived", "alwaysOnTop"]) {
+      if (updateData[f] !== undefined && typeof updateData[f] !== "boolean") {
+        return NextResponse.json(
+          { ok: false, error: `INVALID_${f.toUpperCase()}` },
+          { status: 400 }
+        );
+      }
+    }
+    if (
+      updateData["sortOrder"] !== undefined &&
+      (typeof updateData["sortOrder"] !== "number" ||
+        !Number.isFinite(updateData["sortOrder"]))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "INVALID_SORT_ORDER" },
+        { status: 400 }
+      );
+    }
+    for (const f of ["windowX", "windowY"]) {
+      const v = updateData[f];
+      if (
+        v !== undefined &&
+        v !== null &&
+        (typeof v !== "number" || !Number.isFinite(v) || Math.abs(v) > 20000)
+      ) {
+        return NextResponse.json(
+          { ok: false, error: "INVALID_WINDOW_POSITION" },
+          { status: 400 }
+        );
+      }
+    }
+    for (const f of ["windowWidth", "windowHeight"]) {
+      const v = updateData[f];
+      if (
+        v !== undefined &&
+        v !== null &&
+        (typeof v !== "number" || !Number.isFinite(v) || v < 50 || v > 10000)
+      ) {
+        return NextResponse.json(
+          { ok: false, error: "INVALID_WINDOW_SIZE" },
+          { status: 400 }
+        );
       }
     }
 

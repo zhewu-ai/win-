@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashResetToken } from "@/lib/passwordReset";
+import { rateLimit } from "@/lib/rateLimit";
 import bcrypt from "bcryptjs";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -42,8 +43,43 @@ export async function POST(request: Request) {
       );
     }
 
+    // 频控：IP 5 次/10 分钟，防止随机 token 请求反复消耗 bcrypt CPU
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (!rateLimit(`resetpw:ip:${ip}`, 5, 600_000)) {
+      return NextResponse.json(
+        { ok: false, error: "RATE_LIMITED" },
+        { status: 429 }
+      );
+    }
+
     const tokenHash = hashResetToken(token);
     const now = new Date();
+
+    // 先校验 token 存在/未用/未过期，再执行 bcrypt；事务内仍保留原子抢占防并发
+    const preRecord = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: { usedAt: true, expiresAt: true },
+    });
+    if (!preRecord) {
+      return NextResponse.json(
+        { ok: false, error: "INVALID_RESET_TOKEN" },
+        { status: 400 }
+      );
+    }
+    if (preRecord.usedAt) {
+      return NextResponse.json(
+        { ok: false, error: "RESET_TOKEN_USED" },
+        { status: 400 }
+      );
+    }
+    if (preRecord.expiresAt <= now) {
+      return NextResponse.json(
+        { ok: false, error: "RESET_TOKEN_EXPIRED" },
+        { status: 400 }
+      );
+    }
+
     // bcrypt 较重，放在事务外算好，缩短持锁时间
     const passwordHash = await bcrypt.hash(newPassword, 10);
 

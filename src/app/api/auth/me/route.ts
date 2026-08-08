@@ -25,6 +25,22 @@ export async function PATCH(request: Request) {
     );
   }
 
+  // 与 change-password 同口径：重新查库校验 active，禁用用户旧 session 也不能改资料
+  const current = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, status: true },
+  });
+  if (!current || current.status !== "active") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "ACCOUNT_DISABLED",
+        message: "账号已被禁用，请联系管理员",
+      },
+      { status: 403 }
+    );
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
