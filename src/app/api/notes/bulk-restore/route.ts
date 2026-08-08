@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
 import { resolveBulkIds } from "@/lib/bulk";
+import { recordUserActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -41,5 +42,10 @@ export async function POST(request: Request) {
 
   const ownedSet = new Set(ownedIds);
   const notFoundIds = ids.filter((id) => !ownedSet.has(id));
+
+  if (ownedIds.length > 0) {
+    await recordUserActivity(session.userId, "restore_note", { count: ownedIds.length });
+  }
+
   return NextResponse.json({ ok: true, processedIds: ownedIds, notFoundIds });
 }

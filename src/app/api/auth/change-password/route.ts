@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authOrResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MIN_PASSWORD_LENGTH } from "@/lib/admin";
+import { recordUserActivity } from "@/lib/activity";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,8 @@ export async function POST(request: Request) {
     where: { id: user.id },
     data: { passwordHash, mustChangePassword: false },
   });
+
+  await recordUserActivity(user.id, "change_password");
 
   return NextResponse.json({ ok: true, message: "密码已修改" });
 }

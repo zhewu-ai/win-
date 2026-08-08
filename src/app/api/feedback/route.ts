@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authOrResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rateLimit";
+import { recordUserActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,8 @@ export async function POST(request: Request) {
     },
     select: { id: true },
   });
+
+  await recordUserActivity(userId, "submit_feedback", { type });
 
   return NextResponse.json({ ok: true, ticket });
 }

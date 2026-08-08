@@ -5,6 +5,7 @@ import Link from "next/link";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import UserAvatar from "@/components/UserAvatar";
 import type { AdminInvite } from "@/types";
+import { formatLastActiveAt } from "@/lib/format-time";
 
 interface AdminUser {
   id: string;
@@ -19,6 +20,12 @@ interface AdminUser {
   storageUsedBytes: number;
   createdAt: string;
   updatedAt: string;
+  lastActiveAt: string | null;
+  lastActiveAction: string | null;
+  activityCounts: {
+    today: number;
+    last7Days: number;
+  };
   _count: {
     notes: number;
     attachments: number;
@@ -55,6 +62,24 @@ const INVITE_STATUS_TEXT: Record<AdminInvite["status"], string> = {
   used: "已使用",
   revoked: "已作废",
   expired: "已过期",
+};
+
+const ACTION_TEXT: Record<string, string> = {
+  login: "登录",
+  create_note: "新建便签",
+  edit_note: "编辑便签",
+  check_todo: "勾选待办",
+  delete_note: "删除便签",
+  restore_note: "恢复便签",
+  archive_note: "归档便签",
+  unarchive_note: "取消归档",
+  permanent_delete_note: "永久删除便签",
+  upload_attachment: "上传附件",
+  delete_attachment: "删除附件",
+  submit_feedback: "提交反馈",
+  read_announcement: "阅读公告",
+  change_avatar: "更换头像",
+  change_password: "修改密码",
 };
 
 export default function AdminUsersClient({
@@ -190,7 +215,13 @@ export default function AdminUsersClient({
       setUsers((prev) =>
         prev.map((u) =>
           u.id === disableTarget.id
-            ? { ...data.user, _count: u._count }
+            ? {
+                ...data.user,
+                lastActiveAt: u.lastActiveAt,
+                lastActiveAction: u.lastActiveAction,
+                activityCounts: u.activityCounts,
+                _count: u._count,
+              }
             : u
         )
       );
@@ -216,7 +247,15 @@ export default function AdminUsersClient({
       }
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === user.id ? { ...data.user, _count: u._count } : u
+          u.id === user.id
+            ? {
+                ...data.user,
+                lastActiveAt: u.lastActiveAt,
+                lastActiveAction: u.lastActiveAction,
+                activityCounts: u.activityCounts,
+                _count: u._count,
+              }
+            : u
         )
       );
     } catch {
@@ -295,7 +334,17 @@ export default function AdminUsersClient({
         return;
       }
       setUsers((prev) =>
-        prev.map((u) => (u.id === quotaTarget.id ? data.user : u))
+        prev.map((u) =>
+          u.id === quotaTarget.id
+            ? {
+                ...data.user,
+                lastActiveAt: u.lastActiveAt,
+                lastActiveAction: u.lastActiveAction,
+                activityCounts: u.activityCounts,
+                _count: u._count,
+              }
+            : u
+        )
       );
       setQuotaTarget(null);
     } catch {
@@ -440,8 +489,14 @@ export default function AdminUsersClient({
                         {formatBytes(u.storageUsedBytes)} /{" "}
                         {formatBytes(u.storageQuotaBytes)}
                       </p>
-                      <p className="text-[11px] text-ink-muted/70">
-                        创建于 {formatDateTime(u.createdAt)}
+                      <p className="text-[11px] text-ink-muted/70 break-words">
+                        创建于 {formatDateTime(u.createdAt)} · 活跃{" "}
+                        {formatLastActiveAt(u.lastActiveAt)}
+                        {u.lastActiveAction
+                          ? ` · ${ACTION_TEXT[u.lastActiveAction] || u.lastActiveAction}`
+                          : ""}{" "}
+                        · 今日 {u.activityCounts.today} 次 · 近7天{" "}
+                        {u.activityCounts.last7Days} 次
                       </p>
                     </div>
                   </div>

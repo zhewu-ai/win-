@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
 import { serializeNote, validateChecklistItems } from "@/lib/note-serializer";
+import { recordUserActivity } from "@/lib/activity";
 import {
   QUOTA_EXCEEDED_ERROR,
   QUOTA_EXCEEDED_MESSAGE,
@@ -123,6 +124,8 @@ export async function POST(request: Request) {
     });
 
     await addStorageUsed(session.userId, newSize);
+
+    await recordUserActivity(session.userId, "create_note");
 
     return NextResponse.json(
       serializeNote(note as unknown as Record<string, unknown>)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authOrResponse } from "@/lib/auth";
 import { resolveBulkIds } from "@/lib/bulk";
 import { hardDeleteNotes } from "@/lib/permanent-delete";
+import { recordUserActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -24,5 +25,12 @@ export async function POST(request: Request) {
   if (error) return error;
 
   const { deletedIds, notFoundIds } = await hardDeleteNotes(session.userId, ids);
+
+  if (deletedIds.length > 0) {
+    await recordUserActivity(session.userId, "permanent_delete_note", {
+      count: deletedIds.length,
+    });
+  }
+
   return NextResponse.json({ ok: true, processedIds: deletedIds, notFoundIds });
 }

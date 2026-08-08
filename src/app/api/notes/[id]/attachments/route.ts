@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import sharp from "sharp";
 import path from "path";
 import fs from "fs/promises";
@@ -154,6 +155,8 @@ export async function POST(
   });
 
   await addStorageUsed(session.userId, file.size);
+
+  await recordUserActivity(session.userId, "upload_attachment");
 
   return NextResponse.json({
     attachment: {

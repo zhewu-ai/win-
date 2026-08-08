@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import { hardDeleteNotes } from "@/lib/permanent-delete";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,10 @@ export async function DELETE(
       { status: 404 }
     );
   }
+
+  await recordUserActivity(session.userId, "permanent_delete_note", {
+    count: deletedIds.length,
+  });
 
   return NextResponse.json({ ok: true });
 }

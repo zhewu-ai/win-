@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
     const session = await getSession();
     session.userId = user.id;
     await session.save();
+
+    await recordUserActivity(user.id, "login");
 
     return NextResponse.json({
       ok: true,

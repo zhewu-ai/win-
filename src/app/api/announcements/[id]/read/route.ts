@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ export async function POST(
     },
     update: {},
   });
+
+  await recordUserActivity(session.userId, "read_announcement");
 
   return NextResponse.json({ ok: true });
 }

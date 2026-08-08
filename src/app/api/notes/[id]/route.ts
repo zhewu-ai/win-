@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import { serializeNote, validateChecklistItems, validateChecklistGroups } from "@/lib/note-serializer";
 import {
   QUOTA_EXCEEDED_ERROR,
@@ -158,6 +159,19 @@ export async function PATCH(
 
     await addStorageUsed(session.userId, delta);
 
+    // M10.11 埋点：isArchived 与旧值比较，区分归档/取消归档，避免顺带传 isArchived 误报；
+    // 否则带 checklistItems 记 check_todo（mode 切换误归类 SPEC 允许），其余记 edit_note。
+    let action: "edit_note" | "check_todo" | "archive_note" | "unarchive_note" = "edit_note";
+    if (
+      updateData["isArchived"] !== undefined &&
+      updateData["isArchived"] !== note.isArchived
+    ) {
+      action = updateData["isArchived"] ? "archive_note" : "unarchive_note";
+    } else if (updateData["checklistItems"] !== undefined) {
+      action = "check_todo";
+    }
+    await recordUserActivity(session.userId, action);
+
     // Deserialize checklistItems for the response
     return NextResponse.json(serializeNote(updated as unknown as Record<string, unknown>));
   } catch {
@@ -194,6 +208,8 @@ export async function DELETE(
     where: { id: params.id },
     data: { deletedAt: new Date() },
   });
+
+  await recordUserActivity(session.userId, "delete_note");
 
   return NextResponse.json({ ok: true });
 }

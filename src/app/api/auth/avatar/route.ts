@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import { addStorageUsed, getStorageState } from "@/lib/storage";
 import { QUOTA_EXCEEDED_MESSAGE } from "@/lib/storage";
 import sharp from "sharp";
@@ -186,6 +187,8 @@ export async function POST(request: Request) {
 
   await addStorageUsed(session.userId, compressed.length - oldAvatarSize);
 
+  await recordUserActivity(session.userId, "change_avatar");
+
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: AVATAR_USER_SELECT,
@@ -224,6 +227,8 @@ export async function DELETE() {
   });
 
   await addStorageUsed(session.userId, -(user?.avatarSize ?? 0));
+
+  await recordUserActivity(session.userId, "change_avatar");
 
   const updated = await prisma.user.findUnique({
     where: { id: session.userId },

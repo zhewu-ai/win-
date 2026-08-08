@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import path from "path";
 import fs from "fs/promises";
 import { addStorageUsed } from "@/lib/storage";
@@ -40,6 +41,8 @@ export async function DELETE(
   } catch {
     // File already deleted — still return success
   }
+
+  await recordUserActivity(session.userId, "delete_attachment");
 
   return NextResponse.json({ ok: true });
 }

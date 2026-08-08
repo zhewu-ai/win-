@@ -18,6 +18,8 @@ export const ADMIN_USER_SELECT = {
 /** 管理员用户列表用：额外返回每用户业务数据计数，用于删除废用户时展示影响范围。 */
 export const ADMIN_USER_SELECT_WITH_COUNTS = {
   ...ADMIN_USER_SELECT,
+  lastActiveAt: true,
+  lastActiveAction: true,
   _count: {
     select: {
       notes: true,

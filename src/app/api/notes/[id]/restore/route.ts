@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authOrResponse } from "@/lib/auth";
+import { recordUserActivity } from "@/lib/activity";
 import { serializeNote } from "@/lib/note-serializer";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ export async function POST(
     data: { deletedAt: null },
     include: { attachments: true },
   });
+
+  await recordUserActivity(session.userId, "restore_note");
 
   return NextResponse.json(
     serializeNote(restored as unknown as Record<string, unknown>)

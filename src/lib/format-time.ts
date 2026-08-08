@@ -57,3 +57,32 @@ export function formatTrashRetention(
   if (daysLeft <= 0) return "今天将永久删除";
   return `${daysLeft}天后永久删除`;
 }
+
+/** 最近活跃时间：null→"暂无"；今天 HH:mm / 昨天 HH:mm / 更早 YYYY-MM-DD HH:mm。 */
+export function formatLastActiveAt(
+  iso: string | null,
+  now = new Date()
+): string {
+  if (!iso) return "暂无";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return "暂无";
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDay = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+  const diffDays = Math.round(
+    (startOfToday.getTime() - startOfDay.getTime()) / 86400000
+  );
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hhmm = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+  if (diffDays === 0) return `今天 ${hhmm}`;
+  if (diffDays === 1) return `昨天 ${hhmm}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )} ${hhmm}`;
+}
