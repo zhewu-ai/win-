@@ -33,6 +33,7 @@
 - [交付报告-M10_11_用户活跃度观察_20260808.md](./交付报告-M10_11_用户活跃度观察_20260808.md)：M10.11 交付报告。
 - [SECURITY_AUDIT_M10_11_20260808.md](./SECURITY_AUDIT_M10_11_20260808.md)：上线后安全审计：依赖、认证频控、CSRF、上传、维护接口、输入上限、管理员审计。
 - [交付报告-安全审计整改_20260808.md](./交付报告-安全审计整改_20260808.md)：安全审计整改第一轮 8 项：登录/注册/重置密码频控、先校验再 bcrypt、附件真实图片校验、输入上限、rateLimit 清理、trash-cleanup 密钥。
+- [SPEC_NEXT_UPGRADE_PREVIEW_BRANCH_20260808.md](./SPEC_NEXT_UPGRADE_PREVIEW_BRANCH_20260808.md)：Next.js 架构升级评估：独立分支、独立 preview 环境、生产不动、验收后再合并。
 - [SPEC_M9_VISUAL_SKIN_INTEGRATION_20260807.md](./SPEC_M9_VISUAL_SKIN_INTEGRATION_20260807.md)：M9 视觉换皮集成说明。
 - [SPEC_M9_NOTE_CARD_POLISH_FEEDBACK_20260807.md](./SPEC_M9_NOTE_CARD_POLISH_FEEDBACK_20260807.md)：M9 左侧便签卡片视觉补充反馈。
 - [SPEC_M8_8_SCOPE_ADJUSTMENT_LOSS_PREVENTION_20260806.md](./SPEC_M8_8_SCOPE_ADJUSTMENT_LOSS_PREVENTION_20260806.md)：M8.8 离线范围调整与断网防丢保护。
