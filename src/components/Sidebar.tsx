@@ -13,6 +13,8 @@ interface Props {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onCreateNote: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   onCollapse?: () => void;
 }
 
@@ -25,6 +27,8 @@ export default function Sidebar({
   searchQuery,
   onSearchChange,
   onCreateNote,
+  onRefresh,
+  refreshing,
   onCollapse,
 }: Props) {
   return (
@@ -64,6 +68,25 @@ export default function Sidebar({
             </button>
           )}
         </div>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="flex items-center justify-center w-icon-btn h-icon-btn flex-shrink-0 text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            title="刷新便签"
+            aria-label="刷新便签"
+          >
+            <svg
+              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        )}
         {onCollapse && (
           <button
             onClick={onCollapse}

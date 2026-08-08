@@ -25,9 +25,16 @@ function ensureSyncLoop() {
     void runSync();
   });
   window.addEventListener("offline", () => setOnline(false));
-  // 后台轻量重试
+  // 后台轻量重试：无待同步内容时不触发 runSync，避免 isSyncing 空转导致 UI 闪跳
   window.setInterval(() => {
-    if (navigator.onLine) void runSync();
+    if (!navigator.onLine) return;
+    void (async () => {
+      const pending = await getDB()
+        .notes.where("syncStatus")
+        .anyOf(["pendingCreate", "pendingUpdate", "pendingDelete", "syncError"])
+        .count();
+      if (pending > 0) void runSync();
+    })();
   }, 30000);
   if (navigator.onLine) void runSync();
 }

@@ -17,16 +17,26 @@ import {
 export function useNotes(archived = false) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fetchingRef = useRef(false);
 
+  /**
+   * 拉取列表。silent = 手动/后台刷新：不触发列表 loading 骨架屏；失败时不改写当前列表，
+   * 避免服务器旧快照覆盖本机未同步内容。返回 Note[] 成功；null 失败；undefined 已有请求在途。
+   */
   const fetchNotes = useCallback(
-    async (q?: string) => {
-      if (fetchingRef.current) return;
+    async (
+      q?: string,
+      opts?: { silent?: boolean }
+    ): Promise<Note[] | null | undefined> => {
+      if (fetchingRef.current) return undefined;
       fetchingRef.current = true;
+      const silent = opts?.silent ?? false;
+      if (silent) setRefreshing(true);
+      else setLoading(true);
 
-      setLoading(true);
       try {
         const params = new URLSearchParams();
         params.set("archived", String(archived));
@@ -35,14 +45,15 @@ export function useNotes(archived = false) {
         const res = await fetch(`/api/notes?${params}`);
         if (!res.ok) throw new ApiError(res.status, "Failed to fetch");
         const data = await res.json();
-        setNotes(data.notes);
+        const fetched = data.notes as Note[];
+        setNotes(fetched);
         setError(null);
         // 在线成功 → 镜像到本地缓存
-        void Promise.all((data.notes as Note[]).map((n) => mirrorNote(n)));
+        void Promise.all(fetched.map((n) => mirrorNote(n)));
         // 全量拉取（无搜索）时以服务端为准清理本地已消失的 synced 便签：
         // 避免并发镜像把刚同步删除/他端删除的便签重新带回离线列表。
         if (!q) {
-          const serverIds = new Set((data.notes as Note[]).map((n) => n.id));
+          const serverIds = new Set(fetched.map((n) => n.id));
           void getDB()
             .notes.where("syncStatus")
             .equals("synced")
@@ -54,7 +65,9 @@ export function useNotes(archived = false) {
             )
             .delete();
         }
+        return fetched;
       } catch (e) {
+        if (silent) return null; // 静默刷新失败：不改动当前列表，交由调用方提示
         if (isNetworkError(e)) {
           // 离线/断网 → 从本地缓存回填
           const cached = await loadCachedNotes();
@@ -63,8 +76,10 @@ export function useNotes(archived = false) {
         } else {
           setError("加载便签失败");
         }
+        return null;
       } finally {
-        setLoading(false);
+        if (silent) setRefreshing(false);
+        else setLoading(false);
         fetchingRef.current = false;
       }
     },
@@ -111,10 +126,10 @@ export function useNotes(archived = false) {
     fetchNotes();
   }, [fetchNotes]);
 
-  // Refresh on tab visibility change
+  // Refresh on tab visibility change（静默：回到标签页不闪骨架屏）
   useEffect(() => {
     const handler = () => {
-      if (!document.hidden) fetchNotes(searchQuery || undefined);
+      if (!document.hidden) fetchNotes(searchQuery || undefined, { silent: true });
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
@@ -123,6 +138,7 @@ export function useNotes(archived = false) {
   return {
     notes,
     loading,
+    refreshing,
     error,
     searchQuery,
     setSearchQuery,

@@ -62,7 +62,7 @@ export default function SaveStatus({
     syncStatus === "pendingUpdate" ||
     syncStatus === "pendingDelete";
 
-  let label = "已同步";
+  let label = "已保存";
   let dotCls = "bg-ink-muted/30";
   if (syncStatus === "syncError") {
     label = "同步失败，内容已保存在本地";

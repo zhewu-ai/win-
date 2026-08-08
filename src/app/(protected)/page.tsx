@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import OfflineBar from "@/components/OfflineBar";
@@ -13,13 +13,17 @@ import type { Note } from "@/types";
 const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
 
 export default function HomePage() {
-  const { notes, loading, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
+  const { notes, loading, refreshing, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
     useNotes(false);
 
   // 布局模式：≥720 双栏（侧栏固定 350px，仅手动折叠）/ <720 单栏（工具栏再按编辑区实际宽度细分）
   const mode = useLayoutMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [refreshToast, setRefreshToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // NoteEditor 暴露的刷新前置保护：flush 未保存内容 + 重试失败载荷，返回是否可安全刷新
+  const editorRefreshRef = useRef<(() => Promise<boolean>) | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
@@ -112,6 +116,37 @@ export default function HomePage() {
     fetchNotes(q || undefined);
   };
 
+  const showRefreshToast = useCallback((msg: string) => {
+    setRefreshToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setRefreshToast(null), 2000);
+  }, []);
+
+  // 手动刷新：先保护本机未保存内容（flush + 重试失败载荷），再静默拉服务器最新列表。
+  // 不覆盖本机本地 pending 队列（mirrorNote 已有保护，此处不引入覆盖）。
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    if (editorRefreshRef.current) {
+      const ok = await editorRefreshRef.current();
+      if (!ok) {
+        showRefreshToast("本机有未保存内容且保存失败，请先重试保存");
+        return;
+      }
+    }
+    const fetched = await fetchNotes(searchQuery || undefined, { silent: true });
+    if (fetched === null) {
+      showRefreshToast("刷新失败，请稍后重试");
+      return;
+    }
+    if (fetched === undefined) return; // 已有请求在途，忽略本次
+    // 其他设备删除当前编辑的便签 → 退出编辑态，避免继续编辑幽灵数据
+    if (!searchQuery && selectedNoteId && !fetched.some((n) => n.id === selectedNoteId)) {
+      setSelectedNoteId(null);
+      setShowEditor(false);
+    }
+    showRefreshToast("已刷新");
+  }, [refreshing, fetchNotes, searchQuery, selectedNoteId, showRefreshToast]);
+
   useEffect(() => {
     const onChanged = (e: Event) => {
       const detail = (e as CustomEvent<{ deletedId?: string }>).detail;
@@ -164,6 +199,8 @@ export default function HomePage() {
             searchQuery={searchQuery}
             onSearchChange={handleSearchChange}
             onCreateNote={handleCreate}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
             onCollapse={mode === "single" ? undefined : toggleSidebar}
           />
         </div>
@@ -195,9 +232,19 @@ export default function HomePage() {
             onNewNote={handleCreate}
             showBackButton={mode === "single"}
             onBack={handleBack}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+            refreshReadyRef={editorRefreshRef}
           />
         </div>
       </div>
+
+      {/* 刷新结果轻提示：不阻塞、自动消失 */}
+      {refreshToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-card bg-ink text-page-bg text-sm shadow-xl">
+          {refreshToast}
+        </div>
+      )}
     </div>
   );
 }

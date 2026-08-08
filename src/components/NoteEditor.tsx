@@ -25,6 +25,10 @@ interface Props {
   onNewNote?: () => void;
   showBackButton?: boolean;
   onBack?: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  /** 页面在刷新前调用它 flush 本机未保存内容并重试失败载荷；返回 false 表示不能安全刷新 */
+  refreshReadyRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
 }
 
 function formatEditorDate(dateStr?: string): string {
@@ -51,6 +55,9 @@ export default function NoteEditor({
   onNewNote,
   showBackButton,
   onBack,
+  onRefresh,
+  refreshing,
+  refreshReadyRef,
 }: Props) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -78,6 +85,7 @@ export default function NoteEditor({
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const prevNoteIdRef = useRef<string | null>(null);
+  const prevUpdatedAtRef = useRef<string | undefined>(undefined);
   const moreRef = useRef<HTMLDivElement>(null);
   const imageUploadRef = useRef<ImageUploadHandle>(null);
 
@@ -197,47 +205,92 @@ export default function NoteEditor({
     }
   }, []);
 
-  // Reset local state when switching notes (flush pending first)
+  // 刷新前置保护：flush debounce pending + 重试上次失败载荷；全部成功后返回 true。
+  // 由 page 在刷新前调用，确保不会用服务器旧快照覆盖本机正在输入的内容。
+  const flushAndEnsureSaved = useCallback(async (): Promise<boolean> => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = undefined;
+    }
+    const pending = { ...pendingUpdatesRef.current };
+    pendingUpdatesRef.current = {};
+    if (Object.keys(pending).length > 0 && currentNoteIdRef.current) {
+      await saveRef.current(pending);
+    }
+    if (lastFailedPayloadRef.current) {
+      const retry = { ...lastFailedPayloadRef.current };
+      await saveRef.current(retry);
+    }
+    return !lastFailedPayloadRef.current;
+  }, []);
+
+  // 把刷新前置保护暴露给 page
+  useEffect(() => {
+    if (refreshReadyRef) refreshReadyRef.current = flushAndEnsureSaved;
+    return () => {
+      if (refreshReadyRef) refreshReadyRef.current = null;
+    };
+  }, [refreshReadyRef, flushAndEnsureSaved]);
+
+  // Reset local state when switching notes (flush pending first)。
+  // 同一条便签远端版本更新（updatedAt 变化）时，仅在本机无未保存内容时应用新版，
+  // 否则保留本地编辑，避免服务器快照覆盖正在输入的内容。
   useEffect(() => {
     if (!note) return;
     const noteIdChanged = note.id !== prevNoteIdRef.current;
+    const remoteVersionChanged =
+      !noteIdChanged && note.updatedAt !== prevUpdatedAtRef.current;
     prevNoteIdRef.current = note.id;
+    prevUpdatedAtRef.current = note.updatedAt;
 
     if (noteIdChanged) {
       flushPendingSave();
     }
 
-    currentNoteIdRef.current = note.id;
-    setTitle(note.title);
-    setContent(note.content);
-    setColor(note.color as NoteColor);
-    setIsPinned(note.isPinned);
-    setIsArchived(note.isArchived);
-    setMode(note.mode || "text");
-    const rawItems =
-      note.checklistItems && note.checklistItems.length > 0
-        ? note.checklistItems
-        : note.mode === "checklist"
-          ? [{ ...createEmptyItem() }]
-          : [];
-    const normalized = normalizeChecklist(rawItems, note.checklistGroups || []);
-    setChecklistItems(normalized.items);
-    setChecklistGroups(normalized.groups);
-    if (normalized.changed && note.mode === "checklist") {
-      saveRef.current({
-        checklistItems: normalized.items,
-        checklistGroups: normalized.groups,
-      });
+    const localDirty =
+      saveStatus !== "saved" ||
+      Object.keys(pendingUpdatesRef.current).length > 0 ||
+      lastFailedPayloadRef.current !== null ||
+      restored;
+
+    if (noteIdChanged || (remoteVersionChanged && !localDirty)) {
+      currentNoteIdRef.current = note.id;
+      setTitle(note.title);
+      setContent(note.content);
+      setColor(note.color as NoteColor);
+      setIsPinned(note.isPinned);
+      setIsArchived(note.isArchived);
+      setMode(note.mode || "text");
+      const rawItems =
+        note.checklistItems && note.checklistItems.length > 0
+          ? note.checklistItems
+          : note.mode === "checklist"
+            ? [{ ...createEmptyItem() }]
+            : [];
+      const normalized = normalizeChecklist(rawItems, note.checklistGroups || []);
+      setChecklistItems(normalized.items);
+      setChecklistGroups(normalized.groups);
+      if (normalized.changed && note.mode === "checklist") {
+        saveRef.current({
+          checklistItems: normalized.items,
+          checklistGroups: normalized.groups,
+        });
+      }
+      setAttachments(note.attachments || []);
+      setSaveStatus("saved");
+      lastFailedPayloadRef.current = null;
+      // 远端新版已应用：清掉可能残留的草稿镜像，避免下次打开时用旧内容覆盖
+      if (remoteVersionChanged) clearDraft(note.id);
+    } else {
+      currentNoteIdRef.current = note.id;
     }
-    setAttachments(note.attachments || []);
-    setSaveStatus("saved");
-    lastFailedPayloadRef.current = null;
 
     // Auto-focus title on new note
     if (noteIdChanged && titleRef.current) {
       titleRef.current.focus();
     }
-  }, [note?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id, note?.updatedAt]);
 
   // 防丢：打开便签时检查本地草稿镜像，比服务器内容新则恢复并提示
   useEffect(() => {
@@ -515,6 +568,25 @@ export default function NoteEditor({
         <ColorPicker selected={color} onChange={handleColorChange} mode={toolbarMode} />
 
         <div className="flex-1" />
+
+        {/* 手动刷新：拉取服务器最新列表；刷新中禁用并旋转，避免重复请求 */}
+        <button
+          onClick={() => onRefresh?.()}
+          disabled={refreshing}
+          className="flex items-center justify-center w-icon-btn h-icon-btn flex-shrink-0 text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors disabled:opacity-50 disabled:pointer-events-none"
+          title="刷新便签"
+          aria-label="刷新便签"
+        >
+          <svg
+            className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
 
         {/* 保存状态预留固定宽度，状态变化不推动右侧图标横移（minimal 时省略） */}
         {toolbarMode !== "minimal" && (
