@@ -13,6 +13,8 @@ import {
 } from "@/lib/storage";
 
 const ALLOWED_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+// sharp 解析出的真实格式白名单（小写），与 ALLOWED_MIMES 一致，用于防止伪装 MIME
+const ALLOWED_FORMATS = ["jpeg", "png", "webp", "gif"];
 
 function getConfig() {
   const uploadDir = process.env.UPLOAD_DIR || "./uploads";
@@ -128,6 +130,17 @@ export async function POST(
   if (!metadata) {
     return NextResponse.json(
       { ok: false, error: "INVALID_IMAGE_FILE", message: "文件不是有效图片" },
+      { status: 400 }
+    );
+  }
+  // 真实格式白名单：仅 jpeg/png/webp/gif，防止伪装 MIME 传其它格式落盘
+  if (!metadata.format || !ALLOWED_FORMATS.includes(metadata.format)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "UNSUPPORTED_IMAGE_FORMAT",
+        message: "仅支持 JPEG/PNG/WebP/GIF 图片",
+      },
       { status: 400 }
     );
   }
