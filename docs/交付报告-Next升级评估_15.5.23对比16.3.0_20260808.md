@@ -8,24 +8,24 @@
 
 ## 一、结论摘要
 
-- 生产 Next.js 14.2.35（已 EOL，缺 2026-07 安全修复）已按 SPEC 完成独立分支适配，独立 preview 环境上线并**全量验收通过**。
-- **15.5.23**（backport LTS，含 2026-07 安全修复）：改动最小、preview 稳定，但 `npm audit --omit=dev` 仍红 —— 2 个漏洞（1 high + 1 moderate）来自 next 内嵌 `postcss@8.4.31`，仅构建期生效，无法用非破坏性手段消除（npm 明确指向 16.3.0 为破坏性修复）。
-- **16.3.0 对比**：`npm audit` 0 漏洞；`tsc --noEmit` 与 `next build` **在零额外代码改动下全部通过**（复用已完成的 async API 适配）。React 18.3.0 仍被支持（peer `^18.2.0 || ^19.0.0`），服务器 Node v22.22.3 满足 engines（>=20.9）。
-- **合并建议**：见第八节（三选一，需用户拍板）。
+- 生产 Next.js 14.2.35（已 EOL，缺 2026-07 安全修复）已完成独立分支适配；15.5.23 preview 全量验收通过后，按用户决定继续 16.3.0 对比。
+- **16.3.0 定版**：`npm audit --omit=dev` **0 漏洞**（15.5.23 的 2 个构建期 postcss 漏洞在 16.3.0 消除）；`tsc --noEmit` 与 `next build` **零额外代码改动**通过；16.3.0 preview 已部署并**全量验收通过**（API 32/32 + SSR 全页面 + PWA）。React 18.3.0 仍被支持（peer `^18.2.0 || ^19.0.0`），服务器 Node v22.22.3 满足 engines（>=20.9）。
+- **关键教训**：本服务器上 `next build` 默认的 **Turbopack 会吃满内存导致整机 thrash**（preview+prod 同机，一度同时宕机）；改用 **`next build --webpack`** 后构建 1 分钟内完成、内存平稳。生产构建必须走 webpack。
+- **合并决定**：用户选定「直接 16.3.0 再合并」，本轮验收全绿，**推荐并执行合并**（见第八节）。
 
 ---
 
 ## 二、分支与提交
 
-`codex/next-upgrade-preview`（基于 main，生产 main/服务/数据库未动）：
+- `codex/next-upgrade-preview`：15.5.23 适配分支（生产 main/服务/数据库未动），提交：
+  - `5e7145b` docs: Next 升级评估方案——独立分支 + 独立 preview 环境
+  - `de940b1` chore: upgrade next dependency for preview evaluation（next ^15.5.23、postcss ^8.5.23、overrides nanoid/sharp）
+  - `2f3b41b` fix: adapt next async request APIs（17 个路由 + 3 个页面 + auth.ts）
+  - `ee9b636` docs: Next 升级评估交付报告（15.5.23 验收通过 + 16.3.0 对比归零）
+- `codex/next-upgrade-16`：16.3.0 定版分支，基于上述分支追加：
+  - `80551d8` chore(next16): next 15.5.23 → 16.3.0，audit 归零，tsc/build 零代码改动通过（含 tsconfig/next-env 由 next 16 自动更新）
 
-| 提交 | 说明 |
-|---|---|
-| `5e7145b` | docs: Next 升级评估方案——独立分支 + 独立 preview 环境 |
-| `de940b1` | chore: upgrade next dependency for preview evaluation（next ^15.5.23、postcss ^8.5.23、overrides nanoid/sharp） |
-| `2f3b41b` | fix: adapt next async request APIs（17 个路由 + 3 个页面 + auth.ts） |
-
-共 26 文件改动，+589 / -193。
+共 26 文件改动，+589 / -193。main 与 16 分支为干净 fast-forward，无缺失提交。
 
 ---
 
@@ -45,7 +45,7 @@
 |---|---|---|
 | `npm audit --omit=dev` | **2 漏洞**（1 high + 1 moderate，next 内嵌 postcss@8.4.31，仅构建期，运行时不可利用） | **0 漏洞** |
 | `tsc --noEmit` | 通过 | **通过（零额外代码改动）** |
-| `next build` | 通过（preview 实际运行） | **通过（34 路由全部编译）** |
+| `next build` | 通过（preview 实际运行） | **通过（34 路由全部编译）；本机必须 `--webpack`（Turbopack 内存超限，见已知问题）** |
 | React | 18.3.0 | 18.3.0（peer 支持 `^18.2.0`） |
 | Node | >=18 | >=20.9（服务器 v22.22.3 ✓） |
 | sharp | 靠 override `^0.35.3` | next 直接携带 `^0.35.3`（override 不再必需，保留无害） |
@@ -58,7 +58,7 @@ postcss 漏洞说明：advisory 针对 CSS 序列化/源映射处理，攻击面
 
 ## 五、改动清单（分支相对 main）
 
-- `package.json`：`next ^14.2.0 → ^15.5.23`；`postcss ^8.4.0 → ^8.5.23`；新增 `overrides { nanoid ^3.3.17, sharp ^0.35.3 }`
+- `package.json`：`next ^14.2.0 → ^16.3.0`（16 定版，先经 15.5.23 过渡）；`postcss ^8.4.0 → ^8.5.23`；保留 `overrides { nanoid ^3.3.17, sharp ^0.35.3 }`（16 已直接携带修复版本，保留无害）
 - `src/lib/auth.ts`：`getIronSession(await cookies(), ...)`（唯一 next/headers 调用）
 - 17 个 API 路由：`params` 改为 `Promise<{...}>` + handler 内 `await params`（含 files/[...path] 的 `path` 变量规避、多参解构、双 handler 文件）
 - 3 个页面：`login/page.tsx`、`reset-password/page.tsx`（`searchParams` Promise）、`notes/[id]/floating/page.tsx`（`params` Promise）
@@ -66,7 +66,7 @@ postcss 漏洞说明：advisory 针对 CSS 序列化/源映射处理，攻击面
 
 ---
 
-## 六、验收结果
+## 六、验收结果（16.3.0 preview 复验全绿）
 
 ### API 层（32/32 通过）
 
@@ -77,6 +77,7 @@ postcss 漏洞说明：advisory 针对 CSS 序列化/源映射处理，攻击面
 - 公告：发布、用户阅读、列表/阅读统计接口
 - 后台权限：未登录 admin API → 401；普通用户 → 403；管理员列表 → 200
 - 活跃度：新用户 UserActivityLog 落记录、User.lastActiveAction 更新
+- 说明：首轮跑完 7 个失败项经核实为脚本断言/复用已删 note 的 bug + 复用账号的频控状态，逐一修复脚本后复跑全绿；4 个受频控影响的项用全新账号/全新 IP 隔离复验均通过。
 
 ### 前端 / SSR 层
 
@@ -94,35 +95,36 @@ postcss 漏洞说明：advisory 针对 CSS 序列化/源映射处理，攻击面
 
 ## 七、已知问题
 
-1. **`Server Reference ID did not match the expected format` 日志**（非阻塞）
-   - 现象：preview 8/8 17:43-17:44 出现 7 次（6 次全零 payload + 1 次 `"y"`），prod（Next 14）近 7 天 0 次。
-   - 判定：时间与 Caddy 证书签发/服务重启重叠，payload 为畸形探针请求；真实请求（登录 + 建便签）0 次。属**扫描探针噪声，非 Next 15 功能回归**。差异仅是 Next 15 对畸形 flight 请求打 error 日志而 Next 14 静默，属可观测性差异。
-2. **audit 残留 2 漏洞**（15.5.23，仅构建期）：见第四节，需 16.3.0 消除。
-3. 交互式前端未自动化目验（见第六节未做项）。
+1. **Turbopack 构建内存超限导致整机宕机（本次事故，已恢复）**
+   - 现象：升级 preview 到 16.3.0 时执行默认的 `next build`（Next 16 默认 Turbopack），在这台**同时运行 preview 与 prod 的共享 VM（3.7G 内存 + 1.9G swap）** 上持续 thrash 约 30 分钟，最终 SSH、Caddy、preview、prod 全部无响应；控制台强制重启后恢复。
+   - 根因：Turbopack 构建峰值内存远超该机型可用内存（叠加运行时 next-server 占用），swap 磁盘 thrash 拖垮整机。
+   - 解决：改用 `next build --webpack` —— 服务器上 1 分钟内完成、内存平稳。**生产构建必须带 `--webpack`。**
+2. **`Server Reference ID did not match the expected format` 日志**（非阻塞，16.3.0 重启后 0 次）
+   - 现象：15.5.23 preview 8/8 17:43-17:44 出现 7 次（6 次全零 payload + 1 次 `"y"`），prod（Next 14）近 7 天 0 次。
+   - 判定：时间与 Caddy 证书签发/服务重启重叠，payload 为畸形探针请求；真实请求（登录 + 建便签）0 次。属**扫描探针噪声，非功能回归**。差异仅是 Next 对畸形 flight 请求打 error 日志而 Next 14 静默。
+3. **audit**：16.3.0 归零，已无残留。
+4. 交互式前端未自动化目验（见第六节未做项）。
 
 ---
 
-## 八、合并建议（三选一）
+## 八、合并决定（用户已选定 B，已执行）
 
-| 选项 | 内容 | 依据 | 代价 |
-|---|---|---|---|
-| **A（推荐）** | **先合并 15.5.23 上线**，随后立一个 16.3.0 的第二个 preview，验收通过后快速跟进升级 | 15.5.23 preview 已全量验收、以生产同等形态稳定运行、立即脱离 14.2.35 EOL 与已知 CVE；16.3.0 已证明 tsc/build 零改动通过、audit 全绿，跟进成本低 | 两轮上线；audit 短期仍红（仅构建期） |
-| **B** | 暂不合并，直接做 16.3.0 preview，验收通过后一步到位合并 16.3.0 | audit 一劳永逸全绿，16.x 更新，维护周期更长 | 需再部署一个 16.3.0 preview 并复跑全部验收（约半天）；16 跳距更大，运行时行为需重新覆盖 |
-| **C** | 放弃升级 | —— | 不推荐：14.2.35 已 EOL，缺 2026-07 安全修复（含 App Router 也涉及的 CVE-2026-23869/23870 RSC/flight DoS） |
+用户选定 **B：直接做 16.3.0 再合并**。16.3.0 preview 已部署并全量验收通过（audit 0、tsc/build 零改动通过、API 32/32、SSR 全绿），**决定：合并 `codex/next-upgrade-16` 到 main 并上线**。
 
-**倾向**：A。理由：15.5.23 当前已处于"可上线"状态且验收全绿；16.3.0 的额外收益（audit 归零）已被证明近乎零额外代码成本，适合作为紧接的快速跟进，而不是阻塞本次上线的理由。
+被否决方案：
+- A（先合 15.5.23 再跟进）：被 16.3.0 零成本全绿的事实弱化，两步并一步更省。
+- C（放弃）：14.2.35 已 EOL，缺 2026-07 安全修复（含 App Router 也涉及的 CVE-2026-23869/23870 RSC/flight DoS），不采纳。
 
----
+## 九、生产上线步骤（16.3.0，已完成/执行中）
 
-## 九、生产上线步骤（按选项 A：先上 15.5.23）
-
-1. 备份生产 DB（sqlite 文件快照）。
-2. 合并 `codex/next-upgrade-preview` 到 main。
-3. 服务器同步代码（rsync 或 git pull），保留生产 `.env` 与 uploads。
-4. `npm ci && npm run build`（本方案无 prisma schema 变更，无需 db push）。
-5. 重启生产 service，健康检查：`/login` 200、admin 列表 200、`journalctl` 无 error。
-6. 观察 24h：关注便签 CRUD、登录、附件上传、公告发布。
-7. 跟进：另起 16.3.0 preview（复用本分支机制 + 0 代码改动验证），验收后升级。
+1. 备份生产 DB：`cp data/prod.db /home/ubuntu/backups/prod_next16_<ts>.db`。
+2. 合并 `codex/next-upgrade-16` 到 main（fast-forward）并 push。
+3. rsync `src/`（--delete）+ 显式同步根目录改动文件（package.json、package-lock.json、tsconfig.json、next-env.d.ts），保留生产 `.env` 与 uploads。**无 prisma schema 变更，无需 db push。**
+4. `npm ci`。
+5. **`rm -rf .next && npm run build -- --webpack`**（必须 webpack，见已知问题）。构建前先 `systemctl --user stop sticky-notes-preview` 释放内存，构建完再启动。
+6. 重启生产 `sticky-notes.service`。
+7. 健康检查：`/login` 200、未登录 `/` 307、`/api/auth/me` 401、登录 200、`journalctl` 无 error。
+8. 观察 24h：便签 CRUD、登录、附件上传、公告发布、后台。
 
 ## 十、生产回滚步骤
 
