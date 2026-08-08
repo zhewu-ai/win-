@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     await requireAdmin();
   } catch (e) {
@@ -39,7 +40,7 @@ export async function PATCH(
   }
 
   const target = await prisma.user.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: { id: true },
   });
   if (!target) {
@@ -52,7 +53,7 @@ export async function PATCH(
   // 重新 bcrypt hash，绝不在响应/日志输出明文；重置密码后要求用户尽快修改
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
-    where: { id: params.id },
+    where: { id: id },
     data: { passwordHash, mustChangePassword: true },
   });
 

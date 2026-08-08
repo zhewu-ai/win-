@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
  */
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   let admin;
   try {
     admin = await requireAdmin();
@@ -22,7 +23,7 @@ export async function DELETE(
     return toErrorResponse(e);
   }
 
-  if (params.id === admin.id) {
+  if (id === admin.id) {
     return NextResponse.json(
       { ok: false, error: "CANNOT_DELETE_SELF", message: "不能删除自己" },
       { status: 400 }
@@ -30,7 +31,7 @@ export async function DELETE(
   }
 
   const target = await prisma.user.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: {
       id: true,
       username: true,
@@ -65,7 +66,7 @@ export async function DELETE(
 
   // 删除行前收集文件路径，供事务成功后尽力清理
   const notes = await prisma.note.findMany({
-    where: { userId: params.id },
+    where: { userId: id },
     select: {
       id: true,
       attachments: { select: { storagePath: true } },
@@ -78,7 +79,7 @@ export async function DELETE(
 
   // 防御：普通用户不应创建公告（公告仅 admin 接口可建）；若存在则拒绝，避免外键残留
   const createdAnnouncements = await prisma.announcement.count({
-    where: { createdById: params.id },
+    where: { createdById: id },
   });
   if (createdAnnouncements > 0) {
     return NextResponse.json(
@@ -93,17 +94,17 @@ export async function DELETE(
 
   // 事务内级联清理：先子后父，最后删 User（不维护 storageUsedBytes，User 已不存在）
   const results = await prisma.$transaction([
-    prisma.attachment.deleteMany({ where: { userId: params.id } }),
-    prisma.note.deleteMany({ where: { userId: params.id } }),
-    prisma.feedbackTicket.deleteMany({ where: { userId: params.id } }),
-    prisma.announcementRead.deleteMany({ where: { userId: params.id } }),
-    prisma.passwordResetToken.deleteMany({ where: { userId: params.id } }),
-    prisma.inviteCode.deleteMany({ where: { createdById: params.id } }),
+    prisma.attachment.deleteMany({ where: { userId: id } }),
+    prisma.note.deleteMany({ where: { userId: id } }),
+    prisma.feedbackTicket.deleteMany({ where: { userId: id } }),
+    prisma.announcementRead.deleteMany({ where: { userId: id } }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: id } }),
+    prisma.inviteCode.deleteMany({ where: { createdById: id } }),
     prisma.inviteCode.updateMany({
-      where: { usedById: params.id },
+      where: { usedById: id },
       data: { usedById: null },
     }),
-    prisma.user.delete({ where: { id: params.id } }),
+    prisma.user.delete({ where: { id: id } }),
   ]);
 
   // 事务成功后尽力清理附件文件/目录 + 头像文件，失败不阻塞接口
@@ -135,7 +136,7 @@ export async function DELETE(
 
   return NextResponse.json({
     ok: true,
-    deletedUserId: params.id,
+    deletedUserId: id,
     counts: {
       notes: results[1].count,
       attachments: results[0].count,

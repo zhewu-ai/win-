@@ -5,9 +5,10 @@ import LoginForm from "./LoginForm";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { returnTo?: string };
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
+  const { returnTo } = await searchParams;
   const user = await getCurrentUser();
   if (user) redirect("/");
-  return <LoginForm returnTo={searchParams.returnTo} />;
+  return <LoginForm returnTo={returnTo} />;
 }

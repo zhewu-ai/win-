@@ -8,14 +8,15 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
   const note = await prisma.note.findFirst({
     where: {
-      id: params.id,
+      id: id,
       userId: session.userId,
       deletedAt: { not: null },
     },
@@ -29,7 +30,7 @@ export async function POST(
   }
 
   const restored = await prisma.note.update({
-    where: { id: params.id },
+    where: { id: id },
     data: { deletedAt: null },
     include: { attachments: true },
   });

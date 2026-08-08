@@ -5,7 +5,7 @@ import { SessionData, sessionOptions } from "./session";
 import { prisma } from "./prisma";
 
 export async function getSession() {
-  const session = await getIronSession<SessionData>(cookies(), sessionOptions);
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   return session;
 }
 

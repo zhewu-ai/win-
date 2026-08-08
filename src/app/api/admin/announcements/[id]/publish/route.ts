@@ -7,13 +7,14 @@ export const dynamic = "force-dynamic";
 /** 发布公告：draft → published，记录发布时间。 */
 export async function POST(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     await requireAdmin();
 
     const existing = await prisma.announcement.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       select: { id: true, status: true },
     });
     if (!existing) {
@@ -30,7 +31,7 @@ export async function POST(
     }
 
     const announcement = await prisma.announcement.update({
-      where: { id: params.id },
+      where: { id: id },
       data: { status: "published", publishedAt: new Date() },
     });
 

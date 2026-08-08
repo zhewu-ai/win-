@@ -15,14 +15,15 @@ const VALID_COLORS = ["yellow", "blue", "green", "pink", "gray"];
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
   const note = await prisma.note.findFirst({
     where: {
-      id: params.id,
+      id: id,
       userId: session.userId,
       deletedAt: null,
     },
@@ -205,7 +206,7 @@ export async function PATCH(
     }
 
     const updated = await prisma.note.update({
-      where: { id: params.id },
+      where: { id: id },
       data: updateData,
       include: { attachments: true },
     });
@@ -237,14 +238,15 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
   const note = await prisma.note.findFirst({
     where: {
-      id: params.id,
+      id: id,
       userId: session.userId,
       deletedAt: null,
     },
@@ -258,7 +260,7 @@ export async function DELETE(
   }
 
   await prisma.note.update({
-    where: { id: params.id },
+    where: { id: id },
     data: { deletedAt: new Date() },
   });
 

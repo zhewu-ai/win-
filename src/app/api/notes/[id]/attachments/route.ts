@@ -25,15 +25,16 @@ function getConfig() {
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
   // Verify note exists, belongs to user, and is not permanently deleted
   const note = await prisma.note.findFirst({
     where: {
-      id: params.id,
+      id: id,
       userId: session.userId,
     },
   });
@@ -84,7 +85,7 @@ export async function POST(
 
   // Enforce per-note limit
   const existingCount = await prisma.attachment.count({
-    where: { noteId: params.id },
+    where: { noteId: id },
   });
 
   if (existingCount >= maxPerNote) {
@@ -116,7 +117,7 @@ export async function POST(
   const filename = `${attachmentId}.${ext}`;
 
   // Build storage path and URL
-  const relativeDir = path.join("notes", params.id);
+  const relativeDir = path.join("notes", id);
   const noteDir = path.resolve(uploadDir, relativeDir);
   const storagePath = path.join(relativeDir, filename);
   const url = `/api/files/${relativeDir}/${filename}`;
@@ -168,7 +169,7 @@ export async function POST(
       data: {
         id: attachmentId,
         userId: session.userId,
-        noteId: params.id,
+        noteId: id,
         type: "image",
         url,
         storagePath,

@@ -4,11 +4,11 @@ import { requireAdmin, toErrorResponse } from "@/lib/auth";
 
 export async function PATCH(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAdmin();
-    const id = params.id;
+    const id = (await params).id;
 
     const invite = await prisma.inviteCode.findUnique({ where: { id } });
     if (!invite) {

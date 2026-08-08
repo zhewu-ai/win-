@@ -8,12 +8,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const { path: filePath } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
-  const rawPath = params.path.join("/");
+  const rawPath = filePath.join("/");
   const uploadDir = process.env.UPLOAD_DIR || "./uploads";
   const resolvedDir = path.resolve(uploadDir);
   const resolvedPath = path.resolve(resolvedDir, rawPath);
@@ -26,7 +27,7 @@ export async function GET(
 
   // Parse noteId from URL pattern: notes/{noteId}/{filename}
   // Verify attachment DB record belongs to current user
-  const segments = params.path;
+  const segments = filePath;
   let avatarServe = false;
   if (segments.length >= 2 && segments[0] === "notes") {
     const noteId = segments[1];

@@ -16,13 +16,14 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
   const src = await prisma.note.findFirst({
-    where: { id: params.id, userId: session.userId, deletedAt: null },
+    where: { id: id, userId: session.userId, deletedAt: null },
     include: { attachments: true },
   });
 

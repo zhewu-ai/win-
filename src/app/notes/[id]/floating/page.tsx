@@ -8,17 +8,18 @@ import type { Note } from "@/types";
 export default async function FloatingPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const user = await getCurrentUser();
   if (!user)
     redirect(
-      `/login?returnTo=${encodeURIComponent(`/notes/${params.id}/floating`)}`
+      `/login?returnTo=${encodeURIComponent(`/notes/${id}/floating`)}`
     );
 
   const note = await prisma.note.findFirst({
     where: {
-      id: params.id,
+      id,
       userId: user.id,
     },
     include: { attachments: true },
@@ -32,7 +33,7 @@ export default async function FloatingPage({
     <div className="min-h-screen bg-page-bg">
       <FloatingNoteClient
         initialNote={serialized as unknown as Note}
-        noteId={params.id}
+        noteId={id}
       />
     </div>
   );

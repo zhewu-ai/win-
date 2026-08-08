@@ -7,12 +7,13 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
-  const { deletedIds } = await hardDeleteNotes(session.userId, [params.id]);
+  const { deletedIds } = await hardDeleteNotes(session.userId, [id]);
   if (deletedIds.length === 0) {
     return NextResponse.json(
       { ok: false, error: "NOT_FOUND" },

@@ -8,16 +8,17 @@ import { addStorageUsed } from "@/lib/storage";
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string; attachmentId: string } }
+  { params }: { params: Promise<{ id: string; attachmentId: string }> }
 ) {
+  const { id, attachmentId } = await params;
   const session = await authOrResponse();
   if (session instanceof NextResponse) return session;
 
   // Find attachment and verify ownership
   const attachment = await prisma.attachment.findFirst({
     where: {
-      id: params.attachmentId,
-      noteId: params.id,
+      id: attachmentId,
+      noteId: id,
       userId: session.userId,
     },
   });
@@ -28,7 +29,7 @@ export async function DELETE(
 
   // Delete DB record first
   await prisma.attachment.delete({
-    where: { id: params.attachmentId },
+    where: { id: attachmentId },
   });
 
   await addStorageUsed(session.userId, -attachment.size);

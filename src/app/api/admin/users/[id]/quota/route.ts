@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     await requireAdmin();
   } catch (e) {
@@ -54,7 +55,7 @@ export async function PATCH(
   }
 
   const target = await prisma.user.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: { id: true, storageUsedBytes: true },
   });
   if (!target) {
@@ -77,7 +78,7 @@ export async function PATCH(
   }
 
   const user = await prisma.user.update({
-    where: { id: params.id },
+    where: { id: id },
     data: { storageQuotaBytes: quota },
     select: ADMIN_USER_SELECT,
   });

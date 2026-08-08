@@ -9,8 +9,9 @@ const MAX_CONTENT_LENGTH = 20000;
 /** 编辑公告草稿的标题/正文/版本号。仅 draft 状态可编辑。 */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     await requireAdmin();
 
@@ -30,7 +31,7 @@ export async function PATCH(
     };
 
     const existing = await prisma.announcement.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       select: { id: true, status: true },
     });
     if (!existing) {
@@ -84,7 +85,7 @@ export async function PATCH(
     }
 
     const announcement = await prisma.announcement.update({
-      where: { id: params.id },
+      where: { id: id },
       data,
     });
 

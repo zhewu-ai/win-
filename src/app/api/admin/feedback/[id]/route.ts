@@ -9,8 +9,9 @@ const MAX_ADMIN_NOTE = 2000;
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     await requireAdmin();
   } catch (e) {
@@ -67,7 +68,7 @@ export async function PATCH(
   }
 
   const existing = await prisma.feedbackTicket.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: { id: true },
   });
   if (!existing) {
@@ -78,7 +79,7 @@ export async function PATCH(
   }
 
   const ticket = await prisma.feedbackTicket.update({
-    where: { id: params.id },
+    where: { id: id },
     data: updateData,
     select: {
       id: true,
