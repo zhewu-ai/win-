@@ -10,6 +10,7 @@ import {
   deleteNoteOfflineAware,
   isNetworkError,
   loadCachedNotes,
+  mergeLocalPending,
   mirrorNote,
   saveNoteUpdate,
 } from "@/lib/offline/persist";
@@ -46,7 +47,15 @@ export function useNotes(archived = false) {
         if (!res.ok) throw new ApiError(res.status, "Failed to fetch");
         const data = await res.json();
         const fetched = data.notes as Note[];
-        setNotes(fetched);
+        // 把本地 pending/syncError 记录合并进内存列表再展示：
+        // 服务器旧快照不得吞掉本地较新内容/离线新建（mirrorNote 只保护 IndexedDB，这里补内存层）。
+        let merged = fetched;
+        try {
+          merged = await mergeLocalPending(fetched, archived);
+        } catch {
+          // IndexedDB 不可用时退化为纯服务器快照，不阻断本次刷新
+        }
+        setNotes(merged);
         setError(null);
         // 在线成功 → 镜像到本地缓存
         void Promise.all(fetched.map((n) => mirrorNote(n)));

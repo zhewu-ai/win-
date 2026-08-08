@@ -2,6 +2,7 @@ import type { Note, NoteColor, SyncStatus } from "@/types";
 import type { LocalNote } from "./db";
 import {
   deleteNoteRow,
+  getDB,
   getNote,
   getNoteByServerId,
   listNotes,
@@ -105,6 +106,48 @@ export async function mirrorNote(note: Note): Promise<void> {
   const existing = await getNote(note.id);
   if (existing && existing.syncStatus !== "synced") return;
   await putNote(mapToLocal(note, "synced"));
+}
+
+const LOCAL_PENDING_STATUSES: SyncStatus[] = [
+  "pendingCreate",
+  "pendingUpdate",
+  "pendingDelete",
+  "syncError",
+];
+
+/** 把服务器快照与本地待同步记录合并后再交给 React 列表，避免旧快照吞掉本地较新内容。
+ * - pendingDelete：服务器可能仍返回该便签（DELETE 尚未送达），从结果中剔除；
+ * - pendingUpdate / syncError：同 id 用本地较新版本替换服务器旧版（本地 updatedAt 更新）；
+ * - pendingCreate：服务器还没有，保留并前置。
+ * 注意：mirrorNote 只保护 IndexedDB；本函数保护内存列表。两者都要，缺一不可。 */
+export async function mergeLocalPending(
+  serverNotes: Note[],
+  archived: boolean
+): Promise<Note[]> {
+  const pendings = await getDB()
+    .notes.where("syncStatus")
+    .anyOf(LOCAL_PENDING_STATUSES)
+    .toArray();
+  if (pendings.length === 0) return serverNotes;
+
+  const pendingDelete = new Set(
+    pendings
+      .filter((p) => p.syncStatus === "pendingDelete")
+      .map((p) => p.serverId)
+      .filter((id): id is string => id !== null)
+  );
+  const byServerId = new Map<string, Note>();
+  const localCreates: Note[] = [];
+  for (const p of pendings) {
+    if (p.syncStatus === "pendingDelete" || p.isArchived !== archived) continue;
+    if (p.serverId) byServerId.set(p.serverId, mapFromLocal(p));
+    else localCreates.push(mapFromLocal(p));
+  }
+
+  const merged = serverNotes
+    .filter((n) => !pendingDelete.has(n.id))
+    .map((n) => byServerId.get(n.id) ?? n);
+  return [...localCreates, ...merged];
 }
 
 /** 把一次 PATCH 增量合并进本地缓存，标记待同步。返回合并后的本地记录。 */
