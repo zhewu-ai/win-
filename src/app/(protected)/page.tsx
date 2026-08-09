@@ -58,9 +58,13 @@ export default function HomePage() {
     });
   };
 
-  // M12 工作日历：打开/关闭右面板嵌入日历（不跳独立页）
+  // M12 工作日历：打开/关闭右面板嵌入日历（不跳独立页）。
+  // 2.2 选中态互斥：打开日历时清除便签/待办选中态，避免两个对象同时高亮。
   const openCalendar = useCallback(() => {
     setCalendarOpen(true);
+    setSelectedNoteId(null);
+    setShowEditor(false);
+    setNoteNavStack([]);
   }, []);
 
   const closeCalendar = useCallback(() => {
@@ -68,10 +72,14 @@ export default function HomePage() {
     setCameFromCalendar(false);
   }, []);
 
-  // M12 返修：从日历进入的便签点击「返回工作日历」→ 恢复日历面板（视图上下文由保持挂载保留）
+  // M12 返修：从日历进入的便签点击「返回工作日历」→ 恢复日历面板（视图上下文由保持挂载保留）。
+  // 2.2：返回日历时同样清除便签选中态。
   const returnToCalendar = useCallback(() => {
     setCameFromCalendar(false);
     setCalendarOpen(true);
+    setSelectedNoteId(null);
+    setShowEditor(false);
+    setNoteNavStack([]);
   }, []);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;

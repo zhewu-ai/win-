@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   CalendarImportDraft,
@@ -13,7 +13,7 @@ import type {
   WorkScheduleItemInput,
 } from "@/types";
 import { useWorkCalendar } from "@/hooks/useWorkCalendar";
-import { addDays, fromDateStr, monthOptions, startOfWeek, toDateStr, todayStr } from "@/lib/calendar-date";
+import { addDays, fromDateStr, isSameDay, monthOptions, startOfWeek, toDateStr, todayStr } from "@/lib/calendar-date";
 import WorkWeekView from "./work/WorkWeekView";
 import WorkMonthView from "./work/WorkMonthView";
 import WorkTodayView from "./work/WorkTodayView";
@@ -118,6 +118,38 @@ export default function CalendarPageClient({
       if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
     };
   }, []);
+
+  // M12 体验细修 2.9：工作区宽度 <520px 进入窄宽专注模式（工具区默认收起，可展开）。
+  // 挂载时同步测量一次（窄窗直接加载 / 双栏窄面板都正确），ResizeObserver 负责后续窗口变化。
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [focusMode, setFocusMode] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const apply = () => setFocusMode(el.getBoundingClientRect().width < 520);
+    apply();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 2.5 月视图连续月份滚动：锚点月前后 ±3 个月纵向堆叠，切换锚点月时滚动到对应月
+  const monthContainerRef = useRef<HTMLDivElement>(null);
+  const monthRange = useMemo(() => {
+    const out: Date[] = [];
+    for (let i = -3; i <= 3; i++) {
+      out.push(new Date(monthDate.getFullYear(), monthDate.getMonth() + i, 1));
+    }
+    return out;
+  }, [monthDate]);
+  useEffect(() => {
+    if (view !== "month") return;
+    const key = `${monthDate.getFullYear()}-${monthDate.getMonth()}`;
+    const el = monthContainerRef.current?.querySelector(`[data-month="${key}"]`);
+    el?.scrollIntoView({ block: "start", behavior: "auto" });
+  }, [monthDate, view]);
 
   // 独立页无 notes prop 时自行拉取未归档便签（今日视图「今天编辑的便签」链接层）
   useEffect(() => {
@@ -491,13 +523,25 @@ export default function CalendarPageClient({
     return projects.filter((p) => p.status === "active" || p.id === curId);
   }, [projects, selectedProject, selectedItem]);
 
-  const periodLabel = useMemo(() => {
+  // 2.4/2.7 顶部日期导航标签：日视图显示具体日期，月/周显示区间
+  const compactPeriodLabel = useMemo(() => {
     if (view === "month") return `${monthDate.getFullYear()}年${monthDate.getMonth() + 1}月`;
     if (view === "week") {
       const end = addDays(weekStart, 6);
-      return `${weekStart.getMonth() + 1}月${weekStart.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+      return weekStart.getMonth() === end.getMonth()
+        ? `${weekStart.getMonth() + 1}月${weekStart.getDate()}日 - ${end.getDate()}日`
+        : `${weekStart.getMonth() + 1}月${weekStart.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
     }
-    return `今日 · ${dayDate.getFullYear()}年${dayDate.getMonth() + 1}月${dayDate.getDate()}日`;
+    return `${dayDate.getMonth() + 1}月${dayDate.getDate()}日`;
+  }, [view, monthDate, weekStart, dayDate]);
+
+  const isOnTodayPeriod = useMemo(() => {
+    const now = new Date();
+    if (view === "month") {
+      return now.getFullYear() === monthDate.getFullYear() && now.getMonth() === monthDate.getMonth();
+    }
+    if (view === "week") return isSameDay(now, weekStart);
+    return isSameDay(now, dayDate);
   }, [view, monthDate, weekStart, dayDate]);
 
   const monthSelectOptions = useMemo(() => monthOptions(monthDate), [monthDate]);
@@ -577,27 +621,27 @@ export default function CalendarPageClient({
 
   return (
     <div
+      ref={rootRef}
       className={`${
         embedded ? "flex-1 flex flex-col h-full min-h-0 bg-page-bg" : "h-screen flex flex-col bg-page-bg"
       }`}
     >
-      {/* 顶行：返回 + 标题/说明 + 导航 + 视图切换 */}
-      <header className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-light px-3 py-2">
+      {/* 顶行：返回 + 标题 + 日期导航 + 视图切换（2.4/2.7/2.9 压缩分层） */}
+      <header className="flex flex-shrink-0 items-center gap-2 border-b border-border-light px-3 py-2">
         {onBack ? (
           <button
             onClick={onBack}
-            className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-btn text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
             title="返回列表"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            返回
           </button>
         ) : !embedded ? (
           <Link
             href="/"
-            className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
+            className="flex flex-shrink-0 items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -606,13 +650,12 @@ export default function CalendarPageClient({
           </Link>
         ) : null}
 
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[22px] font-bold leading-tight text-ink">工作日历</h1>
-        </div>
+        {!focusMode && <h1 className="truncate text-[18px] font-bold leading-tight text-ink">工作日历</h1>}
 
-        {/* 导航 */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="hidden text-sm font-semibold text-ink sm:block">{periodLabel}</span>
+        <div className="min-w-0 flex-1" />
+
+        {/* 日期导航：‹ 8月10日 ›（2.4 压缩；2.7 日视图显示具体日期） */}
+        <div className="flex flex-shrink-0 items-center gap-0.5">
           <button
             onClick={() => navigate(-1)}
             className="flex h-7 w-7 items-center justify-center rounded-btn text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
@@ -622,12 +665,7 @@ export default function CalendarPageClient({
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <button
-            onClick={goToToday}
-            className="rounded-btn px-2 py-1 text-sm text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
-          >
-            今天
-          </button>
+          <span className="whitespace-nowrap text-sm font-semibold text-ink">{compactPeriodLabel}</span>
           <button
             onClick={() => navigate(1)}
             className="flex h-7 w-7 items-center justify-center rounded-btn text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
@@ -637,7 +675,7 @@ export default function CalendarPageClient({
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           </button>
-          {view === "month" && (
+          {view === "month" && !focusMode && (
             <select
               value={`${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`}
               onChange={(e) => {
@@ -656,13 +694,13 @@ export default function CalendarPageClient({
           )}
         </div>
 
-        {/* 视图切换（segmented） */}
+        {/* 视图切换：日 / 周 / 月（2.7 命名） */}
         <div className="flex flex-shrink-0 items-center rounded-lg border border-border-light bg-panel-bg p-0.5">
           {(
             [
-              ["today", "今日"],
-              ["month", "月"],
+              ["today", "日"],
               ["week", "周"],
+              ["month", "月"],
             ] as const
           ).map(([v, label]) => (
             <button
@@ -676,51 +714,78 @@ export default function CalendarPageClient({
             </button>
           ))}
         </div>
+
+        {/* 窄宽专注模式：展开/收起工具区（2.9） */}
+        {focusMode && (
+          <button
+            onClick={() => setToolbarExpanded((v) => !v)}
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-btn text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
+            aria-label={toolbarExpanded ? "收起工具区" : "展开工具区"}
+            title={toolbarExpanded ? "收起工具区" : "展开工具区"}
+          >
+            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="5" cy="12" r="1.7" />
+              <circle cx="12" cy="12" r="1.7" />
+              <circle cx="19" cy="12" r="1.7" />
+            </svg>
+          </button>
+        )}
       </header>
 
-      {/* 筛选行：项目 chip + 便签链接 + 手动添加入口 + 归档开关 */}
-      <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-border-light px-3 py-2">
-        {emptyNoProjects ? (
-          <span className="text-xs text-ink-muted">暂无项目</span>
-        ) : (
-          activeProjects.map((p) => renderChip(p, { secondary: false }))
-        )}
-        <button
-          type="button"
-          onClick={() => setShowNoteLayer((v) => !v)}
-          className={`flex items-center gap-1 rounded-lg border px-1.5 py-0.5 transition-colors ${
-            showNoteLayer ? "border-[var(--note)]/40 bg-[var(--note)]/10" : "border-border-light opacity-50"
-          }`}
-          title={showNoteLayer ? "点击隐藏便签链接" : "点击显示便签链接"}
-        >
-          <span className="flex h-4 w-4 items-center justify-center rounded-full border border-transparent">
-            <span className={`h-2.5 w-2.5 rounded-full ${showNoteLayer ? "bg-[var(--note)]" : "bg-border-strong"}`} />
-          </span>
-          <span className={`text-xs ${showNoteLayer ? "text-[var(--note)]" : "text-ink-secondary"}`}>便签链接</span>
-        </button>
+      {/* 工具区：今天 + 项目筛选 + 便签链接 + 添加/归档（窄宽专注模式默认收起） */}
+      {(!focusMode || toolbarExpanded) && (
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-border-light px-3 py-2">
+          <button
+            onClick={goToToday}
+            className={`flex-shrink-0 rounded-btn px-2 py-1 text-xs font-semibold transition-colors ${
+              isOnTodayPeriod ? "text-primary" : "text-ink-muted hover:text-ink hover:bg-surface-hover"
+            }`}
+            title="回到今天"
+          >
+            今天
+          </button>
+          {emptyNoProjects ? (
+            <span className="text-xs text-ink-muted">暂无项目</span>
+          ) : (
+            activeProjects.map((p) => renderChip(p, { secondary: false }))
+          )}
+          <button
+            type="button"
+            onClick={() => setShowNoteLayer((v) => !v)}
+            className={`flex items-center gap-1 rounded-lg border px-1.5 py-0.5 transition-colors ${
+              showNoteLayer ? "border-[var(--note)]/40 bg-[var(--note)]/10" : "border-border-light opacity-50"
+            }`}
+            title={showNoteLayer ? "点击隐藏便签链接" : "点击显示便签链接"}
+          >
+            <span className="flex h-4 w-4 items-center justify-center rounded-full border border-transparent">
+              <span className={`h-2.5 w-2.5 rounded-full ${showNoteLayer ? "bg-[var(--note)]" : "bg-border-strong"}`} />
+            </span>
+            <span className={`text-xs ${showNoteLayer ? "text-[var(--note)]" : "text-ink-secondary"}`}>便签链接</span>
+          </button>
 
-        <div className="flex-1 min-w-0" />
+          <div className="flex-1 min-w-0" />
 
-        <button
-          onClick={() => startNewItem(todayStr(), null)}
-          className="flex items-center gap-1 rounded-btn bg-primary px-2.5 py-1 text-sm font-medium text-white transition-colors hover:bg-primary/90 whitespace-nowrap"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
-          </svg>
-          添加排期
-        </button>
-        <button
-          onClick={openNewProject}
-          className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          新增项目
-        </button>
-        <Toggle label="显示归档" checked={showArchived} onChange={() => setShowArchived((v) => !v)} />
-      </div>
+          <button
+            onClick={() => startNewItem(todayStr(), null)}
+            className="flex items-center gap-1 rounded-btn bg-primary px-2.5 py-1 text-sm font-medium text-white transition-colors hover:bg-primary/90 whitespace-nowrap"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+            </svg>
+            添加排期
+          </button>
+          <button
+            onClick={openNewProject}
+            className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            新增项目
+          </button>
+          <Toggle label="显示归档" checked={showArchived} onChange={() => setShowArchived((v) => !v)} />
+        </div>
+      )}
 
       {/* 已结束待归档 / 已归档 chip 行 */}
       {(endedProjects.length > 0 || (showArchived && archivedProjects.length > 0)) && (
@@ -752,25 +817,45 @@ export default function CalendarPageClient({
               </button>
             </div>
           ) : view === "week" ? (
-            <WorkWeekView
-              weekStart={weekStart}
-              items={visibleItems}
-              today={today}
-              colorOf={colorOf}
-              showNoteLayer={showNoteLayer}
-              onItemClick={handleItemClick}
-              onSelectDay={handleSelectDay}
-            />
+            <div className="h-full min-h-0 overflow-x-auto">
+              <div className="h-full min-w-[560px]">
+                <WorkWeekView
+                  weekStart={weekStart}
+                  items={visibleItems}
+                  today={today}
+                  colorOf={colorOf}
+                  showNoteLayer={showNoteLayer}
+                  onItemClick={handleItemClick}
+                  onSelectDay={handleSelectDay}
+                />
+              </div>
+            </div>
           ) : view === "month" ? (
-            <WorkMonthView
-              monthDate={monthDate}
-              items={visibleItems}
-              today={today}
-              colorOf={colorOf}
-              showNoteLayer={showNoteLayer}
-              onItemClick={handleItemClick}
-              onSelectDay={handleSelectDay}
-            />
+            /* 2.5 连续月份滚动：锚点月 ±3 个月纵向堆叠，上下滚动跨月；切换锚点月自动滚动定位 */
+            <div ref={monthContainerRef} className="flex flex-col gap-6">
+              {monthRange.map((m) => (
+                <div key={`${m.getFullYear()}-${m.getMonth()}`} data-month={`${m.getFullYear()}-${m.getMonth()}`}>
+                  <div className="mb-1.5 text-sm font-bold text-ink">
+                    {m.getFullYear()}年{m.getMonth() + 1}月
+                  </div>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[560px]">
+                      <WorkMonthView
+                        monthDate={m}
+                        items={visibleItems}
+                        notes={showNoteLayer ? notesForLayer : []}
+                        today={today}
+                        colorOf={colorOf}
+                        showNoteLayer={showNoteLayer}
+                        onItemClick={handleItemClick}
+                        onSelectDay={handleSelectDay}
+                        onOpenNote={handleOpenNote}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <WorkTodayView
               date={dayDate}
@@ -787,8 +872,10 @@ export default function CalendarPageClient({
           )}
         </main>
 
-        {/* 桌面右栏：手动添加/编辑表单 */}
-        <div className="hidden w-[286px] flex-shrink-0 sm:flex">{renderRightPanel}</div>
+        {/* 桌面右栏：默认收起（2.3），点「添加排期」/项目 /排期条目时展开；取消/删除后收起 */}
+        {rightOpen && (
+          <div className="hidden w-[286px] flex-shrink-0 sm:flex">{renderRightPanel}</div>
+        )}
       </div>
 
       {/* 窄窗口：右栏抽屉 */}

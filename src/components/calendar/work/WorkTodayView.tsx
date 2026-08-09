@@ -120,21 +120,25 @@ export default function WorkTodayView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-baseline gap-2 px-0.5">
+      <div className="flex items-center gap-2 px-0.5">
         <h2 className="text-base font-bold text-ink">
-          {MONTH_NAMES[date.getMonth()]} 月 {date.getDate()} 日
+          {MONTH_NAMES[date.getMonth()]}月{date.getDate()}日
+          <span className={`ml-1 text-xs font-semibold ${weekend ? "text-accent-pink" : "text-ink-muted"}`}>
+            · {weekday}
+          </span>
         </h2>
-        <span className={`text-xs ${weekend ? "text-accent-pink" : "text-ink-muted"}`}>{weekday}</span>
         {isToday && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">今天</span>}
       </div>
 
       {emptyAll ? (
-        <div className="px-3 py-10 text-center text-sm text-ink-muted">今天无排期。</div>
+        <div className="px-3 py-10 text-center text-sm text-ink-muted">
+          {isToday ? "今天无排期。" : "当天暂无排期。"}
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {/* 今天要做：进行中的连续阶段 */}
+          {/* 今天要做 / 当天要做：进行中的连续阶段 */}
           <div className="flex flex-col gap-1.5">
-            <SectionTitle label="今天要做" />
+            <SectionTitle label={isToday ? "今天要做" : "当天要做"} />
             {todayRanges.length === 0 ? (
               <Empty text="暂无" />
             ) : (
@@ -175,9 +179,9 @@ export default function WorkTodayView({
 
           {/* 今天节点 + 今天编辑的便签：宽屏分两栏 */}
           <div className="grid gap-4 sm:grid-cols-2">
-            {/* 今天节点 */}
+            {/* 今天节点 / 当天节点 */}
             <div className="flex flex-col gap-1.5">
-              <SectionTitle label="今天节点" />
+              <SectionTitle label={isToday ? "今天节点" : "当天节点"} />
               {todayNodes.length === 0 ? (
                 <Empty text="暂无" />
               ) : (
@@ -216,9 +220,9 @@ export default function WorkTodayView({
               )}
             </div>
 
-            {/* 今天编辑的便签（便签链接层，受开关控制） */}
+            {/* 今天编辑的便签 / 当天编辑的便签（便签链接层，受开关控制） */}
             <div className="flex flex-col gap-1.5">
-              <SectionTitle label="今天编辑的便签" />
+              <SectionTitle label={isToday ? "今天编辑的便签" : "当天编辑的便签"} />
               {todayNotes.length === 0 ? (
                 <Empty text="暂无" />
               ) : (
@@ -235,7 +239,13 @@ export default function WorkTodayView({
                       </svg>
                       <span className="min-w-0 flex-1 truncate text-xs text-ink">{n.title || "未命名便签"}</span>
                       <span className="flex-shrink-0 text-[11px] text-ink-muted">
-                        {n.createdAt && toDateStr(new Date(n.createdAt)) === dateStr ? "今天创建" : "今天更新"}
+                        {n.createdAt && toDateStr(new Date(n.createdAt)) === dateStr
+                          ? isToday
+                            ? "今天创建"
+                            : "当天创建"
+                          : isToday
+                            ? "今天更新"
+                            : "当天更新"}
                       </span>
                     </button>
                   ))}

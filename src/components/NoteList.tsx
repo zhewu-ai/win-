@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Note } from "@/types";
 import { formatNoteTime } from "@/lib/format-time";
 import { displayPlainText } from "@/lib/link-parser";
@@ -22,6 +22,11 @@ interface Props {
   /** M12 返修：工作日历筛选状态，同步入口卡今日预览 */
   calendarHiddenProjectIds?: Set<string>;
   calendarShowNoteLayer?: boolean;
+  /** M12 体验细修：多选状态上提（Sidebar 据此隐藏搜索框），本组件用受控 props */
+  selectionMode?: boolean;
+  onSelectionModeChange?: (active: boolean) => void;
+  /** M12 体验细修：刷新能力移入「三个点」菜单 */
+  onRefresh?: () => void;
 }
 
 const ACCENT: Record<string, string> = {
@@ -51,7 +56,7 @@ function getSummaryLines(note: Note): string[] {
   if (note.mode === "checklist" && note.checklistItems?.length > 0) {
     return note.checklistItems
       .filter((i) => i.text.trim().length > 0)
-      .slice(0, 3)
+      .slice(0, 2)
       .map((i) =>
         displayPlainText(
           i.kind === "heading"
@@ -174,11 +179,15 @@ export default function NoteList({
   calendarActive,
   calendarHiddenProjectIds,
   calendarShowNoteLayer,
+  selectionMode = false,
+  onSelectionModeChange,
+  onRefresh,
 }: Props) {
-  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { isOnline } = useSyncStatus();
 
   // 列表变化时剔除已消失的选中项（外部删除/搜索过滤后残留）
@@ -193,11 +202,21 @@ export default function NoteList({
   // 没有便签时退出多选模式
   useEffect(() => {
     if (notes.length === 0) {
-      setSelectionMode(false);
+      onSelectionModeChange?.(false);
       setSelectedSet(new Set());
       setConfirmOpen(false);
     }
-  }, [notes.length]);
+  }, [notes.length, onSelectionModeChange]);
+
+  // 三个点菜单：点击外部关闭
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   const pinned = notes.filter((n) => n.isPinned);
   const regular = notes.filter((n) => !n.isPinned);
@@ -288,7 +307,7 @@ export default function NoteList({
     try {
       await onBulkDelete(ids);
       setSelectedSet(new Set());
-      setSelectionMode(false);
+      onSelectionModeChange?.(false);
       setConfirmOpen(false);
     } finally {
       setDeleting(false);
@@ -330,75 +349,73 @@ export default function NoteList({
           isSelected ? selectedCls : "card-surface"
         }`}
       >
-        <div className={`px-5 py-4 ${selectionMode ? "flex items-start gap-2" : ""}`}>
-          {selectionMode && (
-            <span
-              className={`mt-0.5 flex-shrink-0 w-[18px] h-[18px] rounded-full border flex items-center justify-center transition-colors ${
-                isChecked
-                  ? "bg-primary border-primary text-white"
-                  : "border-border-strong"
-              }`}
-              aria-hidden="true"
-            >
-              {isChecked && (
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </span>
-          )}
-          <div className="flex-1 min-w-0">
-            {/* Title row */}
-            <div className="flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-[17px] leading-[1.18] font-bold truncate ${
-                    isSelected ? "text-white" : "text-ink"
-                  }`}
-                >
-                  <HighlightText text={autoTitle} query={searchQuery || ""} />
-                </p>
-              </div>
-              <span className={`${dotCls} ${accent} mt-0.5`} aria-hidden="true" />
-            </div>
-
-            {/* Summary lines */}
-            {summaryLines.length > 0 && (
-              <div className="mt-1.5 space-y-0.5">
-                {summaryLines.map((line, i) => (
-                  <p
-                    key={i}
-                    className={`text-[15px] leading-[1.28] font-semibold truncate ${
-                      isSelected ? "text-white/[0.82]" : "text-ink-secondary"
-                    }`}
-                  >
-                    <HighlightText text={line} query={searchQuery || ""} />
-                  </p>
-                ))}
-              </div>
-            )}
-
-            {/* Meta row: 待办进度在左，最后修改日期在右 */}
-            <div className="flex items-center justify-between gap-3 mt-2">
-              <div className="flex items-center gap-3">
-                {progress && (
-                  <span
-                    className={`text-[13px] leading-tight font-semibold ${
-                      isSelected ? "text-white/[0.72]" : "text-ink-muted"
-                    }`}
-                  >
-                    {progress.done}/{progress.total}
-                  </span>
-                )}
-              </div>
+        <div className="flex min-h-[146px] flex-col px-5 py-4">
+          {/* Title row：多选勾选框内联在标题行首 */}
+          <div className="flex items-start gap-2">
+            {selectionMode && (
               <span
-                className={`text-[13px] leading-tight font-semibold ${
-                  isSelected ? "text-white/[0.72]" : "text-ink-muted"
+                className={`mt-0.5 flex-shrink-0 w-[18px] h-[18px] rounded-full border flex items-center justify-center transition-colors ${
+                  isChecked
+                    ? "bg-primary border-primary text-white"
+                    : "border-border-strong"
+                }`}
+                aria-hidden="true"
+              >
+                {isChecked && (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p
+                className={`text-[17px] leading-[1.18] font-bold truncate ${
+                  isSelected ? "text-white" : "text-ink"
                 }`}
               >
-                {formatNoteTime(note.updatedAt)}
-              </span>
+                <HighlightText text={autoTitle} query={searchQuery || ""} />
+              </p>
             </div>
+            <span className={`${dotCls} ${accent} mt-0.5`} aria-hidden="true" />
+          </div>
+
+          {/* Summary lines：最多 2 行，超出截断，不撑开卡片 */}
+          {summaryLines.length > 0 && (
+            <div className="mt-1.5 space-y-0.5">
+              {summaryLines.map((line, i) => (
+                <p
+                  key={i}
+                  className={`text-[15px] leading-[1.28] font-semibold truncate ${
+                    isSelected ? "text-white/[0.82]" : "text-ink-secondary"
+                  }`}
+                >
+                  <HighlightText text={line} query={searchQuery || ""} />
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Meta row：钉底，保证卡片高度统一 */}
+          <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-3">
+              {progress && (
+                <span
+                  className={`text-[13px] leading-tight font-semibold ${
+                    isSelected ? "text-white/[0.72]" : "text-ink-muted"
+                  }`}
+                >
+                  {progress.done}/{progress.total}
+                </span>
+              )}
+            </div>
+            <span
+              className={`text-[13px] leading-tight font-semibold ${
+                isSelected ? "text-white/[0.72]" : "text-ink-muted"
+              }`}
+            >
+              {formatNoteTime(note.updatedAt)}
+            </span>
           </div>
         </div>
       </button>
@@ -421,7 +438,7 @@ export default function NoteList({
           <div className="flex-1" />
           <button
             onClick={() => {
-              setSelectionMode(false);
+              onSelectionModeChange?.(false);
               setSelectedSet(new Set());
             }}
             className="text-xs font-medium text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn px-1.5 py-1 transition-colors flex-shrink-0"
@@ -439,21 +456,52 @@ export default function NoteList({
         </div>
       ) : (
         <div className="flex justify-end px-3 pt-1 flex-shrink-0">
-          <button
-            onClick={() => {
-              setSelectionMode(true);
-              setSelectedSet(new Set());
-            }}
-            title="选择便签"
-            aria-label="选择便签"
-            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:text-ink rounded-btn transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="12" r="1.7" />
-              <circle cx="12" cy="12" r="1.7" />
-              <circle cx="19" cy="12" r="1.7" />
-            </svg>
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              title="更多操作"
+              aria-label="更多操作"
+              aria-expanded={menuOpen}
+              className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:text-ink rounded-btn transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="1.7" />
+                <circle cx="12" cy="12" r="1.7" />
+                <circle cx="19" cy="12" r="1.7" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-30 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onSelectionModeChange?.(true);
+                    setSelectedSet(new Set());
+                  }}
+                  className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
+                >
+                  <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  选择便签
+                </button>
+                {onRefresh && (
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onRefresh();
+                    }}
+                    className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    刷新
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

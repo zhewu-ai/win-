@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { WorkProjectColor, WorkScheduleItem } from "@/types";
+import type { Note, WorkProjectColor, WorkScheduleItem } from "@/types";
 import { fromDateStr, isSameDay, monthGrid, toDateStr } from "@/lib/calendar-date";
 import { wpClass } from "./color";
 
@@ -9,12 +9,16 @@ interface Props {
   monthDate: Date;
   /** 已按可见项目过滤（含全量日期，本组件自行按本月裁剪）。 */
   items: WorkScheduleItem[];
+  /** 2.6 便签链接层：当天创建/更新的便签（外部已按 showNoteLayer 过滤）。 */
+  notes: Note[];
   today: Date;
   colorOf: (projectId: string) => WorkProjectColor;
-  /** 便签链接层：关闭时隐藏条目上的「关联便签」药丸。 */
+  /** 便签链接层：关闭时隐藏条目上的「关联便签」药丸与日期格便签指示。 */
   showNoteLayer: boolean;
   onItemClick: (item: WorkScheduleItem) => void;
   onSelectDay: (dateStr: string) => void;
+  /** 2.6 便签链接层点击：单条便签直接打开；多条进入当天日视图。 */
+  onOpenNote: (noteId: string) => void;
 }
 
 const ROW_H = 106;
@@ -42,9 +46,25 @@ interface Pill {
   span: number;
 }
 
-export default function WorkMonthView({ monthDate, items, today, colorOf, showNoteLayer, onItemClick, onSelectDay }: Props) {
+export default function WorkMonthView({ monthDate, items, notes, today, colorOf, showNoteLayer, onItemClick, onSelectDay, onOpenNote }: Props) {
   const cells = useMemo(() => monthGrid(monthDate.getFullYear(), monthDate.getMonth()), [monthDate]);
   const gridStartStr = useMemo(() => toDateStr(cells[0].date), [cells]);
+
+  // 2.6 便签链接层：按天归集当天创建/更新的便签
+  const notesByDay = useMemo(() => {
+    const m = new Map<string, Note[]>();
+    for (const n of notes) {
+      const days = new Set<string>();
+      if (n.createdAt) days.add(toDateStr(new Date(n.createdAt)));
+      if (n.updatedAt) days.add(toDateStr(new Date(n.updatedAt)));
+      for (const d of days) {
+        const arr = m.get(d) ?? [];
+        arr.push(n);
+        m.set(d, arr);
+      }
+    }
+    return m;
+  }, [notes]);
 
   // 月历覆盖层：连续阶段/单日节点拆段入轨，便签药丸独立于排期条；每格项目色点供窄屏降级。
   const { bars, pills, dayColors } = useMemo(() => {
@@ -136,6 +156,7 @@ export default function WorkMonthView({ monthDate, items, today, colorOf, showNo
             const key = toDateStr(date);
             const isToday = isSameDay(date, today);
             const colors = dayColors.get(key) ?? [];
+            const dayNotes = notesByDay.get(key) ?? [];
             return (
               <div
                 key={key}
@@ -153,13 +174,37 @@ export default function WorkMonthView({ monthDate, items, today, colorOf, showNo
                   inMonth ? "" : "bg-page-bg/40"
                 }`}
               >
-                <span
-                  className={`flex h-5 min-w-5 items-center justify-center self-start rounded-full px-1 text-xs font-semibold ${
-                    isToday ? "text-primary" : inMonth ? "text-ink" : "text-ink-muted/50"
-                  }`}
-                >
-                  {date.getDate()}
-                </span>
+                <div className="flex items-start justify-between gap-1">
+                  <span
+                    className={`flex h-5 min-w-5 items-center justify-center self-start rounded-full px-1 text-xs font-semibold ${
+                      isToday ? "text-primary" : inMonth ? "text-ink" : "text-ink-muted/50"
+                    }`}
+                  >
+                    {date.getDate()}
+                  </span>
+                  {/* 2.6 便签链接层：右上角便签指示；1 条直接打开，多条进入当天日视图 */}
+                  {dayNotes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        if (dayNotes.length === 1) onOpenNote(dayNotes[0].id);
+                        else onSelectDay(key);
+                      }}
+                      title={
+                        dayNotes.length === 1
+                          ? dayNotes[0].title || "未命名便签"
+                          : `${dayNotes.length} 条便签，点击查看当天`
+                      }
+                      className="flex flex-shrink-0 items-center gap-0.5 rounded-full px-1 py-0.5 text-[var(--note)] transition-colors hover:bg-[var(--note)]/10"
+                    >
+                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="text-[10px] font-semibold leading-none">{dayNotes.length}</span>
+                    </button>
+                  )}
+                </div>
                 {/* 窄屏：项目色点（不溢出、信息层级保留） */}
                 <div className="mt-1 flex flex-wrap items-center gap-0.5 sm:hidden">
                   {colors.slice(0, 3).map((c, i) => (
