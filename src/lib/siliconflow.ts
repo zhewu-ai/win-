@@ -218,7 +218,9 @@ async function callChat(
   const startedAt = Date.now();
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  // M13 R2 复测：60s 硬超时容易误杀，改环境变量可配（默认 120s）
+  const timeoutMs = Number(process.env.SILICONFLOW_TIMEOUT_MS || 120_000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(API_URL, {

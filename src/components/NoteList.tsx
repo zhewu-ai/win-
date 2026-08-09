@@ -352,7 +352,7 @@ export default function NoteList({
           isSelected ? selectedCls : "card-surface"
         }`}
       >
-        <div className="flex min-h-[146px] flex-col px-5 py-4">
+        <div className="flex min-h-[108px] flex-col px-4 py-3">
           {/* Title row：多选勾选框内联在标题行首 */}
           <div className="flex items-start gap-2">
             {selectionMode && (
@@ -373,7 +373,7 @@ export default function NoteList({
             )}
             <div className="min-w-0 flex-1">
               <p
-                className={`text-[17px] leading-[1.18] font-bold truncate ${
+                className={`text-[16px] leading-[1.2] font-bold truncate ${
                   isSelected ? "text-white" : "text-ink"
                 }`}
               >
@@ -385,11 +385,11 @@ export default function NoteList({
 
           {/* Summary lines：最多 2 行，超出截断，不撑开卡片 */}
           {summaryLines.length > 0 && (
-            <div className="mt-1.5 space-y-0.5">
+            <div className="mt-1 space-y-0.5">
               {summaryLines.map((line, i) => (
                 <p
                   key={i}
-                  className={`text-[15px] leading-[1.28] font-semibold truncate ${
+                  className={`text-[13px] leading-[1.3] font-semibold truncate ${
                     isSelected ? "text-white/[0.82]" : "text-ink-secondary"
                   }`}
                 >
@@ -400,11 +400,11 @@ export default function NoteList({
           )}
 
           {/* Meta row：钉底，保证卡片高度统一 */}
-          <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+          <div className="mt-auto flex items-center justify-between gap-3 pt-1.5">
             <div className="flex items-center gap-3">
               {progress && (
                 <span
-                  className={`text-[13px] leading-tight font-semibold ${
+                  className={`text-[12px] leading-tight font-semibold ${
                     isSelected ? "text-white/[0.72]" : "text-ink-muted"
                   }`}
                 >
@@ -413,7 +413,7 @@ export default function NoteList({
               )}
             </div>
             <span
-              className={`text-[13px] leading-tight font-semibold ${
+              className={`text-[12px] leading-tight font-semibold ${
                 isSelected ? "text-white/[0.72]" : "text-ink-muted"
               }`}
             >

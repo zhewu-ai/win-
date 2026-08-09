@@ -50,10 +50,19 @@ export default function ImportStepPanel({ stages, elapsed = 0, failed = false, o
             {s.label}
           </span>
           {s.status === "active" && s.id === "ai" && (
-            <span className="ml-auto text-ink-muted">已等待 {elapsed}s…</span>
+            <span className="ml-auto text-ink-muted">
+              {elapsed >= 60
+                ? `识别仍在继续，已等待 ${elapsed}s，可能需要更长时间…`
+                : `已等待 ${elapsed}s…`}
+            </span>
           )}
         </div>
       ))}
+      {stages.some((s) => s.id === "ai" && s.status === "active") && (
+        <p className="pt-0.5 text-[10px] text-ink-muted">
+          识别期间请勿关闭或离开此页面，否则结果可能丢失。
+        </p>
+      )}
       {failed && (
         <div className="pt-1">
           {failedStage?.error && <p className="pb-1 text-[11px] text-danger">{failedStage.error}</p>}
