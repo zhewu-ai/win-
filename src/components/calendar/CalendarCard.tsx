@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import type { CalendarEvent } from "@/types";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { todayStr, weekdayLabel } from "@/lib/calendar-date";
@@ -9,10 +8,19 @@ import { eventTimeLabel } from "./EventChip";
 
 const MONTH_NAMES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
-// 侧边栏顶部日历卡片（仅管理员展示）：工作日历入口 + 今日预览。
-// 视觉与便签卡片统一（card-surface + rounded-card）。卡片主体点击进 /calendar；
-// 底部轻量「+ 添加今日事件」直接打开今日新建弹窗。用独立 useCalendarEvents 实例拉今天。
-export default function CalendarCard() {
+interface Props {
+  /** 卡片主体点击：打开右面板嵌入日历（不跳独立页） */
+  onOpen: () => void;
+  /** 底部「+ 添加今日事件」：打开右面板并弹出今日新建事件弹窗 */
+  onOpenNew: () => void;
+  /** 选中态（右面板正在展示日历） */
+  active?: boolean;
+}
+
+// 左侧「日历」分组入口卡片（仅管理员展示）：工作日历入口 + 今日预览。
+// 视觉与便签卡片统一（card-surface / card-selected + rounded-card）；
+// 位于 NoteList 的 px-3 滚动容器内，宽度 w-full。卡片主体点击 → onOpen，底部「+」→ onOpenNew。
+export default function CalendarCard({ onOpen, onOpenNew, active }: Props) {
   const { events, loading, fetchRange } = useCalendarEvents();
 
   useEffect(() => {
@@ -32,11 +40,16 @@ export default function CalendarCard() {
   )}`;
   const undone = events.filter((e) => e.status !== "done");
   const first2 = events.slice(0, 2);
-  const today = todayStr();
+
+  const rootCls = active ? "card-selected card-selected-gray" : "card-surface";
 
   return (
-    <div className="mx-3 mb-2 flex-shrink-0 rounded-card card-surface">
-      <Link href="/calendar" className="block px-3 py-2.5">
+    <div className={`w-full rounded-card ${rootCls}`}>
+      <button
+        onClick={onOpen}
+        className="block w-full text-left px-3 py-2.5 rounded-t-card"
+        title="打开工作日历"
+      >
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
             <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -78,17 +91,18 @@ export default function CalendarCard() {
             )}
           </>
         )}
-      </Link>
+      </button>
 
-      <Link
-        href={`/calendar?date=${today}&new=1`}
-        className="flex items-center gap-1 border-t border-border-light/60 px-3 py-1.5 text-xs text-ink-muted hover:text-primary transition-colors"
+      <button
+        onClick={onOpenNew}
+        className="flex items-center gap-1 w-full border-t border-border-light/60 px-3 py-1.5 text-xs text-ink-muted hover:text-primary transition-colors"
+        title="添加今日事件"
       >
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
         </svg>
         添加今日事件
-      </Link>
+      </button>
     </div>
   );
 }

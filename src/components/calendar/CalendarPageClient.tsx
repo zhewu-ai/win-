@@ -1,14 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { CalendarEvent, CalendarEventInput } from "@/types";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import {
   addDays,
   fromDateStr,
-  isValidDateRange,
   monthOptions,
   startOfWeek,
   toDateStr,
@@ -20,6 +18,23 @@ import TodayList from "./TodayList";
 import EventEditorDialog from "./EventEditorDialog";
 
 type CalendarView = "month" | "week" | "day";
+
+export interface CalendarInitialAction {
+  date?: string;
+  newEvent?: boolean;
+  eventId?: string;
+}
+
+interface Props {
+  /** 嵌入态（首页右面板）：单栏时提供返回回调关闭面板；双栏不传则头部无返回区 */
+  onBack?: () => void;
+  /** true → 根节点填充父容器（flex-1 h-full），用于首页嵌入；false → 独立页 h-screen */
+  embedded?: boolean;
+  /** 父级触发的「打开新建事件弹窗」；n 递增可重复触发，null 忽略 */
+  openNewEvent?: { date: string; n: number } | null;
+  /** 独立页从 URL 深链读到的初始动作，挂载时生效一次 */
+  initialAction?: CalendarInitialAction | null;
+}
 
 function rangeFor(view: CalendarView, monthDate: Date, weekStart: Date, dayDate: Date): { from: string; to: string } {
   if (view === "day") {
@@ -37,8 +52,12 @@ function rangeFor(view: CalendarView, monthDate: Date, weekStart: Date, dayDate:
   };
 }
 
-export default function CalendarPageClient() {
-  const searchParams = useSearchParams();
+export default function CalendarPageClient({
+  onBack,
+  embedded = false,
+  openNewEvent = null,
+  initialAction = null,
+}: Props) {
   const [view, setView] = useState<CalendarView>("month");
   const [today, setToday] = useState<Date>(() => new Date());
   const [monthDate, setMonthDate] = useState<Date>(() => new Date());
@@ -58,22 +77,33 @@ export default function CalendarPageClient() {
     void fetchRange(range.from, range.to);
   }, [fetchRange, range.from, range.to]);
 
-  // 首页今日条/快速新建 → /calendar?date=YYYY-MM-DD&new=1 时打开新建弹窗；
-  // /calendar?event=<id> 时等列表加载后打开该事件编辑弹窗（首页今日条无便签事件点击）。
+  const initialApplied = useRef(false);
+
+  // 深链初始动作（独立页 /calendar?date=...&new=1 / ?event=<id>），仅首次生效
   useEffect(() => {
-    const date = searchParams.get("date");
-    const eid = searchParams.get("event");
-    if (searchParams.get("new") === "1" && date && isValidDateRange(date, date)) {
+    if (initialApplied.current || !initialAction) return;
+    initialApplied.current = true;
+    const { date, newEvent, eventId } = initialAction;
+    if (newEvent && date) {
       setDayDate(fromDateStr(date));
       setEditorDate(date);
       setEditingEvent(null);
       setEditorOpen(true);
-    } else if (eid) {
-      setPendingEventId(eid);
+    } else if (eventId) {
+      setPendingEventId(eventId);
     }
-    // 仅在首次进入时读取
+    // 仅首次进入时生效
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialAction]);
+
+  // 嵌入态父级「+ 添加今日事件」：n 递增时打开新建事件弹窗（可重复触发）
+  useEffect(() => {
+    if (!openNewEvent) return;
+    setDayDate(fromDateStr(openNewEvent.date));
+    setEditorDate(openNewEvent.date);
+    setEditingEvent(null);
+    setEditorOpen(true);
+  }, [openNewEvent]);
 
   useEffect(() => {
     if (!pendingEventId) return;
@@ -150,18 +180,35 @@ export default function CalendarPageClient() {
   const monthSelectOptions = useMemo(() => monthOptions(monthDate), [monthDate]);
 
   return (
-    <div className="h-screen flex flex-col bg-page-bg">
+    <div
+      className={`${
+        embedded ? "flex-1 flex flex-col h-full min-h-0 bg-page-bg" : "h-screen flex flex-col bg-page-bg"
+      }`}
+    >
       {/* 顶栏 */}
       <header className="flex items-center gap-2 px-3 py-2 border-b border-border-light bg-sidebar-bg flex-shrink-0 flex-wrap">
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          返回便签
-        </Link>
+        {onBack ? (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
+            title="返回列表"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            返回
+          </button>
+        ) : !embedded ? (
+          <Link
+            href="/"
+            className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            返回便签
+          </Link>
+        ) : null}
         <h1 className="text-base font-bold text-ink whitespace-nowrap">工作日历</h1>
 
         <div className="mx-1 h-4 w-px bg-border-light" />

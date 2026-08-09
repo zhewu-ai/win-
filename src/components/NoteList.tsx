@@ -6,6 +6,7 @@ import { formatNoteTime } from "@/lib/format-time";
 import { displayPlainText } from "@/lib/link-parser";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import ConfirmDialog from "./ConfirmDialog";
+import CalendarCard from "./calendar/CalendarCard";
 
 interface Props {
   notes: Note[];
@@ -14,6 +15,11 @@ interface Props {
   onBulkDelete: (ids: string[]) => Promise<void>;
   loading?: boolean;
   searchQuery?: string;
+  /** M12 R2 管理员「日历」分组入口 */
+  isAdmin?: boolean;
+  onOpenCalendar?: () => void;
+  onOpenCalendarNew?: () => void;
+  calendarActive?: boolean;
 }
 
 const ACCENT: Record<string, string> = {
@@ -161,6 +167,10 @@ export default function NoteList({
   onBulkDelete,
   loading,
   searchQuery,
+  isAdmin,
+  onOpenCalendar,
+  onOpenCalendarNew,
+  calendarActive,
 }: Props) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
@@ -186,6 +196,32 @@ export default function NoteList({
     }
   }, [notes.length]);
 
+  const pinned = notes.filter((n) => n.isPinned);
+  const regular = notes.filter((n) => !n.isPinned);
+  const regularGroups = regular.reduce<
+    Array<{ label: string; rank: number; notes: Note[] }>
+  >((groups, note) => {
+    const { label, rank } = getDateSection(note.updatedAt);
+    const group = groups.find((g) => g.label === label);
+    if (group) {
+      group.notes.push(note);
+    } else {
+      groups.push({ label, rank, notes: [note] });
+    }
+    return groups;
+  }, []);
+  // Deterministic ordering: 今天 first, then older buckets; newest within each section.
+  regularGroups.sort((a, b) => a.rank - b.rank);
+  regularGroups.forEach((g) =>
+    g.notes.sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
+  );
+
+  // M12 R2：管理员「日历」分组并入列表结构（置顶/日期分组顺位下移）；
+  // 管理员空便签列表下入口仍可见，故空态只在非管理员时 early-return。
+  const showCalendarGroup = Boolean(isAdmin && onOpenCalendar);
+
   if (loading) {
     return (
       <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin [scrollbar-gutter:stable]">
@@ -199,7 +235,7 @@ export default function NoteList({
     );
   }
 
-  if (notes.length === 0) {
+  if (notes.length === 0 && !showCalendarGroup) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-center">
         <div>
@@ -225,28 +261,6 @@ export default function NoteList({
       </div>
     );
   }
-
-  const pinned = notes.filter((n) => n.isPinned);
-  const regular = notes.filter((n) => !n.isPinned);
-  const regularGroups = regular.reduce<
-    Array<{ label: string; rank: number; notes: Note[] }>
-  >((groups, note) => {
-    const { label, rank } = getDateSection(note.updatedAt);
-    const group = groups.find((g) => g.label === label);
-    if (group) {
-      group.notes.push(note);
-    } else {
-      groups.push({ label, rank, notes: [note] });
-    }
-    return groups;
-  }, []);
-  // Deterministic ordering: 今天 first, then older buckets; newest within each section.
-  regularGroups.sort((a, b) => a.rank - b.rank);
-  regularGroups.forEach((g) =>
-    g.notes.sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    )
-  );
 
   const visibleIds = notes.map((n) => n.id);
   const allSelected =
@@ -441,6 +455,30 @@ export default function NoteList({
       )}
 
       <div className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-2.5 scrollbar-thin [scrollbar-gutter:stable]">
+        {/* M12 R2 日历分组：管理员展示，位于置顶/日期分组之上 */}
+        {showCalendarGroup && (
+          <div>
+            <SectionHeader
+              label="日历"
+              icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+            <CalendarCard
+              onOpen={onOpenCalendar!}
+              onOpenNew={onOpenCalendarNew!}
+              active={calendarActive}
+            />
+          </div>
+        )}
+
+        {/* 管理员空便签列表：入口仍可见，下方行内空提示 */}
+        {notes.length === 0 && (
+          <div className="py-10 text-center">
+            <p className="text-ink-muted text-[15px] font-semibold">
+              {searchQuery ? "未找到匹配的便签" : "还没有便签，点击下方「新建」开始"}
+            </p>
+          </div>
+        )}
+
         {pinned.length > 0 && (
           <div>
             <SectionHeader

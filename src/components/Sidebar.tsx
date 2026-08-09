@@ -3,7 +3,6 @@
 import type { Note } from "@/types";
 import NoteList from "./NoteList";
 import AccountMenu from "./AccountMenu";
-import CalendarCard from "./calendar/CalendarCard";
 
 interface Props {
   notes: Note[];
@@ -17,8 +16,12 @@ interface Props {
   onRefresh?: () => void;
   refreshing?: boolean;
   onCollapse?: () => void;
-  /** M12 管理员灰度：true 时展示「日历」入口。 */
+  /** M12 管理员灰度：true 时列表顶部展示「日历」分组入口卡片。 */
   isAdmin?: boolean;
+  /** M12 R2：日历入口卡片回调（右面板嵌入展示，不跳独立页） */
+  onOpenCalendar?: () => void;
+  onOpenCalendarNew?: () => void;
+  calendarActive?: boolean;
 }
 
 export default function Sidebar({
@@ -34,6 +37,9 @@ export default function Sidebar({
   refreshing,
   onCollapse,
   isAdmin,
+  onOpenCalendar,
+  onOpenCalendarNew,
+  calendarActive,
 }: Props) {
   return (
     <div className="flex flex-col h-full min-h-0 bg-sidebar-bg">
@@ -104,10 +110,7 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* M12 工作日历入口卡片：仅管理员展示 */}
-      {isAdmin && <CalendarCard />}
-
-      {/* Note list */}
+      {/* Note list（含 M12 日历分组入口卡片，仅管理员） */}
       <div className="flex-1 min-h-0 flex flex-col">
         <NoteList
           notes={notes}
@@ -116,6 +119,10 @@ export default function Sidebar({
           onBulkDelete={onBulkDelete}
           loading={loading}
           searchQuery={searchQuery}
+          isAdmin={isAdmin}
+          onOpenCalendar={onOpenCalendar}
+          onOpenCalendarNew={onOpenCalendarNew}
+          calendarActive={calendarActive}
         />
       </div>
 

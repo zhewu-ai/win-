@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import OfflineBar from "@/components/OfflineBar";
+import CalendarPageClient from "@/components/calendar/CalendarPageClient";
 import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { todayStr } from "@/lib/calendar-date";
 import { deleteNoteOfflineAware } from "@/lib/offline/persist";
 import { getDraft } from "@/lib/offline/draft";
 import type { Note } from "@/types";
@@ -23,6 +25,9 @@ export default function HomePage() {
   const mode = useLayoutMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  // M12 R2：右面板嵌入日历。calendarNewEvent 触发「+ 添加今日事件」弹窗（n 递增可重复触发）
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarNewEvent, setCalendarNewEvent] = useState<{ date: string; n: number } | null>(null);
   // M11.1.1 内部链接跳转返回栈：栈顶是「当前便签的来源便签」
   const [noteNavStack, setNoteNavStack] = useState<string[]>([]);
   const [refreshToast, setRefreshToast] = useState<string | null>(null);
@@ -46,6 +51,20 @@ export default function HomePage() {
     });
   };
 
+  // M12 R2：打开右面板嵌入日历（不跳独立页）；newEvent 时联动弹出今日新建事件弹窗
+  const openCalendar = useCallback((opts?: { newEvent?: boolean }) => {
+    setCalendarOpen(true);
+    if (opts?.newEvent) {
+      const d = todayStr();
+      setCalendarNewEvent((prev) => ({ date: d, n: (prev?.n ?? 0) + 1 }));
+    }
+  }, []);
+
+  const closeCalendar = useCallback(() => {
+    setCalendarOpen(false);
+    setCalendarNewEvent(null);
+  }, []);
+
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
   // M11.1.1 返回条文案：栈顶来源便签的标题；来源已删则提示失效
@@ -58,6 +77,7 @@ export default function HomePage() {
     : "";
 
   const handleCreate = async () => {
+    setCalendarOpen(false);
     try {
       const note = await createNote();
       setSelectedNoteId(note.id);
@@ -68,7 +88,8 @@ export default function HomePage() {
   };
 
   const handleSelect = (id: string) => {
-    // 手动点左侧列表视为新路径起点，清空内部链接返回栈
+    // 手动点左侧列表视为新路径起点，清空内部链接返回栈；同时关闭日历面板
+    setCalendarOpen(false);
     setNoteNavStack([]);
     setSelectedNoteId(id);
     setShowEditor(true);
@@ -261,18 +282,19 @@ export default function HomePage() {
       <OfflineBar />
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
-            单栏 → 编辑打开时收起（复用 width/opacity 动画），否则全宽显示；
-            双栏 → 固定 350px，仅随用户手动折叠状态隐藏（w-0+opacity 过渡动画），不随窗口缩放自动变化。 */}
+            单栏 → 编辑打开或日历打开时收起，否则全宽显示；双栏 → 固定 350px，随手动折叠隐藏。
+            不带 width/opacity 过渡：transition-property 与宽度同帧变化会被浏览器冻结在起始值
+            （R1 §9.6 记录的老 bug：双栏 350px ↔ 单栏 100% 卡在 350px），改为即时收起，彻底消除。 */}
         <div
           className={`${
             mode === "single"
-              ? !showEditor
+              ? !showEditor && !calendarOpen
                 ? "flex w-full border-r border-border-light"
                 : "flex w-0 opacity-0 overflow-hidden pointer-events-none"
               : sidebarCollapsed
                 ? "flex w-0 opacity-0 overflow-hidden pointer-events-none"
                 : "flex w-[350px] border-r border-border-light"
-          } flex-shrink-0 flex-col bg-sidebar-bg transition-[width,opacity] duration-150 ease-out`}
+          } flex-shrink-0 flex-col bg-sidebar-bg`}
         >
           <Sidebar
             notes={notes}
@@ -287,6 +309,9 @@ export default function HomePage() {
             refreshing={refreshing}
             onCollapse={mode === "single" ? undefined : toggleSidebar}
             isAdmin={isAdmin}
+            onOpenCalendar={() => openCalendar()}
+            onOpenCalendarNew={() => openCalendar({ newEvent: true })}
+            calendarActive={calendarOpen}
           />
         </div>
 
@@ -303,28 +328,36 @@ export default function HomePage() {
           </button>
         )}
 
-        {/* 编辑器：单栏时编辑打开才显示；双栏始终显示 */}
+        {/* 编辑器/日历：单栏时编辑或日历打开才显示；双栏始终显示 */}
         <div
           className={`${
-            mode === "single" && !showEditor ? "hidden" : "flex"
+            mode === "single" && !showEditor && !calendarOpen ? "hidden" : "flex"
           } flex-1 flex-col`}
         >
-          <NoteEditor
-            note={selectedNote}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
-            onArchive={handleArchive}
-            onNewNote={handleCreate}
-            showBackButton={mode === "single"}
-            onBack={handleBack}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-            refreshReadyRef={editorRefreshRef}
-            onOpenNote={openNoteById}
-            linkableNotes={notes}
-            onGoBack={goBackLinkedNote}
-            backLabel={backLabel}
-          />
+          {calendarOpen ? (
+            <CalendarPageClient
+              embedded
+              onBack={mode === "single" ? closeCalendar : undefined}
+              openNewEvent={calendarNewEvent}
+            />
+          ) : (
+            <NoteEditor
+              note={selectedNote}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onArchive={handleArchive}
+              onNewNote={handleCreate}
+              showBackButton={mode === "single"}
+              onBack={handleBack}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+              refreshReadyRef={editorRefreshRef}
+              onOpenNote={openNoteById}
+              linkableNotes={notes}
+              onGoBack={goBackLinkedNote}
+              backLabel={backLabel}
+            />
+          )}
         </div>
       </div>
 
