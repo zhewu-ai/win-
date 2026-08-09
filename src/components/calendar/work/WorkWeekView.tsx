@@ -97,13 +97,13 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
 
   // 桌面：week-head + week-grid 七列（始终渲染，空列显示「无排期」）
   const desktop = (
-    <div className="hidden sm:block">
+    <div className="hidden min-h-0 flex-1 flex-col sm:flex">
       <div className="grid grid-cols-7 border-b border-border-light bg-surface-strong/40">
         {days.map((d) => (
           <WeekdayHead key={toDateStr(d)} date={d} today={today} onSelectDay={onSelectDay} />
         ))}
       </div>
-      <div className="grid min-h-[480px] grid-cols-7">
+      <div className="grid min-h-0 flex-1 grid-cols-7">
         {days.map((d) => {
           const key = toDateStr(d);
           const dayItems = dayStrMap.get(key) ?? [];
@@ -111,7 +111,7 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
           return (
             <div
               key={key}
-              className={`flex flex-col items-stretch gap-1.5 border-r border-border-light/60 px-1.5 py-2 last:border-r-0 ${
+              className={`flex min-h-0 flex-col items-stretch gap-1.5 overflow-y-auto border-r border-border-light/60 px-1.5 py-2 last:border-r-0 ${
                 isToday ? "bg-primary/5" : ""
               }`}
             >
@@ -168,7 +168,7 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
   );
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       {desktop}
       {narrow}
     </div>

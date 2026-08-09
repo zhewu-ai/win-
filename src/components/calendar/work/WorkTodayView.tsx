@@ -23,11 +23,6 @@ interface Props {
 
 const MONTH_NAMES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
-function shortDate(s: string): string {
-  const [, m, d] = s.split("-");
-  return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
-}
-
 function SectionTitle({ label }: { label: string }) {
   return <h3 className="px-0.5 pb-1 text-xs font-bold text-ink-muted">{label}</h3>;
 }
@@ -124,7 +119,7 @@ export default function WorkTodayView({
   const emptyAll = todayRanges.length === 0 && todayNodes.length === 0 && todayNotes.length === 0;
 
   return (
-    <div className="flex flex-col gap-3 max-w-[680px]">
+    <div className="flex flex-col gap-4">
       <div className="flex items-baseline gap-2 px-0.5">
         <h2 className="text-base font-bold text-ink">
           {MONTH_NAMES[date.getMonth()]} 月 {date.getDate()} 日
@@ -134,112 +129,119 @@ export default function WorkTodayView({
       </div>
 
       {emptyAll ? (
-        <div className="px-3 py-10 text-center text-sm text-ink-muted">今天没有进行中的排期。</div>
+        <div className="px-3 py-10 text-center text-sm text-ink-muted">今天无排期。</div>
       ) : (
         <div className="flex flex-col gap-4">
           {/* 今天要做：进行中的连续阶段 */}
           <div className="flex flex-col gap-1.5">
             <SectionTitle label="今天要做" />
             {todayRanges.length === 0 ? (
-              <Empty text="今天没有进行中的连续阶段。" />
+              <Empty text="暂无" />
             ) : (
-              todayRanges.map((it) => (
-                <div key={it.id} className="flex items-start gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onToggleDone(it)}
-                    aria-label="标记完成"
-                    className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
-                      it.status === "done"
-                        ? "border-primary bg-primary text-white"
-                        : "border-border-strong bg-panel-bg hover:border-primary/50"
-                    }`}
-                  >
-                    {it.status === "done" && (
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <TodayItemCard
-                      item={it}
-                      colorOf={colorOf}
-                      projectNameOf={projectNameOf}
-                      showNoteLayer={showNoteLayer}
-                      sub={`处于 ${shortDate(it.startDate)} - ${shortDate(it.endDate)} 阶段内，今天继续推进。`}
-                      onClick={() => onItemClick(it)}
-                    />
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {todayRanges.map((it) => (
+                  <div key={it.id} className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onToggleDone(it)}
+                      aria-label="标记完成"
+                      className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+                        it.status === "done"
+                          ? "border-primary bg-primary text-white"
+                          : "border-border-strong bg-panel-bg hover:border-primary/50"
+                      }`}
+                    >
+                      {it.status === "done" && (
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <TodayItemCard
+                        item={it}
+                        colorOf={colorOf}
+                        projectNameOf={projectNameOf}
+                        showNoteLayer={showNoteLayer}
+                        sub="阶段中"
+                        onClick={() => onItemClick(it)}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* 今天节点 */}
-          <div className="flex flex-col gap-1.5">
-            <SectionTitle label="今天节点" />
-            {todayNodes.length === 0 ? (
-              <Empty text="今天没有提交、会议或反馈节点。" />
-            ) : (
-              todayNodes.map((it) => (
-                <div key={it.id} className="flex items-start gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onToggleDone(it)}
-                    aria-label={it.status === "done" ? "标记为未完成" : "标记为完成"}
-                    className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
-                      it.status === "done"
-                        ? "border-primary bg-primary text-white"
-                        : "border-border-strong bg-panel-bg hover:border-primary/50"
-                    }`}
-                  >
-                    {it.status === "done" && (
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <TodayItemCard
-                      item={it}
-                      colorOf={colorOf}
-                      projectNameOf={projectNameOf}
-                      showNoteLayer={showNoteLayer}
-                      sub={`单日节点 · ${shortDate(it.startDate)}`}
-                      onClick={() => onItemClick(it)}
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* 今天编辑的便签（便签链接层，受开关控制） */}
-          <div className="flex flex-col gap-1.5">
-            <SectionTitle label="今天编辑的便签" />
-            {todayNotes.length === 0 ? (
-              <Empty text="今天没有符合筛选条件的便签链接。" />
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {todayNotes.map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => onOpenNote(n.id)}
-                    className="flex items-center gap-2 rounded-btn border border-border-light bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
-                  >
-                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span className="min-w-0 flex-1 truncate text-xs text-ink">{n.title || "未命名便签"}</span>
-                    <span className="flex-shrink-0 text-[11px] text-ink-muted">
-                      {n.createdAt && toDateStr(new Date(n.createdAt)) === dateStr ? "今天创建" : "今天更新"}
-                    </span>
-                  </button>
                 ))}
               </div>
             )}
+          </div>
+
+          {/* 今天节点 + 今天编辑的便签：宽屏分两栏 */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* 今天节点 */}
+            <div className="flex flex-col gap-1.5">
+              <SectionTitle label="今天节点" />
+              {todayNodes.length === 0 ? (
+                <Empty text="暂无" />
+              ) : (
+                <div className="grid gap-1.5">
+                  {todayNodes.map((it) => (
+                    <div key={it.id} className="flex items-start gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onToggleDone(it)}
+                        aria-label={it.status === "done" ? "标记为未完成" : "标记为完成"}
+                        className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+                          it.status === "done"
+                            ? "border-primary bg-primary text-white"
+                            : "border-border-strong bg-panel-bg hover:border-primary/50"
+                        }`}
+                      >
+                        {it.status === "done" && (
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <TodayItemCard
+                          item={it}
+                          colorOf={colorOf}
+                          projectNameOf={projectNameOf}
+                          showNoteLayer={showNoteLayer}
+                          sub="节点"
+                          onClick={() => onItemClick(it)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 今天编辑的便签（便签链接层，受开关控制） */}
+            <div className="flex flex-col gap-1.5">
+              <SectionTitle label="今天编辑的便签" />
+              {todayNotes.length === 0 ? (
+                <Empty text="暂无" />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {todayNotes.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => onOpenNote(n.id)}
+                      className="flex items-center gap-2 rounded-btn border border-border-light bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                    >
+                      <svg className="h-3.5 w-3.5 flex-shrink-0 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="min-w-0 flex-1 truncate text-xs text-ink">{n.title || "未命名便签"}</span>
+                      <span className="flex-shrink-0 text-[11px] text-ink-muted">
+                        {n.createdAt && toDateStr(new Date(n.createdAt)) === dateStr ? "今天创建" : "今天更新"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

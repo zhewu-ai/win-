@@ -56,8 +56,6 @@ function nextProjectColor(projects: WorkProject[]): WorkProjectColor {
   return counts[0].c;
 }
 
-const SUB_COPY = "添加连续阶段和单日节点，保存后写入数据库并在月/周/今日视图同步显示。";
-
 export default function CalendarPageClient({
   onBack,
   embedded = false,
@@ -94,7 +92,7 @@ export default function CalendarPageClient({
   const [showArchived, setShowArchived] = useState(false);
   const [showNoteLayer, setShowNoteLayer] = useState(true);
   const [newItemNonce, setNewItemNonce] = useState(0);
-  const [newPresetType, setNewPresetType] = useState<"range" | "node">("range");
+  const [rightMode, setRightMode] = useState<"item" | "project">("item");
   const [rightOpen, setRightOpen] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project: WorkProject | null }>({
     open: false,
@@ -154,7 +152,7 @@ export default function CalendarPageClient({
     initialApplied.current = true;
     const { date, newEvent, eventId } = initialAction;
     if (newEvent && date) {
-      startNewItem(date, null, "range");
+      startNewItem(date, null);
     } else if (eventId) {
       setPendingItemId(eventId);
     }
@@ -208,11 +206,20 @@ export default function CalendarPageClient({
     [projectDialog.project, updateProject, createProject]
   );
 
+  const handleEditProject = useCallback((p: WorkProject) => {
+    setUiError(null);
+    setProjectDialog({ open: true, project: p });
+  }, []);
+
   const handleArchiveProject = useCallback(
     async (p: WorkProject) => {
       try {
         await updateProject(p.id, { status: "archived" });
-        if (!showArchived && selectedProjectId === p.id) setSelectedProjectId(null);
+        if (!showArchived && selectedProjectId === p.id) {
+          setSelectedProjectId(null);
+          setRightMode("item");
+          setRightOpen(false);
+        }
       } catch {
         setUiError("归档失败，请重试");
       }
@@ -236,7 +243,11 @@ export default function CalendarPageClient({
       if (!window.confirm(`删除项目「${p.name}」？其排期条目将不再显示。`)) return;
       try {
         await deleteProject(p.id);
-        if (selectedProjectId === p.id) setSelectedProjectId(null);
+        if (selectedProjectId === p.id) {
+          setSelectedProjectId(null);
+          setRightMode("item");
+          setRightOpen(false);
+        }
         setUiError(null);
       } catch {
         setUiError("删除失败，请重试");
@@ -246,11 +257,11 @@ export default function CalendarPageClient({
   );
 
   // ---- 排期条目 ----
-  const startNewItem = useCallback((dateStr: string, projectId: string | null, type: "range" | "node" = "range") => {
+  const startNewItem = useCallback((dateStr: string, projectId: string | null) => {
     setDayDate(fromDateStr(dateStr));
     setSelectedItemId(null);
     if (projectId) setSelectedProjectId(projectId);
-    setNewPresetType(type);
+    setRightMode("item");
     setNewItemNonce((n) => n + 1);
     setRightOpen(true);
     setUiError(null);
@@ -265,9 +276,17 @@ export default function CalendarPageClient({
   const handleItemClick = useCallback((item: WorkScheduleItem) => {
     setSelectedItemId(item.id);
     setSelectedProjectId(item.projectId);
+    setRightMode("item");
     setRightOpen(true);
     setUiError(null);
   }, []);
+
+  const handleAddItemToProject = useCallback(
+    (p: WorkProject) => {
+      startNewItem(todayStr(), p.id);
+    },
+    [startNewItem]
+  );
 
   const handleCreateItem = useCallback(
     async (input: WorkScheduleItemInput) => {
@@ -328,6 +347,7 @@ export default function CalendarPageClient({
   const selectProject = useCallback((id: string) => {
     setSelectedProjectId((prev) => (prev === id ? null : id));
     setSelectedItemId(null);
+    setRightMode("project");
     setRightOpen(true);
   }, []);
 
@@ -375,6 +395,10 @@ export default function CalendarPageClient({
 
   const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) ?? null : null;
   const selectedItem = useMemo(() => (selectedItemId ? items.find((it) => it.id === selectedItemId) ?? null : null), [items, selectedItemId]);
+
+  const detailProject = rightMode === "project" ? selectedProject : null;
+  const detailLifecycle = detailProject ? lifecycleOf.get(detailProject.id) ?? "active" : "active";
+  const detailItemCount = detailProject ? items.filter((i) => i.projectId === detailProject.id).length : 0;
 
   // 右栏项目下拉：active 项目 + 当前选中条目所属项目
   const rightSelectProjects = useMemo(() => {
@@ -430,24 +454,6 @@ export default function CalendarPageClient({
         {opts.secondary && life === "archived" && (
           <span className="flex-shrink-0 text-[10px] font-bold text-ink-muted">已归档</span>
         )}
-        {opts.secondary && life === "ended" && (
-          <button
-            type="button"
-            onClick={() => void handleArchiveProject(p)}
-            className="flex-shrink-0 rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary hover:text-ink transition-colors"
-          >
-            归档
-          </button>
-        )}
-        {opts.secondary && life === "archived" && (
-          <button
-            type="button"
-            onClick={() => void handleRestoreProject(p)}
-            className="flex-shrink-0 rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-primary transition-colors"
-          >
-            恢复
-          </button>
-        )}
       </div>
     );
   };
@@ -456,13 +462,20 @@ export default function CalendarPageClient({
     <WorkRightPanel
       projects={rightSelectProjects}
       selectedProject={selectedProject}
+      detailProject={detailProject}
+      detailItemCount={detailItemCount}
+      detailLifecycle={detailLifecycle}
       selectedItem={selectedItem}
       todayStr={todayDateStr}
       newItemNonce={newItemNonce}
-      presetType={newPresetType}
       onCreateItem={handleCreateItem}
       onUpdateItem={handleUpdateItem}
       onDeleteItem={handleDeleteItem}
+      onEditProject={handleEditProject}
+      onArchiveProject={handleArchiveProject}
+      onRestoreProject={handleRestoreProject}
+      onDeleteProject={handleDeleteProject}
+      onAddItemToProject={handleAddItemToProject}
       onNewProject={openNewProject}
       onCancel={handleCancelForm}
     />
@@ -501,7 +514,6 @@ export default function CalendarPageClient({
 
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[22px] font-bold leading-tight text-ink">工作日历</h1>
-          <p className="hidden text-xs leading-relaxed text-ink-muted sm:block">{SUB_COPY}</p>
         </div>
 
         {/* 导航 */}
@@ -575,7 +587,7 @@ export default function CalendarPageClient({
       {/* 筛选行：项目 chip + 便签链接 + 手动添加入口 + 归档开关 */}
       <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-border-light px-3 py-2">
         {emptyNoProjects ? (
-          <span className="text-xs text-ink-muted">暂无项目，点击「新增项目」开始。</span>
+          <span className="text-xs text-ink-muted">暂无项目</span>
         ) : (
           activeProjects.map((p) => renderChip(p, { secondary: false }))
         )}
@@ -596,22 +608,13 @@ export default function CalendarPageClient({
         <div className="flex-1 min-w-0" />
 
         <button
-          onClick={() => startNewItem(todayStr(), null, "range")}
+          onClick={() => startNewItem(todayStr(), null)}
           className="flex items-center gap-1 rounded-btn bg-primary px-2.5 py-1 text-sm font-medium text-white transition-colors hover:bg-primary/90 whitespace-nowrap"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
           </svg>
-          添加连续阶段
-        </button>
-        <button
-          onClick={() => startNewItem(todayStr(), null, "node")}
-          className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          添加单日节点
+          添加排期
         </button>
         <button
           onClick={openNewProject}
@@ -646,7 +649,7 @@ export default function CalendarPageClient({
 
           {emptyNoProjects ? (
             <div className="py-16 text-center">
-              <p className="text-sm text-ink-muted">暂无工作项目，点击右上角「新增项目」开始。</p>
+              <p className="text-sm text-ink-muted">暂无项目</p>
               <button
                 onClick={openNewProject}
                 className="mt-4 rounded-btn bg-primary px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"

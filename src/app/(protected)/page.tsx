@@ -26,6 +26,8 @@ export default function HomePage() {
   const [showEditor, setShowEditor] = useState(false);
   // M12 工作日历：右面板嵌入日历
   const [calendarOpen, setCalendarOpen] = useState(false);
+  // M12 返修：从日历便签进入编辑器后保持日历挂载（保留视图上下文），供「返回工作日历」恢复
+  const [cameFromCalendar, setCameFromCalendar] = useState(false);
   // M12 返修：工作日历筛选状态上提（隐藏项目 + 便签链接层），与左侧预览卡同步
   const [calendarHidden, setCalendarHidden] = useState<Set<string>>(new Set());
   const [calendarNoteLayer, setCalendarNoteLayer] = useState(true);
@@ -63,6 +65,13 @@ export default function HomePage() {
 
   const closeCalendar = useCallback(() => {
     setCalendarOpen(false);
+    setCameFromCalendar(false);
+  }, []);
+
+  // M12 返修：从日历进入的便签点击「返回工作日历」→ 恢复日历面板（视图上下文由保持挂载保留）
+  const returnToCalendar = useCallback(() => {
+    setCameFromCalendar(false);
+    setCalendarOpen(true);
   }, []);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
@@ -78,6 +87,7 @@ export default function HomePage() {
 
   const handleCreate = async () => {
     setCalendarOpen(false);
+    setCameFromCalendar(false);
     try {
       const note = await createNote();
       setSelectedNoteId(note.id);
@@ -90,12 +100,19 @@ export default function HomePage() {
   const handleSelect = (id: string) => {
     // 手动点左侧列表视为新路径起点，清空内部链接返回栈；同时关闭日历面板
     setCalendarOpen(false);
+    setCameFromCalendar(false);
     setNoteNavStack([]);
     setSelectedNoteId(id);
     setShowEditor(true);
   };
 
   const handleBack = () => {
+    // 从日历进入的便签：返回箭头回到工作日历，而非关闭编辑器
+    if (cameFromCalendar) {
+      setCameFromCalendar(false);
+      setCalendarOpen(true);
+      return;
+    }
     setShowEditor(false);
     setSelectedNoteId(null);
   };
@@ -202,11 +219,14 @@ export default function HomePage() {
     [notes, applyNote, showRefreshToast, selectedNoteId]
   );
 
-  // M12：今日视图「今天编辑的便签」点击 → 关闭日历并打开对应便签
+  // M12：今日视图「今天编辑的便签」点击 → 打开便签但保持日历挂载，可「返回工作日历」
   const handleCalendarOpenNote = useCallback(
-    (noteId: string) => {
-      setCalendarOpen(false);
-      void openNoteById(noteId);
+    async (noteId: string) => {
+      const ok = await openNoteById(noteId);
+      if (ok) {
+        setCalendarOpen(false);
+        setCameFromCalendar(true);
+      }
     },
     [openNoteById]
   );
@@ -286,6 +306,11 @@ export default function HomePage() {
     }
   }, [loading, notes, selectedNoteId]);
 
+  // 右面板任一内容激活（编辑器 / 日历 / 日历进入未退出）→ 单栏模式收起侧栏
+  const panelActive = showEditor || calendarOpen || cameFromCalendar;
+  // 日历面板可见：日历打开，或「从日历进入的便签已关闭」自动回到日历
+  const showCalendarPanel = isAdmin && (calendarOpen || (cameFromCalendar && !showEditor));
+
   return (
     <div className="h-screen flex flex-col bg-page-bg">
       <OfflineBar />
@@ -297,7 +322,7 @@ export default function HomePage() {
         <div
           className={`${
             mode === "single"
-              ? !showEditor && !calendarOpen
+              ? !panelActive
                 ? "flex w-full border-r border-border-light"
                 : "flex w-0 opacity-0 overflow-hidden pointer-events-none"
               : sidebarCollapsed
@@ -338,23 +363,29 @@ export default function HomePage() {
           </button>
         )}
 
-        {/* 编辑器/日历：单栏时编辑或日历打开才显示；双栏始终显示 */}
+        {/* 编辑器/日历：单栏时面板激活才显示；双栏始终显示。
+            日历层保持挂载（进入便签后仅隐藏不卸载），「返回工作日历」时恢复视图上下文。 */}
         <div
           className={`${
-            mode === "single" && !showEditor && !calendarOpen ? "hidden" : "flex"
-          } flex-1 flex-col`}
+            mode === "single" && !panelActive ? "hidden" : "flex"
+          } relative flex-1 flex-col`}
         >
-          {calendarOpen ? (
-            <CalendarPageClient
-              embedded
-              onBack={mode === "single" ? closeCalendar : undefined}
-              notes={notes}
-              onOpenNote={handleCalendarOpenNote}
-              hiddenProjectIds={calendarHidden}
-              showNoteLayer={calendarNoteLayer}
-              onFilterChange={handleCalendarFilterChange}
-            />
-          ) : (
+          {/* 日历层：从日历进入便签后保持挂载以保留视图上下文，仅切换可见性 */}
+          {isAdmin && (calendarOpen || cameFromCalendar) && (
+            <div className={`${showCalendarPanel ? "flex" : "hidden"} absolute inset-0 flex-col`}>
+              <CalendarPageClient
+                embedded
+                onBack={mode === "single" ? closeCalendar : undefined}
+                notes={notes}
+                onOpenNote={handleCalendarOpenNote}
+                hiddenProjectIds={calendarHidden}
+                showNoteLayer={calendarNoteLayer}
+                onFilterChange={handleCalendarFilterChange}
+              />
+            </div>
+          )}
+          {/* 便签层：编辑中的便签（无选中时显示空占位） */}
+          {!showCalendarPanel && (
             <NoteEditor
               note={selectedNote}
               onUpdate={handleUpdate}
@@ -370,6 +401,8 @@ export default function HomePage() {
               linkableNotes={notes}
               onGoBack={goBackLinkedNote}
               backLabel={backLabel}
+              onCalendarReturn={cameFromCalendar ? returnToCalendar : undefined}
+              calendarReturnLabel={cameFromCalendar ? "返回工作日历" : undefined}
             />
           )}
         </div>

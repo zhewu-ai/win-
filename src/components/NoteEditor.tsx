@@ -41,6 +41,9 @@ interface Props {
   /** M11.1.1 内部链接跳转返回栈：编辑器顶部显示「← 来源标题」返回入口 */
   onGoBack?: () => void;
   backLabel?: string;
+  /** M12 返修：从日历便签进入时，编辑器顶部显示「返回工作日历」入口 */
+  onCalendarReturn?: () => void;
+  calendarReturnLabel?: string;
 }
 
 function formatEditorDate(dateStr?: string): string {
@@ -74,6 +77,8 @@ export default function NoteEditor({
   linkableNotes,
   onGoBack,
   backLabel,
+  onCalendarReturn,
+  calendarReturnLabel,
 }: Props) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -797,6 +802,27 @@ export default function NoteEditor({
           )}
         </div>
       </div>
+
+      {/* M12 返修：从日历便签进入的返回入口，点击回到工作日历并恢复视图上下文 */}
+      {onCalendarReturn && calendarReturnLabel && (
+        <div className="flex items-center min-w-0 px-3 py-1.5 border-b border-border-light bg-surface-hover/40">
+          <button
+            onClick={onCalendarReturn}
+            className="flex items-center gap-1 min-w-0 text-xs text-primary hover:underline"
+          >
+            <svg
+              className="w-3.5 h-3.5 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="truncate">{calendarReturnLabel}</span>
+          </button>
+        </div>
+      )}
 
       {/* M11.1.1 内部链接跳转返回入口：点击「← 来源标题」回到来源便签 */}
       {onGoBack && backLabel && (
