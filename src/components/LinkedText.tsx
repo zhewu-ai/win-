@@ -17,6 +17,8 @@ export default function LinkedText({ text, onOpenNote, className }: Props) {
   const segments = useMemo(() => parseNoteLinks(text), [text]);
 
   const handleExternalClick = (e: React.MouseEvent, href: string) => {
+    // 渲染层外层 div 的 onClick 负责进入编辑态；点链接时应直接打开，不触发
+    e.stopPropagation();
     if (!isTauri()) return; // 网页端走原生 <a target="_blank">
     e.preventDefault();
     void openExternal(href);
@@ -65,12 +67,27 @@ export default function LinkedText({ text, onOpenNote, className }: Props) {
             onClick={(e) => handleInternalClick(e, seg.noteId)}
             className={
               failed
-                ? "text-ink-muted/60 line-through decoration-ink-muted/40 cursor-not-allowed"
-                : "text-primary underline decoration-primary/40 hover:decoration-primary underline-offset-2"
+                ? "inline-flex items-center gap-1 rounded-md bg-ink-muted/10 px-1.5 py-0.5 text-ink-muted/60 line-through decoration-ink-muted/40 cursor-not-allowed"
+                : "inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-primary hover:bg-primary/15 transition-colors"
             }
             title={failed ? "该便签已失效" : "打开便签"}
           >
-            {failed ? `${seg.title}（已失效）` : seg.title}
+            <svg
+              className="w-3.5 h-3.5 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.75}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+              />
+            </svg>
+            <span className="align-middle">
+              {failed ? `${seg.title}（已失效）` : seg.title}
+            </span>
           </button>
         );
       })}

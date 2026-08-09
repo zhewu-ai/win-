@@ -13,6 +13,8 @@ interface Props {
   onFocus?: React.FocusEventHandler<HTMLTextAreaElement>;
   onBlur?: React.FocusEventHandler<HTMLTextAreaElement>;
   onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  onKeyUp?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  onClick?: React.MouseEventHandler<HTMLTextAreaElement>;
   onPaste?: React.ClipboardEventHandler<HTMLTextAreaElement>;
 }
 
@@ -27,6 +29,8 @@ export default function AutoGrowTextarea({
   onFocus,
   onBlur,
   onKeyDown,
+  onKeyUp,
+  onClick,
   onPaste,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -62,6 +66,8 @@ export default function AutoGrowTextarea({
       onFocus={onFocus}
       onBlur={onBlur}
       onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
+      onClick={onClick}
       onPaste={onPaste}
       className={className}
       style={{

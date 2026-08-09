@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from "react";
 import type { Note, NoteColor, ChecklistItem, ChecklistGroup, Attachment } from "@/types";
 import ColorPicker from "./ColorPicker";
 import SaveStatus from "./SaveStatus";
@@ -10,6 +10,8 @@ import ImageUploadButton, { type ImageUploadHandle } from "./ImageUploadButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import LinkedText from "./LinkedText";
 import InsertNoteLinkDialog from "./InsertNoteLinkDialog";
+import InlineNoteLinkSuggest from "./InlineNoteLinkSuggest";
+import { getCaretCoordinates } from "@/lib/caret";
 import ConfirmDialog from "./ConfirmDialog";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
@@ -18,6 +20,7 @@ import { clearDraft, getDraft } from "@/lib/offline/draft";
 import { useDraftRecovery } from "@/hooks/useDraftRecovery";
 
 const DEBOUNCE_MS = 800;
+const MAX_LINK_SUGGEST = 8;
 
 interface Props {
   note: Note | null;
@@ -35,6 +38,9 @@ interface Props {
   onOpenNote?: (noteId: string) => Promise<boolean> | boolean | void;
   /** M11.1 可插入链接的未归档便签列表（插入对话框搜索来源） */
   linkableNotes?: Note[];
+  /** M11.1.1 内部链接跳转返回栈：编辑器顶部显示「← 来源标题」返回入口 */
+  onGoBack?: () => void;
+  backLabel?: string;
 }
 
 function formatEditorDate(dateStr?: string): string {
@@ -66,6 +72,8 @@ export default function NoteEditor({
   refreshReadyRef,
   onOpenNote,
   linkableNotes,
+  onGoBack,
+  backLabel,
 }: Props) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -81,8 +89,15 @@ export default function NoteEditor({
   >("saved");
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  // M11.1 阅读模式：正文只读渲染（外部/内部链接可点），点击正文或菜单项回到编辑
-  const [preview, setPreview] = useState(false);
+  // M11.1.1 正文焦点态：失焦后正文自动切渲染层（链接可点），点击非链接区回编辑
+  const [contentFocused, setContentFocused] = useState(false);
+  // M11.1.1 `[[` 唤起便签搜索：start = "[[..." 起始位置，query = 已输入关键词，anchor = 光标视口坐标
+  const [linkSuggest, setLinkSuggest] = useState<{
+    start: number;
+    query: string;
+    anchor: { top: number; left: number; height: number };
+  } | null>(null);
+  const [suggestIndex, setSuggestIndex] = useState(0);
   const [insertLinkOpen, setInsertLinkOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // 工具栏按编辑区实际容器宽度分三档（≥560 舒展 / 380-779 紧凑 / <380 极简）
@@ -96,10 +111,17 @@ export default function NoteEditor({
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const lastCaretRef = useRef(0);
+  const lastSuggestQueryRef = useRef<string | null>(null);
   const prevNoteIdRef = useRef<string | null>(null);
   const prevUpdatedAtRef = useRef<string | undefined>(undefined);
   const moreRef = useRef<HTMLDivElement>(null);
   const imageUploadRef = useRef<ImageUploadHandle>(null);
+
+  // M11.1.1 正文渲染层：text 模式 + 有内容 + 未聚焦 + 无 `[[` 浮层时显示链接渲染，
+  // 点击非链接区进入编辑；不再依赖「阅读模式」。
+  const showRenderLayer =
+    mode === "text" && content.trim().length > 0 && !contentFocused && !linkSuggest;
 
   // 防丢保护：关闭/刷新前同步写 localStorage 草稿镜像；保存成功且服务器追上后清理
   const { restored, setRestored, confirmSaved, writeDraft } = useDraftRecovery({
@@ -257,8 +279,9 @@ export default function NoteEditor({
 
     if (noteIdChanged) {
       flushPendingSave();
-      // 切换便签退出阅读模式/关闭插入对话框，避免旧便签的预览态残留
-      setPreview(false);
+      // 切换便签退出正文渲染态/关闭插入对话框与 `[[` 搜索，避免旧便签的态残留
+      setContentFocused(false);
+      setLinkSuggest(null);
       setInsertLinkOpen(false);
     }
 
@@ -427,14 +450,99 @@ export default function NoteEditor({
   const handleContentChange = (value: string) => {
     setContent(value);
     debouncedSave({ content: value });
+    evalLinkSuggest();
   };
 
+  // `[[` 搜索结果：过滤逻辑与插入对话框一致（标题优先，其次普通文本正文包含）
+  const linkSuggestResults = useMemo(() => {
+    if (!linkSuggest) return [];
+    const kw = linkSuggest.query.trim().toLowerCase();
+    const pool = (linkableNotes || []).filter((n) => !n.isArchived);
+    if (!kw) return pool.slice(0, MAX_LINK_SUGGEST);
+    return pool
+      .filter(
+        (n) =>
+          n.title.toLowerCase().includes(kw) ||
+          (n.mode !== "checklist" && n.content.toLowerCase().includes(kw))
+      )
+      .slice(0, MAX_LINK_SUGGEST);
+  }, [linkSuggest, linkableNotes]);
+
+  // M11.1.1 `[[` 触发便签搜索：光标前文本以 "[[query" 结尾时弹浮层。
+  // 跳过 "note:" 前缀（原生语法手写时不劫持）；query 变化重置选中索引，光标移动仅更新坐标。
+  const evalLinkSuggest = useCallback(() => {
+    const ta = contentRef.current;
+    if (!ta) return;
+    const pos = ta.selectionStart;
+    const before = ta.value.slice(0, pos);
+    const m = before.match(/\[\[([^\]\n]*)$/);
+    if (m && !m[1].startsWith("note:")) {
+      const anchor = getCaretCoordinates(ta, ta.value, pos);
+      if (anchor) {
+        if (lastSuggestQueryRef.current !== m[1]) {
+          lastSuggestQueryRef.current = m[1];
+          setSuggestIndex(0);
+        }
+        setLinkSuggest({ start: m.index!, query: m[1], anchor });
+        return;
+      }
+    }
+    lastSuggestQueryRef.current = null;
+    setLinkSuggest(null);
+  }, []);
+
+  // 键盘操作 `[[` 浮层：上下移动 / Enter 选中 / Esc 关闭；无浮层时放行
+  const handleContentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!linkSuggest) return;
+    const count = linkSuggestResults.length;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setLinkSuggest(null);
+    } else if (e.key === "ArrowDown" && count > 0) {
+      e.preventDefault();
+      setSuggestIndex((i) => Math.min(i + 1, count - 1));
+    } else if (e.key === "ArrowUp" && count > 0) {
+      e.preventDefault();
+      setSuggestIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && count > 0) {
+      e.preventDefault();
+      const target = linkSuggestResults[suggestIndex];
+      if (target) acceptLinkSuggest(target);
+    }
+  };
+
+  // 选中搜索结果：用 [[note:id|title]] 替换 "[[query"，保存并聚焦回正文
+  const acceptLinkSuggest = useCallback(
+    (note: Note) => {
+      if (!linkSuggest) return;
+      const snippet = `[[note:${note.id}|${note.title || "未命名便签"}]]`;
+      const ta = contentRef.current;
+      const end = ta ? ta.selectionStart : linkSuggest.start + linkSuggest.query.length;
+      const next =
+        content.slice(0, linkSuggest.start) + snippet + content.slice(end);
+      setLinkSuggest(null);
+      lastSuggestQueryRef.current = null;
+      setContent(next);
+      immediateSave({ content: next });
+      requestAnimationFrame(() => {
+        const el = contentRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(
+            linkSuggest.start + snippet.length,
+            linkSuggest.start + snippet.length
+          );
+        }
+      });
+    },
+    [linkSuggest, content, immediateSave]
+  );
+
   // M11.1 插入内部便签链接：优先在 textarea 光标处插入并落到链接后，
-  // 无光标信息（如处于阅读模式）则追加到正文末尾。
+  // 无光标信息（如正文处于渲染层）则追加到正文末尾。
   const insertNoteLink = useCallback(
     (target: Note) => {
       setInsertLinkOpen(false);
-      setPreview(false);
       const snippet = `[[note:${target.id}|${target.title || "未命名便签"}]]`;
       const ta = contentRef.current;
       if (!ta) {
@@ -737,19 +845,6 @@ export default function NoteEditor({
                   <button
                     onClick={() => {
                       setMoreOpen(false);
-                      setPreview((p) => !p);
-                    }}
-                    className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    {preview ? "返回编辑" : "阅读模式"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMoreOpen(false);
                       setInsertLinkOpen(true);
                     }}
                     className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
@@ -804,6 +899,27 @@ export default function NoteEditor({
         </div>
       </div>
 
+      {/* M11.1.1 内部链接跳转返回入口：点击「← 来源标题」回到来源便签 */}
+      {onGoBack && backLabel && (
+        <div className="flex items-center min-w-0 px-3 py-1.5 border-b border-border-light bg-surface-hover/40">
+          <button
+            onClick={onGoBack}
+            className="flex items-center gap-1 min-w-0 text-xs text-primary hover:underline"
+          >
+            <svg
+              className="w-3.5 h-3.5 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="truncate">{backLabel}</span>
+          </button>
+        </div>
+      )}
+
       {/* Editor body */}
       {restored && (
         <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-b border-primary/20 text-sm text-primary">
@@ -842,11 +958,22 @@ export default function NoteEditor({
             />
 
             {mode === "text" ? (
-              preview ? (
+              showRenderLayer ? (
                 <div
                   className="w-full text-edit-body text-ink whitespace-pre-wrap break-words min-h-[200px] cursor-text"
-                  onClick={() => setPreview(false)}
-                  title="点击返回编辑"
+                  onClick={() => {
+                    setContentFocused(true);
+                    requestAnimationFrame(() => {
+                      const ta = contentRef.current;
+                      if (ta) {
+                        ta.focus();
+                        ta.setSelectionRange(
+                          lastCaretRef.current,
+                          lastCaretRef.current
+                        );
+                      }
+                    });
+                  }}
                 >
                   {content ? (
                     <LinkedText text={content} onOpenNote={onOpenNote} />
@@ -855,14 +982,34 @@ export default function NoteEditor({
                   )}
                 </div>
               ) : (
-                <AutoGrowTextarea
-                  value={content}
-                  onChange={handleContentChange}
-                  placeholder="开始记录..."
-                  className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
-                  minHeight={200}
-                  innerRef={contentRef}
-                />
+                <>
+                  <AutoGrowTextarea
+                    value={content}
+                    onChange={handleContentChange}
+                    onFocus={() => setContentFocused(true)}
+                    onBlur={() => {
+                      setContentFocused(false);
+                      setLinkSuggest(null);
+                      lastSuggestQueryRef.current = null;
+                      lastCaretRef.current = contentRef.current?.selectionStart ?? 0;
+                    }}
+                    onKeyUp={() => evalLinkSuggest()}
+                    onClick={() => evalLinkSuggest()}
+                    onKeyDown={handleContentKeyDown}
+                    placeholder="开始记录..."
+                    className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
+                    minHeight={200}
+                    innerRef={contentRef}
+                  />
+                  {linkSuggest && (
+                    <InlineNoteLinkSuggest
+                      results={linkSuggestResults}
+                      anchor={linkSuggest.anchor}
+                      selectedIndex={suggestIndex}
+                      onSelect={acceptLinkSuggest}
+                    />
+                  )}
+                </>
               )
             ) : (
               <ChecklistEditor

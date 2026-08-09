@@ -20,6 +20,8 @@ export default function HomePage() {
   const mode = useLayoutMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  // M11.1.1 内部链接跳转返回栈：栈顶是「当前便签的来源便签」
+  const [noteNavStack, setNoteNavStack] = useState<string[]>([]);
   const [refreshToast, setRefreshToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // NoteEditor 暴露的刷新前置保护：flush 未保存内容 + 重试失败载荷，返回是否可安全刷新
@@ -43,6 +45,15 @@ export default function HomePage() {
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
+  // M11.1.1 返回条文案：栈顶来源便签的标题；来源已删则提示失效
+  const stackTopId = noteNavStack[noteNavStack.length - 1];
+  const backNote = stackTopId ? notes.find((n) => n.id === stackTopId) : undefined;
+  const backLabel = stackTopId
+    ? backNote
+      ? backNote.title || "未命名便签"
+      : "来源便签已失效"
+    : "";
+
   const handleCreate = async () => {
     try {
       const note = await createNote();
@@ -54,6 +65,8 @@ export default function HomePage() {
   };
 
   const handleSelect = (id: string) => {
+    // 手动点左侧列表视为新路径起点，清空内部链接返回栈
+    setNoteNavStack([]);
     setSelectedNoteId(id);
     setShowEditor(true);
   };
@@ -73,6 +86,7 @@ export default function HomePage() {
       if (selectedNoteId === id) {
         setSelectedNoteId(null);
         setShowEditor(false);
+        setNoteNavStack([]);
       }
       fetchNotes(searchQuery || undefined);
     } catch {
@@ -96,6 +110,7 @@ export default function HomePage() {
       if (selectedNoteId && data.deletedIds.includes(selectedNoteId)) {
         setSelectedNoteId(null);
         setShowEditor(false);
+        setNoteNavStack([]);
       }
       fetchNotes(searchQuery || undefined);
     } catch {
@@ -104,6 +119,7 @@ export default function HomePage() {
   };
 
   const handleArchive = async (id: string) => {
+    setNoteNavStack([]);
     if (selectedNoteId === id) {
       setSelectedNoteId(null);
       setShowEditor(false);
@@ -124,10 +140,20 @@ export default function HomePage() {
 
   // M11.1 内部链接打开：列表已有目标 → 直接选中；否则按 id 拉取单条，
   // 404/403/失败返回 false（链接变灰已失效）；归档目标不跳转、仅提示。
+  // M11.1.1 成功跳转前把当前便签压入返回栈，供「返回上一条」逐级回退。
   const openNoteById = useCallback(
     async (noteId: string): Promise<boolean> => {
+      const pushIfNeeded = () =>
+        setNoteNavStack((prev) =>
+          selectedNoteId &&
+          selectedNoteId !== noteId &&
+          prev[prev.length - 1] !== selectedNoteId
+            ? [...prev, selectedNoteId]
+            : prev
+        );
       const existing = notes.find((n) => n.id === noteId);
       if (existing) {
+        pushIfNeeded();
         setSelectedNoteId(noteId);
         setShowEditor(true);
         return true;
@@ -141,6 +167,7 @@ export default function HomePage() {
           return true;
         }
         applyNote(note);
+        pushIfNeeded();
         setSelectedNoteId(noteId);
         setShowEditor(true);
         return true;
@@ -148,8 +175,21 @@ export default function HomePage() {
         return false;
       }
     },
-    [notes, applyNote, showRefreshToast]
+    [notes, applyNote, showRefreshToast, selectedNoteId]
   );
+
+  // M11.1.1 返回上一条：弹出栈顶来源便签并切回；来源已删除则仅提示不跳转。
+  const goBackLinkedNote = useCallback(() => {
+    const targetId = noteNavStack[noteNavStack.length - 1];
+    if (!targetId) return;
+    setNoteNavStack((prev) => prev.slice(0, -1));
+    if (notes.some((n) => n.id === targetId)) {
+      setSelectedNoteId(targetId);
+      setShowEditor(true);
+    } else {
+      showRefreshToast("来源便签已失效");
+    }
+  }, [noteNavStack, notes, showRefreshToast]);
 
   // 手动刷新：先保护本机未保存内容（flush + 重试失败载荷），再静默拉服务器最新列表。
   // 不覆盖本机本地 pending 队列（mirrorNote 已有保护，此处不引入覆盖）。
@@ -182,6 +222,7 @@ export default function HomePage() {
       if (detail?.deletedId && detail.deletedId === selectedNoteId) {
         setSelectedNoteId(null);
         setShowEditor(false);
+        setNoteNavStack([]);
       }
       fetchNotes(searchQuery || undefined);
     };
@@ -266,6 +307,8 @@ export default function HomePage() {
             refreshReadyRef={editorRefreshRef}
             onOpenNote={openNoteById}
             linkableNotes={notes}
+            onGoBack={goBackLinkedNote}
+            backLabel={backLabel}
           />
         </div>
       </div>
