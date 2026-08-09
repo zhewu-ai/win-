@@ -230,3 +230,35 @@ export interface QuickWeekPreviewRow {
   startDate: string;
   endDate: string;
 }
+
+// --- M13 AI 排期导入 ---
+
+export interface CalendarImportDraftProject {
+  tempId: string;
+  name: string;
+  colorKey?: WorkProjectColor;
+}
+
+export interface CalendarImportDraftItem {
+  tempId: string;
+  projectTempId: string;
+  title: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  note?: string;
+  confidence?: number; // 0-1；< 0.7 前端标「请确认」
+  sourceRef?: string; // 来源坐标等（不展示，仅调试/日志）
+}
+
+export interface CalendarImportDraft {
+  projects: CalendarImportDraftProject[];
+  items: CalendarImportDraftItem[];
+  warnings: string[];
+}
+
+export interface CalendarImportUsage {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  durationMs: number;
+}

@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { WorkProject, WorkScheduleItem, WorkScheduleItemInput } from "@/types";
+import type {
+  WorkProject,
+  WorkScheduleItem,
+  WorkScheduleItemInput,
+  CalendarImportDraft,
+  CalendarImportUsage,
+} from "@/types";
 import EventNotePicker from "../EventNotePicker";
+import ImportPreviewPanel from "./ImportPreviewPanel";
 import { wpClass } from "./color";
 
 interface Props {
@@ -33,6 +40,16 @@ interface Props {
   onNewProject: () => void;
   /** 取消：关闭新建面板 / 取消选中回到新建态。 */
   onCancel: () => void;
+  /** M13 AI 导入。 */
+  importDraft?: CalendarImportDraft | null;
+  importUsage?: CalendarImportUsage | null;
+  importBusy?: boolean;
+  importError?: string | null;
+  importDoneMessage?: string | null;
+  onParseFile: (file: File, kind: "image" | "excel") => void;
+  onUpdateDraft: (draft: CalendarImportDraft) => void;
+  onConfirmImport: () => void;
+  onCancelImport: () => void;
 }
 
 const inputCls =
@@ -57,6 +74,15 @@ export default function WorkRightPanel({
   onAddItemToProject,
   onNewProject,
   onCancel,
+  importDraft,
+  importUsage,
+  importBusy,
+  importError,
+  importDoneMessage,
+  onParseFile,
+  onUpdateDraft,
+  onConfirmImport,
+  onCancelImport,
 }: Props) {
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
@@ -141,9 +167,25 @@ export default function WorkRightPanel({
     }
   };
 
+  const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>, kind: "image" | "excel") => {
+    const f = e.target.files?.[0];
+    if (f) onParseFile(f, kind);
+    e.target.value = "";
+  };
+
   return (
     <aside className="flex h-full min-h-0 w-full flex-col overflow-y-auto border-l border-border-light bg-sidebar-bg scrollbar-thin">
-      {detailMode && detailProject ? (
+      {importDraft ? (
+        <ImportPreviewPanel
+          draft={importDraft}
+          usage={importUsage}
+          busy={importBusy}
+          error={importError}
+          onUpdateDraft={onUpdateDraft}
+          onConfirm={onConfirmImport}
+          onCancel={onCancelImport}
+        />
+      ) : detailMode && detailProject ? (
         <ProjectDetail
           project={detailProject}
           itemCount={detailItemCount}
@@ -258,6 +300,36 @@ export default function WorkRightPanel({
               + 新增项目
             </button>
           )}
+
+          {/* M13 AI 导入：辅助生成草稿，弱于手动添加 */}
+          <div className="mx-3 mb-3 mt-2 flex-shrink-0 border-t border-border-light pt-2">
+            <p className="mb-1.5 text-xs font-medium text-ink-muted">导入排期</p>
+            <div className="flex items-center gap-1.5">
+              <label className="cursor-pointer rounded-btn border border-border-light bg-panel-bg px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-50">
+                上传图片
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={importBusy}
+                  onChange={(e) => handlePickFile(e, "image")}
+                />
+              </label>
+              <label className="cursor-pointer rounded-btn border border-border-light bg-panel-bg px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-50">
+                上传 Excel
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  disabled={importBusy}
+                  onChange={(e) => handlePickFile(e, "excel")}
+                />
+              </label>
+            </div>
+            {importBusy && <p className="mt-1.5 text-xs text-ink-muted">识别中...</p>}
+            {importError && !importBusy && <p className="mt-1.5 text-xs text-danger">{importError}</p>}
+            {importDoneMessage && <p className="mt-1.5 text-xs text-success">✓ {importDoneMessage}</p>}
+          </div>
         </>
       )}
     </aside>

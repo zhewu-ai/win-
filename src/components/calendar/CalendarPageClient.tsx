@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
+  CalendarImportDraft,
+  CalendarImportUsage,
   Note,
   WorkProject,
   WorkProjectColor,
@@ -101,6 +103,21 @@ export default function CalendarPageClient({
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
   const [fetchedNotes, setFetchedNotes] = useState<Note[] | null>(null);
+
+  // M13 AI 排期导入状态：uploading/preview/confirming/idle
+  const [importState, setImportState] = useState<{
+    step: "idle" | "uploading" | "preview" | "confirming";
+    draft: CalendarImportDraft | null;
+    usage: CalendarImportUsage | null;
+    error: string | null;
+    doneMessage: string | null;
+  }>({ step: "idle", draft: null, usage: null, error: null, doneMessage: null });
+  const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+    };
+  }, []);
 
   // 独立页无 notes prop 时自行拉取未归档便签（今日视图「今天编辑的便签」链接层）
   useEffect(() => {
@@ -334,6 +351,74 @@ export default function CalendarPageClient({
     [onOpenNote]
   );
 
+  // ---- M13 AI 排期导入 ----
+  const handleParseFile = useCallback(async (file: File, kind: "image" | "excel") => {
+    setImportState((s) => ({ ...s, step: "uploading", error: null, doneMessage: null }));
+    try {
+      const fd = new FormData();
+      fd.append("kind", kind);
+      fd.append("file", file);
+      const res = await fetch("/api/calendar-imports/parse", { method: "POST", body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setImportState((s) => ({
+          ...s,
+          step: "idle",
+          error: data?.message || "识别失败，请重试",
+        }));
+        return;
+      }
+      setImportState((s) => ({
+        ...s,
+        step: "preview",
+        draft: data.draft ?? null,
+        usage: data.usage ?? null,
+        error: null,
+      }));
+    } catch {
+      setImportState((s) => ({ ...s, step: "idle", error: "网络错误，请重试" }));
+    }
+  }, []);
+
+  const handleUpdateDraft = useCallback((draft: CalendarImportDraft) => {
+    setImportState((s) => ({ ...s, draft }));
+  }, []);
+
+  const handleCancelImport = useCallback(() => {
+    setImportState({ step: "idle", draft: null, usage: null, error: null, doneMessage: null });
+  }, []);
+
+  const handleConfirmImport = useCallback(async () => {
+    if (!importState.draft) return;
+    setImportState((s) => ({ ...s, step: "confirming", error: null }));
+    try {
+      const res = await fetch("/api/calendar-imports/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft: importState.draft }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setImportState((s) => ({
+          ...s,
+          step: "preview",
+          error: data?.message || data?.error || "导入失败，请重试",
+        }));
+        return;
+      }
+      const msg = `已导入 ${data?.created?.items ?? 0} 条排期、${data?.created?.projects ?? 0} 个项目`;
+      setImportState({ step: "idle", draft: null, usage: null, error: null, doneMessage: msg });
+      void fetchProjects(true);
+      void fetchItems();
+      if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+      doneTimerRef.current = setTimeout(() => {
+        setImportState((s) => ({ ...s, doneMessage: null }));
+      }, 5000);
+    } catch {
+      setImportState((s) => ({ ...s, step: "preview", error: "网络错误，导入失败" }));
+    }
+  }, [importState.draft, fetchProjects, fetchItems]);
+
   // ---- 筛选 ----
   const toggleHidden = useCallback((id: string) => {
     setHiddenProjectIds((prev) => {
@@ -478,6 +563,15 @@ export default function CalendarPageClient({
       onAddItemToProject={handleAddItemToProject}
       onNewProject={openNewProject}
       onCancel={handleCancelForm}
+      importDraft={importState.draft}
+      importUsage={importState.usage}
+      importBusy={importState.step === "uploading" || importState.step === "confirming"}
+      importError={importState.error}
+      importDoneMessage={importState.doneMessage}
+      onParseFile={handleParseFile}
+      onUpdateDraft={handleUpdateDraft}
+      onConfirmImport={handleConfirmImport}
+      onCancelImport={handleCancelImport}
     />
   );
 
