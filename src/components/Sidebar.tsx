@@ -22,6 +22,9 @@ interface Props {
   onOpenCalendar?: () => void;
   onOpenCalendarNew?: () => void;
   calendarActive?: boolean;
+  /** M12 返修：工作日历筛选状态，同步左侧预览卡 */
+  calendarHiddenProjectIds?: Set<string>;
+  calendarShowNoteLayer?: boolean;
 }
 
 export default function Sidebar({
@@ -40,6 +43,8 @@ export default function Sidebar({
   onOpenCalendar,
   onOpenCalendarNew,
   calendarActive,
+  calendarHiddenProjectIds,
+  calendarShowNoteLayer,
 }: Props) {
   return (
     <div className="flex flex-col h-full min-h-0 bg-sidebar-bg">
@@ -123,6 +128,8 @@ export default function Sidebar({
           onOpenCalendar={onOpenCalendar}
           onOpenCalendarNew={onOpenCalendarNew}
           calendarActive={calendarActive}
+          calendarHiddenProjectIds={calendarHiddenProjectIds}
+          calendarShowNoteLayer={calendarShowNoteLayer}
         />
       </div>
 

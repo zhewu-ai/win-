@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { WorkProjectColor, WorkScheduleItem } from "@/types";
 import { addDays, isSameDay, toDateStr } from "@/lib/calendar-date";
-import WorkScheduleChip from "./WorkScheduleChip";
+import { wpClass } from "./color";
 
 interface Props {
   weekStart: Date;
@@ -11,11 +11,18 @@ interface Props {
   items: WorkScheduleItem[];
   today: Date;
   colorOf: (projectId: string) => WorkProjectColor;
+  /** 便签链接层：关闭时隐藏条目上的「关联便签」指示。 */
+  showNoteLayer: boolean;
   onItemClick: (item: WorkScheduleItem) => void;
   onSelectDay: (dateStr: string) => void;
 }
 
 const WEEK_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+
+function shortDate(s: string): string {
+  const [, m, d] = s.split("-");
+  return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
+}
 
 function itemsOnDay(items: WorkScheduleItem[], dayStr: string): WorkScheduleItem[] {
   return items
@@ -26,20 +33,45 @@ function itemsOnDay(items: WorkScheduleItem[], dayStr: string): WorkScheduleItem
     });
 }
 
-function DayHeader({ date, today, onSelectDay }: { date: Date; today: Date; onSelectDay: (s: string) => void }) {
+function WeekCard({ item, colorOf, showNoteLayer, onClick }: {
+  item: WorkScheduleItem;
+  colorOf: (projectId: string) => WorkProjectColor;
+  showNoteLayer: boolean;
+  onClick: () => void;
+}) {
+  const rangeText = item.type === "range" ? `${shortDate(item.startDate)} - ${shortDate(item.endDate)}` : shortDate(item.startDate);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`week-card group border border-border-light rounded-btn bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover ${wpClass(colorOf(item.projectId))}`}
+      style={{ borderLeftWidth: 4, borderLeftColor: "var(--wp-base)" }}
+    >
+      <span className="flex items-center gap-1 min-w-0">
+        <span className="truncate text-xs font-semibold leading-[1.35] text-ink">{item.title || "未命名"}</span>
+        {item.noteId && showNoteLayer && (
+          <svg className="w-3 h-3 flex-shrink-0 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        )}
+      </span>
+      <span className="mt-0.5 block text-[11px] leading-[1.35] text-ink-muted">{rangeText}</span>
+    </button>
+  );
+}
+
+function WeekdayHead({ date, today, onSelectDay }: { date: Date; today: Date; onSelectDay: (s: string) => void }) {
   const isToday = isSameDay(date, today);
   const label = `周${WEEK_LABELS[date.getDay() === 0 ? 6 : date.getDay() - 1]}`;
   return (
     <button
       type="button"
       onClick={() => onSelectDay(toDateStr(date))}
-      className={`flex flex-col items-center py-1.5 border-b border-border-light/60 transition-colors hover:bg-surface-hover ${
-        isToday ? "bg-primary/5" : ""
-      }`}
+      className="flex flex-col items-center gap-0.5 px-1 py-2 transition-colors hover:bg-surface-hover"
     >
-      <span className={`text-xs ${isToday ? "text-primary font-bold" : "text-ink-muted"}`}>{label}</span>
+      <span className={`text-xs font-semibold ${isToday ? "text-primary" : "text-ink-muted"}`}>{label}</span>
       <span
-        className={`mt-0.5 h-6 w-6 flex items-center justify-center rounded-full text-sm ${
+        className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
           isToday ? "bg-primary text-white font-bold" : "text-ink"
         }`}
       >
@@ -49,8 +81,8 @@ function DayHeader({ date, today, onSelectDay }: { date: Date; today: Date; onSe
   );
 }
 
-// 周视图（默认视图）：周一到周日七列，命中当天的 range 显示为紧凑小卡、node 只出现在对应日期。
-export default function WorkWeekView({ weekStart, items, today, colorOf, onItemClick, onSelectDay }: Props) {
+// 周视图（默认视图）：周一到周日七列，命中的排期显示为 week-card（左色条 + 标题 + 日期），今天高亮克制。
+export default function WorkWeekView({ weekStart, items, today, colorOf, showNoteLayer, onItemClick, onSelectDay }: Props) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const dayStrMap = useMemo(() => {
     const m = new Map<string, WorkScheduleItem[]>();
@@ -70,30 +102,37 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, onItemC
     );
   }
 
-  // 桌面：7 列
+  // 桌面：week-head + week-grid 七列
   const desktop = (
-    <div className="hidden sm:grid sm:grid-cols-7 sm:border-b sm:border-border-light">
-      {days.map((d) => {
-        const key = toDateStr(d);
-        const dayItems = dayStrMap.get(key) ?? [];
-        return (
-          <div key={key} className="flex flex-col min-h-[120px] border-r border-border-light/60 last:border-r-0">
-            <DayHeader date={d} today={today} onSelectDay={onSelectDay} />
-            <div className="flex-1 flex flex-col gap-0.5 p-1">
-              {dayItems.length === 0 && <span className="text-[10px] text-ink-muted/50">无</span>}
-              {dayItems.map((it) => (
-                <WorkScheduleChip key={it.id} item={it} colorKey={colorOf(it.projectId)} onClick={() => onItemClick(it)} />
-              ))}
+    <div className="hidden sm:block">
+      <div className="grid grid-cols-7 border-b border-border-light bg-surface-strong/40">
+        {days.map((d) => (
+          <WeekdayHead key={toDateStr(d)} date={d} today={today} onSelectDay={onSelectDay} />
+        ))}
+      </div>
+      <div className="grid min-h-[480px] grid-cols-7">
+        {days.map((d) => {
+          const key = toDateStr(d);
+          const dayItems = dayStrMap.get(key) ?? [];
+          return (
+            <div key={key} className="flex flex-col items-stretch gap-1.5 border-r border-border-light/60 px-1.5 py-2 last:border-r-0">
+              {dayItems.length === 0 ? (
+                <span className="px-1 py-2 text-[11px] text-ink-muted/60">无排期</span>
+              ) : (
+                dayItems.map((it) => (
+                  <WeekCard key={it.id} item={it} colorOf={colorOf} showNoteLayer={showNoteLayer} onClick={() => onItemClick(it)} />
+                ))
+              )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 
   // 窄窗口：纵向 7 天列表
   const narrow = (
-    <div className="sm:hidden flex flex-col divide-y divide-border-light/60">
+    <div className="flex flex-col divide-y divide-border-light/60 sm:hidden">
       {days.map((d) => {
         const key = toDateStr(d);
         const dayItems = dayStrMap.get(key) ?? [];
@@ -103,13 +142,13 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, onItemC
             <button
               type="button"
               onClick={() => onSelectDay(key)}
-              className={`flex items-center gap-2 px-3 py-2 w-full text-left transition-colors hover:bg-surface-hover ${
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-hover ${
                 isToday ? "bg-primary/5" : ""
               }`}
             >
               <span className="text-sm font-medium text-ink">周{WEEK_LABELS[d.getDay() === 0 ? 6 : d.getDay() - 1]}</span>
               <span
-                className={`h-6 w-6 flex items-center justify-center rounded-full text-sm ${
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-sm ${
                   isToday ? "bg-primary text-white font-bold" : "text-ink"
                 }`}
               >
@@ -117,10 +156,10 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, onItemC
               </span>
               <span className="ml-auto text-xs text-ink-muted">{dayItems.length} 项</span>
             </button>
-            <div className="px-3 pb-2 flex flex-col gap-0.5">
-              {dayItems.length === 0 && <span className="text-xs text-ink-muted/50">无排期</span>}
+            <div className="flex flex-col gap-1.5 px-3 pb-2">
+              {dayItems.length === 0 && <span className="px-1 py-1 text-xs text-ink-muted/60">无排期</span>}
               {dayItems.map((it) => (
-                <WorkScheduleChip key={it.id} item={it} colorKey={colorOf(it.projectId)} onClick={() => onItemClick(it)} />
+                <WeekCard key={it.id} item={it} colorOf={colorOf} showNoteLayer={showNoteLayer} onClick={() => onItemClick(it)} />
               ))}
             </div>
           </div>

@@ -7,203 +7,213 @@ import { wpClass } from "./color";
 
 interface Props {
   monthDate: Date;
-  /** 已按可见项目过滤。 */
+  /** 已按可见项目过滤（含全量日期，本组件自行按本月裁剪）。 */
   items: WorkScheduleItem[];
   today: Date;
   colorOf: (projectId: string) => WorkProjectColor;
+  /** 便签链接层：关闭时隐藏条目上的「关联便签」指示（条目本身保留）。 */
+  showNoteLayer: boolean;
   onItemClick: (item: WorkScheduleItem) => void;
   onSelectDay: (dateStr: string) => void;
 }
 
-interface Bar {
-  item: WorkScheduleItem;
-  colStart: number;
-  colSpan: number;
-  lane: number;
-}
+const ROW_H = 104;
+const LANE_TOP = 28;
+const LANE_H = 26;
+const MAX_LANES = 3;
 
 function dayDiff(a: string, b: string): number {
   return Math.round((fromDateStr(b).getTime() - fromDateStr(a).getTime()) / 86400000);
 }
 
-/** 每周的甘特条：连续阶段跨日期连成一条（不每天散落），同周多项目上下分轨。 */
-function computeWeekBars(items: WorkScheduleItem[], weekStartStr: string, weekEndStr: string): Bar[] {
-  const ranges = items
-    .filter((it) => it.type === "range" && it.startDate <= weekEndStr && it.endDate >= weekStartStr)
-    .map((it) => {
-      const vs = it.startDate > weekStartStr ? it.startDate : weekStartStr;
-      const ve = it.endDate < weekEndStr ? it.endDate : weekEndStr;
-      return { item: it, colStart: dayDiff(weekStartStr, vs), colEnd: dayDiff(weekStartStr, ve) };
-    })
-    .sort((a, b) => (a.item.startDate < b.item.startDate ? -1 : 1));
-
-  const lanes: number[][] = Array.from({ length: 7 }, () => []);
-  const bars: Bar[] = [];
-  for (const r of ranges) {
-    let lane = 0;
-    for (;;) {
-      let blocked = false;
-      for (let c = r.colStart; c <= r.colEnd; c++) {
-        if (lanes[c].includes(lane)) {
-          blocked = true;
-          break;
-        }
-      }
-      if (!blocked) break;
-      lane++;
-    }
-    for (let c = r.colStart; c <= r.colEnd; c++) lanes[c].push(lane);
-    bars.push({ item: r.item, colStart: r.colStart, colSpan: r.colEnd - r.colStart + 1, lane });
-  }
-  return bars;
+interface Seg {
+  item: WorkScheduleItem;
+  row: number;
+  col: number;
+  span: number;
+  lane: number;
+  isStart: boolean;
+  isEnd: boolean;
 }
 
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
-export default function WorkMonthView({ monthDate, items, today, colorOf, onItemClick, onSelectDay }: Props) {
+export default function WorkMonthView({ monthDate, items, today, colorOf, showNoteLayer, onItemClick, onSelectDay }: Props) {
   const cells = useMemo(() => monthGrid(monthDate.getFullYear(), monthDate.getMonth()), [monthDate]);
-  const rows = useMemo(() => {
-    const out: typeof cells[] = [];
-    for (let i = 0; i < cells.length; i += 7) out.push(cells.slice(i, i + 7));
-    return out;
-  }, [cells]);
+  const gridStartStr = useMemo(() => toDateStr(cells[0].date), [cells]);
 
-  const nodesByDate = useMemo(() => {
-    const m = new Map<string, WorkScheduleItem[]>();
+  // 甘特段：range 跨行拆段、node 单段；每行内贪心分轨（最多 3 条），超轨折叠为「+N 更多」。
+  const { segs, perRowOverflow } = useMemo(() => {
+    const segs: Seg[] = [];
+    const rows: Seg[][] = Array.from({ length: 6 }, () => []);
+
     for (const it of items) {
-      if (it.type !== "node") continue;
-      const arr = m.get(it.startDate);
-      if (arr) arr.push(it);
-      else m.set(it.startDate, [it]);
+      const s = Math.max(0, dayDiff(gridStartStr, it.startDate));
+      const e = Math.min(41, dayDiff(gridStartStr, it.endDate));
+      if (e < 0 || s > 41 || s > e) continue;
+
+      if (it.type === "node") {
+        const seg: Seg = { item: it, row: Math.floor(s / 7), col: s % 7, span: 1, lane: 0, isStart: true, isEnd: true };
+        segs.push(seg);
+        rows[seg.row].push(seg);
+        continue;
+      }
+
+      let cur = s;
+      while (cur <= e) {
+        const row = Math.floor(cur / 7);
+        const rowEnd = Math.min(e, row * 7 + 6);
+        const seg: Seg = {
+          item: it,
+          row,
+          col: cur % 7,
+          span: rowEnd - cur + 1,
+          lane: 0,
+          isStart: cur === s,
+          isEnd: rowEnd === e,
+        };
+        segs.push(seg);
+        rows[row].push(seg);
+        cur = rowEnd + 1;
+      }
     }
-    return m;
-  }, [items]);
+
+    const perRowOverflow = Array.from({ length: 6 }, () => 0);
+    for (let r = 0; r < 6; r++) {
+      const rowSegs = rows[r].sort((a, b) => a.col - b.col || a.span - b.span);
+      const occupied: number[][] = Array.from({ length: 7 }, () => []);
+      for (const sg of rowSegs) {
+        let lane = -1;
+        for (let L = 0; L < MAX_LANES; L++) {
+          let blocked = false;
+          for (let c = sg.col; c < sg.col + sg.span; c++) {
+            if (occupied[c].includes(L)) {
+              blocked = true;
+              break;
+            }
+          }
+          if (!blocked) {
+            lane = L;
+            break;
+          }
+        }
+        if (lane >= 0) {
+          sg.lane = lane;
+          for (let c = sg.col; c < sg.col + sg.span; c++) occupied[c].push(lane);
+        } else {
+          perRowOverflow[r]++;
+        }
+      }
+    }
+
+    return { segs, perRowOverflow };
+  }, [items, gridStartStr]);
 
   const hasAny = items.length > 0;
 
   return (
-    <div className="flex flex-col">
+    <div>
       {/* 表头 */}
       <div className="grid grid-cols-7 border-b border-border-light">
         {WEEKDAY_LABELS.map((label, i) => (
-          <div
-            key={i}
-            className={`px-1 py-1.5 text-center text-xs font-medium ${
-              i >= 5 ? "text-accent-pink" : "text-ink-muted"
-            }`}
-          >
+          <div key={i} className={`px-1 py-1.5 text-center text-xs font-semibold ${i >= 5 ? "text-accent-pink" : "text-ink-muted"}`}>
             {label}
           </div>
         ))}
       </div>
 
-      {rows.map((row, ri) => {
-        const weekStartStr = toDateStr(row[0].date);
-        const weekEndStr = toDateStr(row[6].date);
-        const bars = computeWeekBars(items, weekStartStr, weekEndStr);
-        const laneCount = bars.length ? Math.max(...bars.map((b) => b.lane)) + 1 : 0;
-        return (
-          <div key={ri} className="border-b border-border-light/60">
-            {/* 甘特条轨道（sm 以上显示） */}
-            {laneCount > 0 && (
-              <div className="relative hidden sm:block" style={{ height: laneCount * 20 + 4 }}>
-                {bars.map((b) => (
-                  <button
-                    key={b.item.id}
-                    type="button"
-                    onClick={() => onItemClick(b.item)}
-                    title={b.item.title}
-                    className={`absolute h-[18px] overflow-hidden rounded-sm px-1.5 text-[10px] leading-[17px] text-left whitespace-nowrap ${wpClass(
-                      colorOf(b.item.projectId)
-                    )} wp-bar transition-colors`}
-                    style={{
-                      left: `${(b.colStart / 7) * 100}%`,
-                      width: `${(b.colSpan / 7) * 100}%`,
-                      top: `${b.lane * 20}px`,
-                    }}
-                  >
-                    {b.item.title}
-                  </button>
-                ))}
+      <div className="relative">
+        {/* 42 格日历：行高固定，日期号左上，窄屏显示项目色点 */}
+        <div className="grid grid-cols-7">
+          {cells.map(({ date, inMonth }) => {
+            const key = toDateStr(date);
+            const isToday = isSameDay(date, today);
+            const colors = useMemo(() => {
+              const set = new Set<string>();
+              for (const it of items) {
+                if (it.startDate <= key && it.endDate >= key) set.add(colorOf(it.projectId));
+              }
+              return [...set];
+            }, [items, key]);
+            return (
+              <div
+                key={key}
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectDay(key)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectDay(key);
+                  }
+                }}
+                style={isToday ? { boxShadow: "inset 0 0 0 2px var(--primary)" } : undefined}
+                className={`relative h-[104px] cursor-pointer border-r border-b border-border-light/60 px-1 pt-1 transition-colors hover:bg-surface-hover [&:nth-child(7n)]:border-r-0 ${
+                  inMonth ? "" : "bg-page-bg/40"
+                }`}
+              >
+                <span
+                  className={`flex h-5 min-w-5 items-center justify-center self-start rounded-full px-1 text-xs font-semibold ${
+                    isToday ? "bg-primary text-white" : inMonth ? "text-ink" : "text-ink-muted/50"
+                  }`}
+                >
+                  {date.getDate()}
+                </span>
+                {/* 窄屏：项目色点（不溢出、信息层级保留） */}
+                <div className="mt-1 flex flex-wrap items-center gap-0.5 sm:hidden">
+                  {colors.slice(0, 3).map((c, i) => (
+                    <span key={i} className={`h-1.5 w-1.5 rounded-full wp-dot ${wpClass(c)}`} />
+                  ))}
+                  {colors.length > 3 && <span className="text-[9px] text-ink-muted">+{colors.length - 3}</span>}
+                </div>
               </div>
-            )}
+            );
+          })}
+        </div>
 
-            {/* 日期行 + 节点 */}
-            <div className="grid grid-cols-7">
-              {row.map(({ date, inMonth }) => {
-                const key = toDateStr(date);
-                const dayNodes = nodesByDate.get(key) ?? [];
-                const dayRanges = items.filter((it) => it.type === "range" && it.startDate <= key && it.endDate >= key);
-                const cellItems = [...dayNodes, ...dayRanges];
-                const isToday = isSameDay(date, today);
-                const dotColors = [...new Set(cellItems.slice(0, 3).map((it) => colorOf(it.projectId)))];
-                return (
-                  <div
-                    key={key}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectDay(key)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onSelectDay(key);
-                      }
-                    }}
-                    className={`group flex flex-col min-h-[52px] items-stretch border-r border-border-light/60 px-1 pt-1 pb-1 text-left cursor-pointer transition-colors hover:bg-surface-hover last:border-r-0 ${
-                      !inMonth ? "bg-page-bg/40" : ""
-                    }`}
-                  >
-                    <span
-                      className={`mb-0.5 flex items-center justify-center self-start h-5 min-w-5 px-1 rounded-full text-xs ${
-                        isToday
-                          ? "bg-primary text-white font-bold"
-                          : inMonth
-                            ? "text-ink"
-                            : "text-ink-muted/50"
-                      }`}
-                    >
-                      {date.getDate()}
-                    </span>
+        {/* 甘特层：覆盖整月网格，条/节点按行+轨道绝对定位（桌面） */}
+        <div className="pointer-events-none absolute inset-0 z-[5] hidden sm:block">
+          {segs.map((sg) => {
+            const it = sg.item;
+            const isNode = it.type === "node";
+            return (
+              <button
+                key={`${it.id}-${sg.row}-${sg.col}`}
+                type="button"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  onItemClick(it);
+                }}
+                title={it.title}
+                className={`wc-bar ${wpClass(colorOf(it.projectId))} ${isNode ? "wc-node" : ""} ${
+                  sg.isStart ? "wc-start" : ""
+                } ${sg.isEnd ? "wc-end" : ""}`}
+                style={{
+                  left: `calc(${sg.col} * 100% / 7 + 5px)`,
+                  width: `calc(${sg.span} * 100% / 7 - 10px)`,
+                  top: `${sg.row * ROW_H + LANE_TOP + sg.lane * LANE_H}px`,
+                }}
+              >
+                <span className="truncate">{it.title}</span>
+                {it.noteId && showNoteLayer && (
+                  <svg className="wc-note-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+          {perRowOverflow.map((n, r) =>
+            n > 0 ? (
+              <div key={r} className="absolute text-[10px] text-ink-muted" style={{ top: `${r * ROW_H + 88}px`, left: "8px" }}>
+                +{n} 更多
+              </div>
+            ) : null
+          )}
+        </div>
+      </div>
 
-                    {/* 桌面：节点小卡（最多 2 条），range 由上方甘特条承载 */}
-                    <div className="hidden sm:flex flex-col gap-0.5 min-h-0">
-                      {dayNodes.slice(0, 2).map((n) => (
-                        <button
-                          key={n.id}
-                          type="button"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            onItemClick(n);
-                          }}
-                          className={`text-left text-[10px] leading-tight rounded px-1 py-0.5 truncate ${wpClass(
-                            colorOf(n.projectId)
-                          )} wp-chip transition-colors`}
-                        >
-                          {n.title}
-                        </button>
-                      ))}
-                      {dayNodes.length > 2 && <span className="px-1 text-[10px] text-ink-muted">+{dayNodes.length - 2}</span>}
-                    </div>
-
-                    {/* 窄窗口：项目色圆点 */}
-                    <div className="sm:hidden flex items-center gap-0.5 mt-0.5 flex-wrap">
-                      {cellItems.length > 0 &&
-                        dotColors.map((c, i) => (
-                          <span key={i} className={`h-1.5 w-1.5 rounded-full wp-dot ${wpClass(c)}`} />
-                        ))}
-                      {cellItems.length > 3 && <span className="text-[9px] text-ink-muted">+{cellItems.length - 3}</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-
-      {!hasAny && (
-        <div className="py-14 text-center text-sm text-ink-muted">当前筛选下没有排期。</div>
-      )}
+      {!hasAny && <div className="py-14 text-center text-sm text-ink-muted">当前筛选下没有排期。</div>}
     </div>
   );
 }

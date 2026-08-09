@@ -28,6 +28,13 @@ export default function HomePage() {
   // M12 R2：右面板嵌入日历。calendarNewEvent 触发「+ 添加今日事件」弹窗（n 递增可重复触发）
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarNewEvent, setCalendarNewEvent] = useState<{ date: string; n: number } | null>(null);
+  // M12 返修：工作日历筛选状态上提（隐藏项目 + 便签链接层），与左侧预览卡同步
+  const [calendarHidden, setCalendarHidden] = useState<Set<string>>(new Set());
+  const [calendarNoteLayer, setCalendarNoteLayer] = useState(true);
+  const handleCalendarFilterChange = useCallback((hidden: Set<string>, noteLayer: boolean) => {
+    setCalendarHidden(hidden);
+    setCalendarNoteLayer(noteLayer);
+  }, []);
   // M11.1.1 内部链接跳转返回栈：栈顶是「当前便签的来源便签」
   const [noteNavStack, setNoteNavStack] = useState<string[]>([]);
   const [refreshToast, setRefreshToast] = useState<string | null>(null);
@@ -321,6 +328,8 @@ export default function HomePage() {
             onOpenCalendar={() => openCalendar()}
             onOpenCalendarNew={() => openCalendar({ newEvent: true })}
             calendarActive={calendarOpen}
+            calendarHiddenProjectIds={calendarHidden}
+            calendarShowNoteLayer={calendarNoteLayer}
           />
         </div>
 
@@ -350,6 +359,9 @@ export default function HomePage() {
               openNewEvent={calendarNewEvent}
               notes={notes}
               onOpenNote={handleCalendarOpenNote}
+              hiddenProjectIds={calendarHidden}
+              showNoteLayer={calendarNoteLayer}
+              onFilterChange={handleCalendarFilterChange}
             />
           ) : (
             <NoteEditor

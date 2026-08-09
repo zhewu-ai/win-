@@ -41,12 +41,12 @@ export function useWorkCalendar() {
     }
   }, []);
 
-  const fetchItems = useCallback(async (from: string, to: string) => {
+  const fetchItems = useCallback(async (from?: string, to?: string) => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/work-schedule-items?from=${from}&to=${to}`
-      );
+      const qs =
+        from && to ? `?from=${from}&to=${to}` : "";
+      const res = await fetch(`/api/work-schedule-items${qs}`);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "FETCH_FAILED");
       setItems(data.items as WorkScheduleItem[]);

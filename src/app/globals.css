@@ -21,6 +21,7 @@
     --danger: #ff3b30;
     --success: #34c759;
     --selection-yellow: #4276dc;
+    --note: #18a06d;
     --surface-hover: rgba(32, 41, 56, 0.055);
     --surface-active: rgba(32, 41, 56, 0.1);
     --surface-strong: rgba(32, 41, 56, 0.08);
@@ -83,6 +84,7 @@
     --danger: #ff3b30;
     --success: #34c759;
     --selection-yellow: #5d8cff;
+    --note: #4dd7a8;
     --surface-hover: rgba(255, 255, 255, 0.055);
     --surface-active: rgba(255, 255, 255, 0.1);
     --surface-strong: rgba(255, 255, 255, 0.08);
@@ -238,6 +240,70 @@
 .wp-bar { background: var(--wp-soft); border-left: 3px solid var(--wp-base); color: var(--wp-base); }
 .wp-text { color: var(--wp-base); }
 .wp-chip:hover, .wp-bar:hover { background: var(--wp-soft-border); }
+
+/* ── M12 返修：月视图甘特层（wc-*）────────────────── */
+/* 覆盖在月历 42 格之上的轻量甘特条：跨日连段、单日节点虚线、连接桩 */
+.wc-bar {
+  position: absolute;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+  pointer-events: auto;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--wp-base) 16%, transparent);
+  border-color: color-mix(in srgb, var(--wp-base) 34%, transparent);
+  color: var(--wp-base);
+  box-shadow: inset 3px 0 0 var(--wp-base);
+}
+[data-theme="dark"] .wc-bar {
+  background: color-mix(in srgb, var(--wp-base) 26%, transparent);
+  color: var(--wp-base);
+}
+.wc-bar:hover { filter: brightness(1.06); }
+/* 连接桩：跨日连段的两端延伸小横线，边界段隐藏 */
+.wc-bar::before,
+.wc-bar::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: currentColor;
+  opacity: 0.3;
+}
+.wc-bar::before { left: -8px; }
+.wc-bar::after { right: -8px; }
+.wc-bar.wc-start::before { display: none; }
+.wc-bar.wc-end::after { display: none; }
+/* 单日节点：虚线弱化 + 无左侧粗条 */
+.wc-node {
+  border-style: dashed;
+  background: var(--wp-soft);
+  color: var(--wp-base);
+  box-shadow: none;
+  font-weight: 600;
+}
+[data-theme="dark"] .wc-node {
+  background: color-mix(in srgb, var(--wp-base) 16%, transparent);
+}
+.wc-note-ico {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: var(--wp-deep);
+  opacity: 0.75;
+}
 
 @keyframes toolbar-pop {
   from {

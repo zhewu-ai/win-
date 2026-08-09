@@ -20,6 +20,9 @@ interface Props {
   onOpenCalendar?: () => void;
   onOpenCalendarNew?: () => void;
   calendarActive?: boolean;
+  /** M12 返修：工作日历筛选状态，同步入口卡今日预览 */
+  calendarHiddenProjectIds?: Set<string>;
+  calendarShowNoteLayer?: boolean;
 }
 
 const ACCENT: Record<string, string> = {
@@ -171,6 +174,8 @@ export default function NoteList({
   onOpenCalendar,
   onOpenCalendarNew,
   calendarActive,
+  calendarHiddenProjectIds,
+  calendarShowNoteLayer,
 }: Props) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
@@ -466,6 +471,8 @@ export default function NoteList({
               onOpen={onOpenCalendar!}
               onOpenNew={onOpenCalendarNew!}
               active={calendarActive}
+              hiddenProjectIds={calendarHiddenProjectIds}
+              showNoteLayer={calendarShowNoteLayer}
             />
           </div>
         )}

@@ -18,17 +18,23 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
-    if (!from || !to || !isValidDateString(from) || !isValidDateString(to) || from > to) {
+    const projectId = searchParams.get("projectId");
+
+    // 日期范围可选：省略 from/to 时返回全部非删条目（右栏项目全量 + 客户端切范围）。
+    // 只给一个范围端点则仍按范围查询；二者都给了才校验顺序。
+    const hasRange = Boolean(from || to);
+    if (hasRange && (!from || !to || !isValidDateString(from) || !isValidDateString(to) || from > to)) {
       return NextResponse.json({ ok: false, error: "INVALID_DATE_RANGE" }, { status: 400 });
     }
-    const projectId = searchParams.get("projectId");
+    // 通过校验后 from/to 均非空
+    const fromStr = from ?? "";
+    const toStr = to ?? "";
 
     const items = await prisma.workScheduleItem.findMany({
       where: {
         userId: admin.id,
         deletedAt: null,
-        startDate: { lte: to },
-        endDate: { gte: from },
+        ...(hasRange ? { startDate: { lte: toStr }, endDate: { gte: fromStr } } : {}),
         ...(projectId ? { projectId } : {}),
       },
       orderBy: [

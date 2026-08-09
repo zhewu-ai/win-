@@ -16,9 +16,8 @@ import WorkWeekView from "./work/WorkWeekView";
 import WorkMonthView from "./work/WorkMonthView";
 import WorkTodayView from "./work/WorkTodayView";
 import WorkProjectDialog from "./work/WorkProjectDialog";
-import WorkScheduleItemDialog from "./work/WorkScheduleItemDialog";
 import QuickWeekDialog from "./work/QuickWeekDialog";
-import WorkProjectSidePanel from "./work/WorkProjectSidePanel";
+import WorkRightPanel from "./work/WorkRightPanel";
 import { wpClass } from "./work/color";
 
 type CalendarView = "week" | "month" | "today";
@@ -34,7 +33,7 @@ interface Props {
   onBack?: () => void;
   /** true → 根节点填充父容器（flex-1 h-full），用于首页嵌入；false → 独立页 h-screen */
   embedded?: boolean;
-  /** 父级触发的「添加今日事件/排期」；n 递增可重复触发，null 忽略 */
+  /** 父级触发的「添加今日排期」；n 递增可重复触发，null 忽略 */
   openNewEvent?: { date: string; n: number } | null;
   /** 独立页从 URL 深链读到的初始动作，挂载时生效一次 */
   initialAction?: CalendarInitialAction | null;
@@ -42,19 +41,10 @@ interface Props {
   notes?: Note[];
   /** 今日视图「今天编辑的便签」点击回调；独立页缺省时跳回首页。 */
   onOpenNote?: (noteId: string) => void;
-}
-
-function rangeFor(view: CalendarView, monthDate: Date, weekStart: Date, dayDate: Date): { from: string; to: string } {
-  if (view === "today") {
-    const s = toDateStr(dayDate);
-    return { from: s, to: s };
-  }
-  if (view === "week") {
-    return { from: toDateStr(weekStart), to: toDateStr(addDays(weekStart, 6)) };
-  }
-  const y = monthDate.getFullYear();
-  const m = monthDate.getMonth();
-  return { from: toDateStr(new Date(y, m, 1)), to: toDateStr(new Date(y, m + 1, 0)) };
+  /** 筛选状态上提：父级（首页）同步左侧预览卡片。 */
+  hiddenProjectIds?: Set<string>;
+  showNoteLayer?: boolean;
+  onFilterChange?: (hidden: Set<string>, noteLayer: boolean) => void;
 }
 
 const COLOR_CYCLE: WorkProjectColor[] = ["blue", "red", "green", "purple", "gray"];
@@ -69,28 +59,7 @@ function nextProjectColor(projects: WorkProject[]): WorkProjectColor {
   return counts[0].c;
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      className="flex items-center gap-1 text-xs text-ink-muted hover:text-ink transition-colors flex-shrink-0"
-    >
-      <span
-        className={`h-3.5 w-3.5 rounded border flex items-center justify-center transition-colors ${
-          checked ? "bg-primary border-primary text-white" : "border-border-strong"
-        }`}
-      >
-        {checked && (
-          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </span>
-      {label}
-    </button>
-  );
-}
+const SUB_COPY = "月视图看项目并行和风险密度；周视图处理连续阶段；今日视图落到可执行事项。";
 
 export default function CalendarPageClient({
   onBack,
@@ -99,6 +68,9 @@ export default function CalendarPageClient({
   initialAction = null,
   notes,
   onOpenNote,
+  hiddenProjectIds: hiddenProjectIdsProp,
+  showNoteLayer: showNoteLayerProp,
+  onFilterChange,
 }: Props) {
   const {
     projects,
@@ -122,19 +94,16 @@ export default function CalendarPageClient({
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
   const [dayDate, setDayDate] = useState<Date>(() => new Date());
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [hiddenProjectIds, setHiddenProjectIds] = useState<Set<string>>(() => new Set());
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [hiddenProjectIds, setHiddenProjectIds] = useState<Set<string>>(() => hiddenProjectIdsProp ?? new Set());
   const [showArchived, setShowArchived] = useState(false);
   const [showNoteLayer, setShowNoteLayer] = useState(true);
+  const [newItemNonce, setNewItemNonce] = useState(0);
+  const [rightOpen, setRightOpen] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project: WorkProject | null }>({
     open: false,
     project: null,
   });
-  const [itemDialog, setItemDialog] = useState<{
-    open: boolean;
-    item: WorkScheduleItem | null;
-    date: string;
-    projectId: string | null;
-  }>({ open: false, item: null, date: todayStr(), projectId: null });
   const [quickWeekOpen, setQuickWeekOpen] = useState(false);
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
@@ -160,16 +129,28 @@ export default function CalendarPageClient({
 
   const notesForLayer = notes ?? fetchedNotes ?? [];
 
-  // 初始拉取：项目（含归档，供「显示归档」）+ 当前范围排期
+  // 初始拉取：项目（含归档，供「显示归档」）+ 全部排期（客户端自行按视图裁剪）
   useEffect(() => {
     void fetchProjects(true);
   }, [fetchProjects]);
 
-  const range = useMemo(() => rangeFor(view, monthDate, weekStart, dayDate), [view, monthDate, weekStart, dayDate]);
+  useEffect(() => {
+    void fetchItems();
+  }, [fetchItems]);
+
+  // 受控筛选状态（首页嵌入时由父级提供并回传变更）
+  useEffect(() => {
+    if (hiddenProjectIdsProp) setHiddenProjectIds(hiddenProjectIdsProp);
+  }, [hiddenProjectIdsProp]);
 
   useEffect(() => {
-    void fetchItems(range.from, range.to);
-  }, [fetchItems, range.from, range.to]);
+    if (showNoteLayerProp !== undefined) setShowNoteLayer(showNoteLayerProp);
+  }, [showNoteLayerProp]);
+
+  useEffect(() => {
+    onFilterChange?.(hiddenProjectIds, showNoteLayer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenProjectIds, showNoteLayer]);
 
   const initialApplied = useRef(false);
   // 深链初始动作（独立页 /calendar?date=...&new=1 / ?event=<id>），仅首次生效
@@ -178,28 +159,30 @@ export default function CalendarPageClient({
     initialApplied.current = true;
     const { date, newEvent, eventId } = initialAction;
     if (newEvent && date) {
-      setItemDialog({ open: true, item: null, date, projectId: null });
+      startNewItem(date, null);
     } else if (eventId) {
       setPendingItemId(eventId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAction]);
 
-  // 深链 ?event=<id>：命中当前范围排期时打开编辑
+  // 深链 ?event=<id>：命中当前范围排期时选中编辑
   useEffect(() => {
     if (!pendingItemId) return;
     const found = items.find((it) => it.id === pendingItemId);
     if (found) {
-      setItemDialog({ open: true, item: found, date: found.startDate, projectId: found.projectId });
+      handleItemClick(found);
       setPendingItemId(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, pendingItemId]);
 
-  // 嵌入态父级「添加今日事件」：n 递增时打开新建排期弹窗（可重复触发）
+  // 嵌入态父级「添加今日排期」：n 递增时切到该日并进入新建态（可重复触发）
   useEffect(() => {
     if (!openNewEvent) return;
     setDayDate(fromDateStr(openNewEvent.date));
-    setItemDialog({ open: true, item: null, date: openNewEvent.date, projectId: null });
+    startNewItem(openNewEvent.date, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openNewEvent]);
 
   const goToToday = useCallback(() => {
@@ -263,9 +246,11 @@ export default function CalendarPageClient({
 
   const handleDeleteProject = useCallback(
     async (p: WorkProject) => {
+      if (!window.confirm(`删除项目「${p.name}」？其排期条目将不再显示。`)) return;
       try {
         await deleteProject(p.id);
         if (selectedProjectId === p.id) setSelectedProjectId(null);
+        setUiError(null);
       } catch {
         setUiError("删除失败，请重试");
       }
@@ -273,29 +258,51 @@ export default function CalendarPageClient({
     [deleteProject, selectedProjectId]
   );
 
+  const handleEditProject = useCallback(() => {
+    const it = selectedItemId ? items.find((i) => i.id === selectedItemId) ?? null : null;
+    const fromProjectId = it ? it.projectId : selectedProjectId;
+    const target = fromProjectId ? projects.find((p) => p.id === fromProjectId) ?? null : null;
+    if (target) setProjectDialog({ open: true, project: target });
+  }, [selectedProjectId, selectedItemId, items, projects]);
+
   // ---- 排期条目 ----
-  const openNewItem = useCallback((dateStr: string, projectId: string | null = null) => {
+  const startNewItem = useCallback((dateStr: string, projectId: string | null) => {
+    setDayDate(fromDateStr(dateStr));
+    setSelectedItemId(null);
+    if (projectId) setSelectedProjectId(projectId);
+    setNewItemNonce((n) => n + 1);
+    setRightOpen(true);
     setUiError(null);
-    setItemDialog({ open: true, item: null, date: dateStr, projectId });
   }, []);
 
   const handleItemClick = useCallback((item: WorkScheduleItem) => {
+    setSelectedItemId(item.id);
+    setSelectedProjectId(item.projectId);
+    setRightOpen(true);
     setUiError(null);
-    setItemDialog({ open: true, item, date: item.startDate, projectId: item.projectId });
   }, []);
 
-  const handleSaveItem = useCallback(
+  const handleCreateItem = useCallback(
     async (input: WorkScheduleItemInput) => {
-      if (itemDialog.item) await updateItem(itemDialog.item.id, input);
-      else await createItem(input);
+      await createItem(input);
+      // 新建成功后重置表单，方便连续录入
+      setNewItemNonce((n) => n + 1);
     },
-    [itemDialog.item, updateItem, createItem]
+    [createItem]
+  );
+
+  const handleUpdateItem = useCallback(
+    async (id: string, input: WorkScheduleItemInput) => {
+      await updateItem(id, input);
+    },
+    [updateItem]
   );
 
   const handleDeleteItem = useCallback(
     async (id: string) => {
       try {
         await deleteItem(id);
+        setSelectedItemId((prev) => (prev === id ? null : prev));
       } catch {
         setUiError("删除失败，请重试");
       }
@@ -337,43 +344,7 @@ export default function CalendarPageClient({
     [onOpenNote]
   );
 
-  // ---- 派生 ----
-  const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const colorOf = useCallback((projectId: string): WorkProjectColor => projectById.get(projectId)?.colorKey ?? "gray", [projectById]);
-
-  const activeProjects = useMemo(() => projects.filter((p) => p.status === "active"), [projects]);
-  const visibleProjects = useMemo(
-    () => projects.filter((p) => p.status === "active" || showArchived),
-    [projects, showArchived]
-  );
-  const visibleProjectIds = useMemo(
-    () => new Set(visibleProjects.filter((p) => !hiddenProjectIds.has(p.id)).map((p) => p.id)),
-    [visibleProjects, hiddenProjectIds]
-  );
-  const visibleItems = useMemo(() => items.filter((it) => visibleProjectIds.has(it.projectId)), [items, visibleProjectIds]);
-
-  const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) ?? null : null;
-  const selectedProjectItems = useMemo(
-    () => (selectedProject ? items.filter((it) => it.projectId === selectedProject.id) : []),
-    [items, selectedProject]
-  );
-
-  const defaultItemProjectId = useMemo(() => {
-    if (itemDialog.item) return itemDialog.item.projectId;
-    if (itemDialog.projectId && projects.some((p) => p.id === itemDialog.projectId)) return itemDialog.projectId;
-    if (selectedProjectId && projects.some((p) => p.id === selectedProjectId)) return selectedProjectId;
-    return activeProjects[0]?.id ?? null;
-  }, [itemDialog.item, itemDialog.projectId, selectedProjectId, projects, activeProjects]);
-
-  const titleLabel =
-    view === "month"
-      ? `${monthDate.getFullYear()} 年 ${monthDate.getMonth() + 1} 月`
-      : view === "week"
-        ? `${weekStart.getFullYear()} 年 ${weekStart.getMonth() + 1} 月`
-        : `${dayDate.getFullYear()} 年 ${dayDate.getMonth() + 1} 月`;
-  const monthSelectOptions = useMemo(() => monthOptions(monthDate), [monthDate]);
-  const todayDateStr = toDateStr(today);
-
+  // ---- 筛选 ----
   const toggleHidden = useCallback((id: string) => {
     setHiddenProjectIds((prev) => {
       const next = new Set(prev);
@@ -385,9 +356,158 @@ export default function CalendarPageClient({
 
   const selectProject = useCallback((id: string) => {
     setSelectedProjectId((prev) => (prev === id ? null : id));
+    setSelectedItemId(null);
+    setRightOpen(true);
   }, []);
 
+  // ---- 派生 ----
+  const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const colorOf = useCallback((projectId: string): WorkProjectColor => projectById.get(projectId)?.colorKey ?? "gray", [projectById]);
+  const projectNameOf = useCallback((projectId: string) => projectById.get(projectId)?.name ?? "未知项目", [projectById]);
+
+  const todayDateStr = useMemo(() => toDateStr(today), [today]);
+
+  // 项目生命周期：archived / ended（全部排期已结束，待归档）/ active
+  const lifecycleOf = useMemo(() => {
+    const m = new Map<string, "active" | "ended" | "archived">();
+    for (const p of projects) {
+      if (p.status === "archived") {
+        m.set(p.id, "archived");
+        continue;
+      }
+      const its = items.filter((i) => i.projectId === p.id);
+      m.set(p.id, its.length > 0 && its.every((i) => i.endDate < todayDateStr) ? "ended" : "active");
+    }
+    return m;
+  }, [projects, items, todayDateStr]);
+
+  const activeProjects = useMemo(
+    () => projects.filter((p) => p.status === "active" && lifecycleOf.get(p.id) !== "ended"),
+    [projects, lifecycleOf]
+  );
+  const endedProjects = useMemo(
+    () => projects.filter((p) => p.status === "active" && lifecycleOf.get(p.id) === "ended"),
+    [projects, lifecycleOf]
+  );
+  const archivedProjects = useMemo(() => projects.filter((p) => p.status === "archived"), [projects]);
+
+  // 可见排期：active 项目（含已结束，历史仍可见）+ 显式开启的归档项目，减隐藏
+  const viewableProjectIds = useMemo(
+    () => new Set(projects.filter((p) => p.status === "active" || (p.status === "archived" && showArchived)).map((p) => p.id)),
+    [projects, showArchived]
+  );
+  const visibleProjectIds = useMemo(
+    () => new Set([...viewableProjectIds].filter((id) => !hiddenProjectIds.has(id))),
+    [viewableProjectIds, hiddenProjectIds]
+  );
+  const visibleItems = useMemo(() => items.filter((it) => visibleProjectIds.has(it.projectId)), [items, visibleProjectIds]);
+
+  const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) ?? null : null;
+  const selectedItem = useMemo(() => (selectedItemId ? items.find((it) => it.id === selectedItemId) ?? null : null), [items, selectedItemId]);
+
+  // 右栏项目下拉：active 项目 + 当前选中条目所属项目
+  const rightSelectProjects = useMemo(() => {
+    const curId = selectedProject?.id ?? selectedItem?.projectId ?? null;
+    return projects.filter((p) => p.status === "active" || p.id === curId);
+  }, [projects, selectedProject, selectedItem]);
+
+  // 指标
+  const mVisible = visibleItems.length;
+  const mRanges = useMemo(() => visibleItems.filter((i) => i.type === "range").length, [visibleItems]);
+  const mNodes = useMemo(() => visibleItems.filter((i) => i.type === "node").length, [visibleItems]);
+  const mNotes = useMemo(() => (showNoteLayer ? visibleItems.filter((i) => i.noteId).length : 0), [visibleItems, showNoteLayer]);
+
+  const titleLabel = useMemo(() => {
+    if (view === "month") return `${monthDate.getFullYear()}年${monthDate.getMonth() + 1}月`;
+    if (view === "week") {
+      const end = addDays(weekStart, 6);
+      return `${weekStart.getMonth() + 1}月${weekStart.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+    }
+    return `今日 · ${dayDate.getFullYear()}年${dayDate.getMonth() + 1}月${dayDate.getDate()}日`;
+  }, [view, monthDate, weekStart, dayDate]);
+
+  const monthSelectOptions = useMemo(() => monthOptions(monthDate), [monthDate]);
   const emptyNoProjects = projects.length === 0;
+
+  // 筛选芯片
+  const renderChip = (p: WorkProject, opts: { secondary?: boolean }) => {
+    const hidden = hiddenProjectIds.has(p.id);
+    const selected = selectedProjectId === p.id;
+    const life = lifecycleOf.get(p.id);
+    return (
+      <div
+        key={p.id}
+        className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors ${
+          selected ? "border-primary/40 bg-primary/10" : "border-border-light"
+        } ${hidden ? "opacity-50" : ""}`}
+      >
+        <button
+          type="button"
+          onClick={() => toggleHidden(p.id)}
+          title={hidden ? "点击显示该项目" : "点击隐藏该项目"}
+          aria-label={`${hidden ? "显示" : "隐藏"}${p.name}`}
+          className="flex items-center justify-center"
+        >
+          <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${hidden ? "border-border-strong" : "border-transparent"}`}>
+            <span className={`h-2 w-2 rounded-full ${hidden ? "bg-border-strong" : `wp-dot ${wpClass(p.colorKey)}`}`} />
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => selectProject(p.id)}
+          className={`max-w-[140px] truncate text-xs transition-colors ${selected ? "font-semibold text-ink" : "text-ink-secondary hover:text-ink"}`}
+        >
+          {p.name || "未命名项目"}
+        </button>
+        {opts.secondary && life === "ended" && (
+          <span className="flex-shrink-0 text-[10px] font-bold text-danger">已结束</span>
+        )}
+        {opts.secondary && life === "archived" && (
+          <span className="flex-shrink-0 text-[10px] font-bold text-ink-muted">已归档</span>
+        )}
+        {opts.secondary && life === "ended" && (
+          <button
+            type="button"
+            onClick={() => void handleArchiveProject(p)}
+            className="flex-shrink-0 rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary hover:text-ink transition-colors"
+          >
+            归档
+          </button>
+        )}
+        {opts.secondary && life === "archived" && (
+          <button
+            type="button"
+            onClick={() => void handleRestoreProject(p)}
+            className="flex-shrink-0 rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-primary transition-colors"
+          >
+            恢复
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderRightPanel = (
+    <WorkRightPanel
+      projects={rightSelectProjects}
+      allProjects={projects}
+      selectedProject={selectedProject}
+      selectedItem={selectedItem}
+      items={items}
+      todayStr={todayDateStr}
+      colorOf={colorOf}
+      newItemNonce={newItemNonce}
+      onEditProject={handleEditProject}
+      onArchiveProject={(p) => void handleArchiveProject(p)}
+      onRestoreProject={(p) => void handleRestoreProject(p)}
+      onDeleteProject={(p) => void handleDeleteProject(p)}
+      onCreateItem={handleCreateItem}
+      onUpdateItem={handleUpdateItem}
+      onDeleteItem={handleDeleteItem}
+      onItemClick={handleItemClick}
+      onAddItem={(projectId) => startNewItem(todayStr(), projectId)}
+    />
+  );
 
   return (
     <div
@@ -395,15 +515,15 @@ export default function CalendarPageClient({
         embedded ? "flex-1 flex flex-col h-full min-h-0 bg-page-bg" : "h-screen flex flex-col bg-page-bg"
       }`}
     >
-      {/* 顶栏 */}
-      <header className="flex items-center gap-2 px-3 py-2 border-b border-border-light bg-sidebar-bg flex-shrink-0 flex-wrap">
+      {/* 顶行：返回 + 标题/说明 + 导航 + 视图切换 */}
+      <header className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-light px-3 py-2">
         {onBack ? (
           <button
             onClick={onBack}
             className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
             title="返回列表"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
             返回
@@ -413,100 +533,122 @@ export default function CalendarPageClient({
             href="/"
             className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink transition-colors whitespace-nowrap"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
             返回便签
           </Link>
         ) : null}
-        <h1 className="text-base font-bold text-ink whitespace-nowrap">工作日历</h1>
 
-        <div className="mx-1 h-4 w-px bg-border-light" />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-bold leading-tight text-ink">{titleLabel}</h1>
+          <p className="hidden text-xs leading-relaxed text-ink-muted sm:block">{SUB_COPY}</p>
+        </div>
 
-        {/* 视图切换：默认周视图 */}
-        <div className="flex rounded-btn border border-border-light overflow-hidden">
+        {/* 导航 */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex h-7 w-7 items-center justify-center rounded-btn text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
+            aria-label="上一页"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={goToToday}
+            className="rounded-btn px-2 py-1 text-sm text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
+          >
+            今天
+          </button>
+          <button
+            onClick={() => navigate(1)}
+            className="flex h-7 w-7 items-center justify-center rounded-btn text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
+            aria-label="下一页"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          {view === "month" && (
+            <select
+              value={`${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split("-").map(Number);
+                setMonthDate(new Date(y, m - 1, 1));
+              }}
+              className="ml-1 rounded-input border border-border-light bg-panel-bg px-1.5 py-1 text-sm text-ink outline-none"
+              aria-label="选择月份"
+            >
+              {monthSelectOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* 视图切换 */}
+        <div className="flex flex-shrink-0 overflow-hidden rounded-btn border border-border-light">
           {(
             [
-              ["week", "周"],
-              ["month", "月"],
               ["today", "今日"],
+              ["month", "月"],
+              ["week", "周"],
             ] as const
           ).map(([v, label]) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`px-2.5 py-1 text-sm transition-colors ${
-                view === v ? "bg-primary text-white font-semibold" : "text-ink-muted hover:bg-surface-hover hover:text-ink"
+                view === v ? "bg-primary font-semibold text-white" : "text-ink-muted hover:bg-surface-hover hover:text-ink"
               }`}
             >
               {label}
             </button>
           ))}
         </div>
+      </header>
 
-        {/* 导航 */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-7 h-7 flex items-center justify-center rounded-btn text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
-            aria-label="上一页"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={() => navigate(1)}
-            className="w-7 h-7 flex items-center justify-center rounded-btn text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
-            aria-label="下一页"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          <button
-            onClick={goToToday}
-            className="px-2 py-1 text-sm text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
-          >
-            今天
-          </button>
-        </div>
+      {/* 筛选行：项目 chip + 便签链接 + 操作 */}
+      <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-border-light px-3 py-2">
+        {emptyNoProjects ? (
+          <span className="text-xs text-ink-muted">暂无项目，点击「新增项目」开始。</span>
+        ) : (
+          activeProjects.map((p) => renderChip(p, { secondary: false }))
+        )}
+        <button
+          type="button"
+          onClick={() => setShowNoteLayer((v) => !v)}
+          className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors ${
+            showNoteLayer ? "border-[var(--note)]/40 bg-[var(--note)]/10" : "border-border-light opacity-50"
+          }`}
+          title={showNoteLayer ? "点击隐藏便签链接" : "点击显示便签链接"}
+        >
+          <span className="flex h-4 w-4 items-center justify-center rounded-full border border-transparent">
+            <span className={`h-2 w-2 rounded-full ${showNoteLayer ? "bg-[var(--note)]" : "bg-border-strong"}`} />
+          </span>
+          <span className={`text-xs ${showNoteLayer ? "text-[var(--note)]" : "text-ink-secondary"}`}>便签链接</span>
+        </button>
 
         <div className="flex-1 min-w-0" />
-        <span className="text-sm font-medium text-ink hidden sm:block">{titleLabel}</span>
-        {view === "month" && (
-          <select
-            value={`${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`}
-            onChange={(e) => {
-              const [y, m] = e.target.value.split("-").map(Number);
-              setMonthDate(new Date(y, m - 1, 1));
-            }}
-            className="px-2 py-1 text-sm text-ink bg-panel-bg border border-border-light rounded-input outline-none"
-            aria-label="选择月份"
-          >
-            {monthSelectOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        )}
 
-        {/* 操作 */}
         <button
-          onClick={() => openNewItem(todayStr())}
-          className="flex items-center gap-1 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/10 rounded-btn transition-colors whitespace-nowrap"
+          onClick={() => startNewItem(todayStr(), null)}
+          className="flex items-center gap-1 rounded-btn bg-primary px-2.5 py-1 text-sm font-medium text-white transition-colors hover:bg-primary/90 whitespace-nowrap"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
           </svg>
           新增排期
         </button>
         <button
           onClick={openNewProject}
-          className="flex items-center gap-1 px-2.5 py-1 text-sm font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-btn transition-colors whitespace-nowrap"
+          className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           新增项目
@@ -515,65 +657,40 @@ export default function CalendarPageClient({
           onClick={() => setQuickWeekOpen(true)}
           disabled={activeProjects.length === 0}
           title={activeProjects.length === 0 ? "请先新增项目" : "快速录入一周"}
-          className="flex items-center gap-1 px-2.5 py-1 text-sm font-medium text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors whitespace-nowrap disabled:opacity-40 disabled:pointer-events-none"
+          className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap disabled:opacity-40 disabled:pointer-events-none"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
           </svg>
           快速录入
         </button>
-      </header>
+        <Toggle label="显示归档" checked={showArchived} onChange={() => setShowArchived((v) => !v)} />
+      </div>
 
-      {/* 项目筛选 + 开关 */}
-      {projects.length > 0 && (
-        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border-light flex-wrap flex-shrink-0">
-          <span className="text-xs font-medium text-ink-muted flex-shrink-0">项目</span>
-          {visibleProjects.map((p) => {
-            const hidden = hiddenProjectIds.has(p.id);
-            const selected = selectedProjectId === p.id;
-            return (
-              <div
-                key={p.id}
-                className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors ${
-                  selected ? "border-primary/40 bg-primary/10" : "border-border-light"
-                } ${hidden ? "opacity-50" : ""}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleHidden(p.id)}
-                  title={hidden ? "点击显示该项目" : "点击隐藏该项目"}
-                  aria-label={`${hidden ? "显示" : "隐藏"}${p.name}`}
-                  className="flex items-center justify-center"
-                >
-                  <span className={`h-4 w-4 rounded-full border flex items-center justify-center ${hidden ? "border-border-strong" : "border-transparent"}`}>
-                    <span className={`w-2 h-2 rounded-full ${hidden ? "bg-border-strong" : `wp-dot ${wpClass(p.colorKey)}`}`} />
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectProject(p.id)}
-                  className={`max-w-[140px] truncate text-xs transition-colors ${
-                    selected ? "text-ink font-semibold" : "text-ink-secondary hover:text-ink"
-                  }`}
-                >
-                  {p.name || "未命名项目"}
-                </button>
-              </div>
-            );
-          })}
-          <div className="flex-1 min-w-0" />
-          <Toggle label="显示归档" checked={showArchived} onChange={() => setShowArchived((v) => !v)} />
-          {view === "today" && (
-            <Toggle label="便签链接" checked={showNoteLayer} onChange={() => setShowNoteLayer((v) => !v)} />
-          )}
+      {/* 已结束待归档 / 已归档 chip 行 */}
+      {(endedProjects.length > 0 || (showArchived && archivedProjects.length > 0)) && (
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-border-light bg-surface-strong/30 px-3 py-1.5">
+          <span className="text-[10px] font-semibold text-ink-muted flex-shrink-0">
+            {endedProjects.length > 0 ? "已结束待归档" : "已归档"}
+          </span>
+          {endedProjects.map((p) => renderChip(p, { secondary: true }))}
+          {showArchived && archivedProjects.map((p) => renderChip(p, { secondary: true }))}
         </div>
       )}
 
-      {/* 主体 */}
-      <main className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 py-3 scrollbar-thin">
+      {/* 指标行 */}
+      <div className="grid flex-shrink-0 grid-cols-2 gap-1.5 border-b border-border-light px-3 py-2 sm:grid-cols-4">
+        <Metric label="当前显示" value={`${mVisible} 项`} />
+        <Metric label="连续阶段" value={`${mRanges} 条`} />
+        <Metric label="单日节点" value={`${mNodes} 个`} />
+        <Metric label="便签链接" value={`${mNotes} 条`} />
+      </div>
+
+      {/* 主体：视图 + 桌面右栏 */}
+      <div className="flex min-h-0 flex-1">
+        <main className="min-h-0 flex-1 overflow-y-auto px-2 py-3 scrollbar-thin sm:px-4">
           {(error || uiError) && (
-            <div className="mb-3 px-3 py-2 rounded-card bg-danger/10 text-sm text-danger">{error || uiError}</div>
+            <div className="mb-3 rounded-card bg-danger/10 px-3 py-2 text-sm text-danger">{error || uiError}</div>
           )}
           {loading && <div className="mb-2 text-xs text-ink-muted">加载中...</div>}
 
@@ -582,19 +699,19 @@ export default function CalendarPageClient({
               <p className="text-sm text-ink-muted">暂无工作项目，点击右上角「新增项目」开始。</p>
               <button
                 onClick={openNewProject}
-                className="mt-4 px-3.5 py-1.5 rounded-btn text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
+                className="mt-4 rounded-btn bg-primary px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
               >
                 新增项目
               </button>
             </div>
-          ) : visibleProjects.length === 0 ? (
+          ) : visibleItems.length === 0 && !loading ? (
             <div className="py-16 text-center">
-              <p className="text-sm text-ink-muted">当前没有可见项目。</p>
+              <p className="text-sm text-ink-muted">当前筛选下没有排期。</p>
               <button
-                onClick={() => setShowArchived(true)}
-                className="mt-3 text-xs font-medium text-primary hover:bg-primary/10 rounded-btn px-2 py-1 transition-colors"
+                onClick={() => startNewItem(todayStr(), null)}
+                className="mt-3 rounded-btn px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
               >
-                显示归档项目
+                新增排期
               </button>
             </div>
           ) : view === "week" ? (
@@ -603,6 +720,7 @@ export default function CalendarPageClient({
               items={visibleItems}
               today={today}
               colorOf={colorOf}
+              showNoteLayer={showNoteLayer}
               onItemClick={handleItemClick}
               onSelectDay={handleSelectDay}
             />
@@ -612,6 +730,7 @@ export default function CalendarPageClient({
               items={visibleItems}
               today={today}
               colorOf={colorOf}
+              showNoteLayer={showNoteLayer}
               onItemClick={handleItemClick}
               onSelectDay={handleSelectDay}
             />
@@ -622,51 +741,40 @@ export default function CalendarPageClient({
               notes={showNoteLayer ? notesForLayer : []}
               today={today}
               colorOf={colorOf}
+              projectNameOf={projectNameOf}
+              showNoteLayer={showNoteLayer}
               onItemClick={handleItemClick}
               onToggleDone={handleToggleDone}
-              onNewItem={(d) => openNewItem(d)}
               onOpenNote={handleOpenNote}
             />
           )}
-        </div>
+        </main>
 
-        {/* 项目详情：桌面固定右栏 / 窄窗口浮层 */}
-        {selectedProject && (
-          <div className="hidden sm:flex w-[300px] flex-shrink-0">
-            <WorkProjectSidePanel
-              project={selectedProject}
-              items={selectedProjectItems}
-              todayStr={todayDateStr}
-              onClose={() => setSelectedProjectId(null)}
-              onEdit={() => setProjectDialog({ open: true, project: selectedProject })}
-              onArchive={() => void handleArchiveProject(selectedProject)}
-              onRestore={() => void handleRestoreProject(selectedProject)}
-              onDelete={() => void handleDeleteProject(selectedProject)}
-              onNewItem={(d) => openNewItem(d, selectedProject.id)}
-              onItemClick={handleItemClick}
-            />
-          </div>
-        )}
-        {selectedProject && (
-          <>
-            <div className="sm:hidden fixed inset-0 z-20 bg-black/30" onClick={() => setSelectedProjectId(null)} />
-            <div className="sm:hidden fixed inset-y-0 right-0 z-30 w-[85%] max-w-[340px]">
-              <WorkProjectSidePanel
-                project={selectedProject}
-                items={selectedProjectItems}
-                todayStr={todayDateStr}
-                onClose={() => setSelectedProjectId(null)}
-                onEdit={() => setProjectDialog({ open: true, project: selectedProject })}
-                onArchive={() => void handleArchiveProject(selectedProject)}
-                onRestore={() => void handleRestoreProject(selectedProject)}
-                onDelete={() => void handleDeleteProject(selectedProject)}
-                onNewItem={(d) => openNewItem(d, selectedProject.id)}
-                onItemClick={handleItemClick}
-              />
+        {/* 桌面右栏：常驻 */}
+        <div className="hidden w-[300px] flex-shrink-0 sm:flex">{renderRightPanel}</div>
+      </div>
+
+      {/* 窄窗口：右栏抽屉 */}
+      {rightOpen && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/30 sm:hidden" onClick={() => setRightOpen(false)} />
+          <div className="fixed inset-y-0 right-0 z-40 flex w-[85%] max-w-[340px] flex-col sm:hidden">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-border-light bg-sidebar-bg px-3 py-1.5">
+              <span className="text-xs font-semibold text-ink-muted">编辑 / 详情</span>
+              <button
+                onClick={() => setRightOpen(false)}
+                className="rounded-btn p-1 text-ink-muted transition-colors hover:text-ink"
+                aria-label="关闭"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-          </>
-        )}
-      </main>
+            <div className="min-h-0 flex-1">{renderRightPanel}</div>
+          </div>
+        </>
+      )}
 
       {/* 弹窗 */}
       <WorkProjectDialog
@@ -676,16 +784,6 @@ export default function CalendarPageClient({
         onClose={() => setProjectDialog({ open: false, project: null })}
         onSave={handleSaveProject}
       />
-      <WorkScheduleItemDialog
-        open={itemDialog.open}
-        item={itemDialog.item}
-        defaultDate={itemDialog.date}
-        projects={projects}
-        defaultProjectId={defaultItemProjectId}
-        onClose={() => setItemDialog({ open: false, item: null, date: todayStr(), projectId: null })}
-        onSave={handleSaveItem}
-        onDelete={handleDeleteItem}
-      />
       <QuickWeekDialog
         open={quickWeekOpen}
         projects={activeProjects}
@@ -694,6 +792,38 @@ export default function CalendarPageClient({
         onPreview={quickWeekPreview}
         onCreateItems={handleQuickWeekCreate}
       />
+    </div>
+  );
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className="flex flex-shrink-0 items-center gap-1 text-xs text-ink-muted transition-colors hover:text-ink"
+    >
+      <span
+        className={`flex h-3.5 w-3.5 items-center justify-center rounded border transition-colors ${
+          checked ? "border-primary bg-primary text-white" : "border-border-strong"
+        }`}
+      >
+        {checked && (
+          <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-btn border border-border-light bg-panel-bg px-2.5 py-1.5">
+      <div className="text-[10px] text-ink-muted">{label}</div>
+      <div className="text-sm font-bold leading-tight text-ink">{value}</div>
     </div>
   );
 }

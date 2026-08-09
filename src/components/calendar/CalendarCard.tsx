@@ -18,11 +18,21 @@ interface Props {
   onOpenNew: () => void;
   /** 选中态（右面板正在展示日历）：蓝色衬底，与便签选中态一致 */
   active?: boolean;
+  /** M12 返修：已隐藏项目（今日预览同步过滤） */
+  hiddenProjectIds?: Set<string>;
+  /** M12 返修：便签链接层开关（有链接的排期显示链接角标） */
+  showNoteLayer?: boolean;
 }
 
 // 左侧「日历」分组入口卡片（仅管理员展示）：工作日历入口 + 今日排期预览。
 // 数据源 = work-schedule-items（今日范围）；视觉与便签卡片统一（card-surface / card-selected-blue）。
-export default function CalendarCard({ onOpen, onOpenNew, active }: Props) {
+export default function CalendarCard({
+  onOpen,
+  onOpenNew,
+  active,
+  hiddenProjectIds,
+  showNoteLayer,
+}: Props) {
   const [items, setItems] = useState<WorkScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -51,7 +61,11 @@ export default function CalendarCard({ onOpen, onOpenNew, active }: Props) {
   const dateLabel = `${MONTH_NAMES[now.getMonth()]} 月 ${now.getDate()} 日 · 周${weekdayLabel(
     dow === 0 ? 6 : dow - 1
   )}`;
-  const undone = items.filter((it) => it.status !== "done");
+  // 隐藏项目过滤：今日未完成数与预览条同步右侧日历的筛选
+  const visible = hiddenProjectIds?.size
+    ? items.filter((it) => !hiddenProjectIds.has(it.projectId))
+    : items;
+  const undone = visible.filter((it) => it.status !== "done");
   const first2 = undone.slice(0, 2);
 
   const rootCls = active ? "card-selected card-selected-blue" : "card-surface";
@@ -103,6 +117,22 @@ export default function CalendarCard({ onOpen, onOpenNew, active }: Props) {
                       aria-hidden="true"
                     />
                     <span className="min-w-0 truncate">{it.title || "未命名排期"}</span>
+                    {showNoteLayer && it.noteId && (
+                      <svg
+                        className="w-3 h-3 flex-shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                    )}
                     <span className={`ml-auto flex-shrink-0 text-[10px] ${active ? "text-white/60" : "text-ink-muted/70"}`}>
                       {it.type === "node"
                         ? shortDate(it.startDate)
