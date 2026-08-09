@@ -238,3 +238,41 @@
     transform: translateY(0) scale(1);
   }
 }
+
+/* ── M11.1.2 Tiptap 链接编辑器 ─────────────────────────────── */
+.ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.note-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* 空块占位符：Tiptap Placeholder 在空 noteText 节点上加 is-editor-empty + data-placeholder */
+.ProseMirror .is-editor-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: rgb(var(--ink-muted-rgb) / 0.45);
+}
+/* 聚焦时隐藏占位符（待办行/小标题行用；正文不需要时别传该属性） */
+[data-hide-ph-on-focus="true"]:focus-within .is-editor-empty::before {
+  opacity: 0;
+}
+/* 占位符透明度覆盖（小标题行更淡） */
+[data-ph-opacity="0.3"] .is-editor-empty::before {
+  color: rgb(var(--ink-muted-rgb) / 0.3);
+}
+/* 外部 URL 装饰链接：编辑与查看态都保持蓝色链接外观 */
+.url-link {
+  color: var(--accent-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.url-link:hover {
+  text-decoration-color: var(--accent-blue);
+}

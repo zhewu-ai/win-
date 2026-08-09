@@ -3,7 +3,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Note } from "@/types";
-import type { CaretCoords } from "@/lib/caret";
+
+/** 光标锚点坐标（视口坐标系）：用于定位搜索浮层。 */
+export interface CaretCoords {
+  top: number;
+  left: number;
+  height: number;
+}
 
 interface Props {
   /** 已在父组件按关键词过滤好的结果 */

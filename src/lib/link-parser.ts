@@ -15,17 +15,24 @@ const URL_RE =
 // 尾部 ASCII/半角标点：不应吞进链接（。，,．. ) ）] 】" 等）。
 const TRAILING_RE = /[.,;:!?)\]}"'》〉】]+$/;
 
-function splitUrls(text: string): LinkSegment[] {
-  const out: LinkSegment[] = [];
+export interface UrlSpan {
+  /** URL 在原始文本中的起始下标（含） */
+  from: number;
+  /** URL 在原始文本中的结束下标（不含） */
+  to: number;
+  text: string;
+  href: string;
+}
+
+/** 找出文本中所有外部 URL 区间（返回原始文本坐标）。被解析层与编辑器的装饰插件共用。 */
+export function findUrlSpans(text: string): UrlSpan[] {
+  const spans: UrlSpan[] = [];
   let rest = text;
+  let offset = 0;
   while (rest) {
     URL_RE.lastIndex = 0;
     const m = URL_RE.exec(rest);
-    if (!m) {
-      out.push({ type: "text", text: rest });
-      break;
-    }
-    if (m.index > 0) out.push({ type: "text", text: rest.slice(0, m.index) });
+    if (!m) break;
 
     let raw = m[0];
     const after = rest.slice(m.index + raw.length);
@@ -40,12 +47,30 @@ function splitUrls(text: string): LinkSegment[] {
         : `https://${raw}`;
 
     if (raw.length > 0 && /^https?:\/\//.test(href)) {
-      out.push({ type: "url", text: raw, href });
-    } else {
-      out.push({ type: "text", text: m[0] });
+      spans.push({
+        from: offset + m.index,
+        to: offset + m.index + raw.length,
+        text: raw,
+        href,
+      });
     }
+    offset += m.index + m[0].length;
     rest = restAfter;
   }
+  return spans;
+}
+
+function splitUrls(text: string): LinkSegment[] {
+  const spans = findUrlSpans(text);
+  if (spans.length === 0) return [{ type: "text", text }];
+  const out: LinkSegment[] = [];
+  let last = 0;
+  for (const s of spans) {
+    if (s.from > last) out.push({ type: "text", text: text.slice(last, s.from) });
+    out.push({ type: "url", text: s.text, href: s.href });
+    last = s.to;
+  }
+  if (last < text.length) out.push({ type: "text", text: text.slice(last) });
   return out;
 }
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
-import type { ChecklistItem, ChecklistGroup } from "@/types";
+import type { ChecklistItem, ChecklistGroup, Note } from "@/types";
 import { parseChecklistLine } from "@/lib/note-serializer";
-import AutoGrowTextarea from "./AutoGrowTextarea";
+import LinkEditor from "./LinkEditor";
+import type { Editor } from "@tiptap/react";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -17,14 +18,20 @@ interface Props {
   items: ChecklistItem[];
   groups: ChecklistGroup[];
   onChange: (items: ChecklistItem[], groups: ChecklistGroup[]) => void;
+  /** `[[` 便签搜索与芯片打开的来源便签列表 / 打开回调（M11.1.2） */
+  linkableNotes?: Note[];
+  onOpenNote?: (noteId: string) => Promise<boolean> | boolean | void;
 }
 
-export default function ChecklistEditor({ items, groups, onChange }: Props) {
-  const itemInputRefs = useRef<Map<string, HTMLTextAreaElement | null>>(
-    new Map()
-  );
+export default function ChecklistEditor({
+  items,
+  groups,
+  onChange,
+  linkableNotes,
+  onOpenNote,
+}: Props) {
+  const itemInputRefs = useRef<Map<string, Editor | null>>(new Map());
   const rootRef = useRef<HTMLDivElement>(null);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
   const [completedCollapsed, setCompletedCollapsed] = useState(true);
   const dragIdRef = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{
@@ -64,19 +71,23 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
     [onChange]
   );
 
-  const setItemRef = useCallback(
-    (id: string, el: HTMLTextAreaElement | null) => {
-      if (el) itemInputRefs.current.set(id, el);
-      else itemInputRefs.current.delete(id);
-    },
-    []
-  );
+  const setItemRef = useCallback((id: string, el: Editor | null) => {
+    if (el) itemInputRefs.current.set(id, el);
+    else itemInputRefs.current.delete(id);
+  }, []);
 
+  // 新建行时 LinkEditor 的 editorRef 在被动 effect 中注册，可能晚于首帧；
+  // 用重试确保拿到实例后聚焦（最多 3 帧）。
   const focusRow = useCallback((id: string) => {
-    requestAnimationFrame(() => {
-      const el = itemInputRefs.current.get(id);
-      if (el) el.focus();
-    });
+    const tryFocus = (attempt: number) => {
+      const ed = itemInputRefs.current.get(id);
+      if (ed) {
+        ed.commands.focus();
+        return;
+      }
+      if (attempt < 3) requestAnimationFrame(() => tryFocus(attempt + 1));
+    };
+    requestAnimationFrame(() => tryFocus(1));
   }, []);
 
   const updateText = useCallback(
@@ -191,27 +202,27 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
     [active, completed, commit, newTodo]
   );
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, id: string) => {
+  // 行级键处理：Enter 加新待办、空行 Backspace 删行、Arrow 上下移焦。
+  // 返回 true 表示已消费（LinkEditor 不再处理该键）。editor 参数取自 LinkEditor 实例。
+  const handleRowKeyDown = useCallback(
+    (e: KeyboardEvent, _editor: Editor, id: string): boolean => {
       const item = items.find((i) => i.id === id);
-      if (!item) return;
+      if (!item) return false;
 
       if (e.key === "Enter") {
-        // Single-line semantics: Enter always adds a new todo (never inserts
-        // a literal newline into the todo text; long text wraps visually).
         e.preventDefault();
         if (!e.shiftKey) addTodoAfter(id);
-        return;
+        return true;
       }
 
       if (e.key === "Backspace" && item.text === "") {
         e.preventDefault();
-        if (items.length <= 1) return;
+        if (items.length <= 1) return true;
         const idx = active.findIndex((r) => r.id === id);
         const prevId = idx > 0 ? active[idx - 1].id : undefined;
         deleteItem(id);
         if (prevId) focusRow(prevId);
-        return;
+        return true;
       }
 
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -219,15 +230,15 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
         if (e.key === "ArrowUp" && idx > 0) {
           e.preventDefault();
           focusRow(active[idx - 1].id);
-        } else if (
-          e.key === "ArrowDown" &&
-          idx >= 0 &&
-          idx < active.length - 1
-        ) {
+          return true;
+        }
+        if (e.key === "ArrowDown" && idx >= 0 && idx < active.length - 1) {
           e.preventDefault();
           focusRow(active[idx + 1].id);
+          return true;
         }
       }
+      return false;
     },
     [items, active, addTodoAfter, deleteItem, focusRow]
   );
@@ -250,25 +261,22 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
     []
   );
 
+  // 行内粘贴（LinkEditor singleLine 模式下把剪贴板按行拆分传入）：
+  // 多行或含标记 → 拆成多行待办/小标题；单行纯文本 → 返回 false 交给 LinkEditor 原样插入。
   const handleRowPaste = useCallback(
-    (e: React.ClipboardEvent, id: string) => {
-      const lines = e.clipboardData
-        .getData("text")
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
-      if (lines.length === 0) return;
-      const parsedAll = lines.map(parseChecklistLine);
+    (lines: string[], id: string): boolean => {
+      const clean = lines.map((l) => l.trim()).filter((l) => l.length > 0);
+      if (clean.length === 0) return false;
+      const parsedAll = clean.map(parseChecklistLine);
       const parsedLines = parsedAll.filter((p) => p.text.length > 0);
-      if (parsedLines.length === 0) return;
+      if (parsedLines.length === 0) return false;
 
       // Single plain line without markers/heading: let default paste insert text.
-      const hasMarker = lines.some((l, i) => {
+      const hasMarker = clean.some((l, i) => {
         const p = parsedAll[i];
         return p.kind === "heading" || p.checked || p.text !== l;
       });
-      if (lines.length === 1 && !hasMarker) return;
-      e.preventDefault();
+      if (clean.length === 1 && !hasMarker) return false;
 
       const now = nowIso();
       const idx = active.findIndex((r) => r.id === id);
@@ -301,14 +309,16 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
       if (activeInsert.length > 0) {
         focusRow(nextActive[insertAt + activeInsert.length - 1].id);
       }
+      return true;
     },
     [active, completed, commit, makeRow, focusRow]
   );
 
+  // 容器空白处粘贴（未落入任何编辑器）：PM 已在编辑器内消费过的粘贴会 preventDefault，
+  // 这里据此跳过，避免重复插入。
   const handleContainerPaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (e.defaultPrevented) return;
       const lines = e.clipboardData
         .getData("text")
         .split("\n")
@@ -497,22 +507,24 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
           </svg>
         )}
       </button>
-      <AutoGrowTextarea
-        innerRef={(el) => setItemRef(row.id, el)}
+      <LinkEditor
         value={row.text}
         onChange={(v) => updateText(row.id, v)}
-        onFocus={() => setFocusedId(row.id)}
         onBlur={(e) => {
-          setFocusedId(null);
           const next = e.relatedTarget as Node | null;
           if (next && rootRef.current && rootRef.current.contains(next)) return;
           handleBlur();
         }}
-        onKeyDown={(e) => handleKeyDown(e, row.id)}
-        onPaste={(e) => handleRowPaste(e, row.id)}
-        placeholder={focusedId === row.id ? "" : "新待办..."}
-        className="flex-1 min-w-0 w-0 bg-transparent border-none outline-none py-0 text-edit-body leading-[1.5] [overflow-wrap:anywhere] placeholder:text-ink-muted/45"
-        minHeight={20}
+        onKeyDown={(e, ed) => handleRowKeyDown(e, ed, row.id)}
+        onPasteLines={(lines) => handleRowPaste(lines, row.id)}
+        editorRef={(el) => setItemRef(row.id, el)}
+        linkableNotes={linkableNotes || []}
+        onOpenNote={onOpenNote}
+        placeholder="新待办..."
+        hidePlaceholderOnFocus
+        singleLine
+        className="flex-1 min-w-0 w-0"
+        contentClassName="min-h-[20px] text-edit-body leading-[1.5]"
       />
       {deleteButton(row)}
     </div>
@@ -528,22 +540,25 @@ export default function ChecklistEditor({ items, groups, onChange }: Props) {
       {dragHandle(row)}
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <div className="flex-1 h-px bg-ink-muted/15" />
-        <AutoGrowTextarea
-          innerRef={(el) => setItemRef(row.id, el)}
+        <LinkEditor
           value={row.text}
           onChange={(v) => updateText(row.id, v)}
-          onFocus={() => setFocusedId(row.id)}
           onBlur={(e) => {
-            setFocusedId(null);
             const next = e.relatedTarget as Node | null;
             if (next && rootRef.current && rootRef.current.contains(next)) return;
             handleBlur();
           }}
-          onKeyDown={(e) => handleKeyDown(e, row.id)}
-          onPaste={(e) => handleRowPaste(e, row.id)}
-          placeholder={focusedId === row.id ? "" : "小标题"}
-          className="flex-[1.5] min-w-0 w-0 bg-transparent border-none outline-none py-0 text-xs font-semibold tracking-wide text-center text-ink-muted/85 [overflow-wrap:anywhere] placeholder:text-ink-muted/30"
-          minHeight={18}
+          onKeyDown={(e, ed) => handleRowKeyDown(e, ed, row.id)}
+          onPasteLines={(lines) => handleRowPaste(lines, row.id)}
+          editorRef={(el) => setItemRef(row.id, el)}
+          linkableNotes={linkableNotes || []}
+          onOpenNote={onOpenNote}
+          placeholder="小标题"
+          hidePlaceholderOnFocus
+          singleLine
+          className="flex-[1.5] min-w-0 w-0"
+          contentClassName="min-h-[18px] text-center text-xs font-semibold tracking-wide text-ink-muted/85"
+          dataPhOpacity="0.3"
         />
         <div className="flex-1 h-px bg-ink-muted/15" />
       </div>
