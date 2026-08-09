@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  QuickWeekPreviewRow,
   WorkProject,
   WorkProjectInput,
   WorkProjectStatus,
@@ -176,25 +175,6 @@ export function useWorkCalendar() {
     }
   }, []);
 
-  const quickWeekPreview = useCallback(
-    async (input: {
-      projectId: string;
-      weekStart: string;
-      days: Record<string, string>;
-      nodes: { date: string; title: string }[];
-    }): Promise<QuickWeekPreviewRow[]> => {
-      const res = await fetch("/api/work-schedule-items/quick-week", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "PREVIEW_FAILED");
-      return data.preview as QuickWeekPreviewRow[];
-    },
-    []
-  );
-
   return {
     projects,
     items,
@@ -208,6 +188,5 @@ export function useWorkCalendar() {
     createItem,
     updateItem,
     deleteItem,
-    quickWeekPreview,
   };
 }

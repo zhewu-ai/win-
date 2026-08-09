@@ -241,11 +241,11 @@
 .wp-text { color: var(--wp-base); }
 .wp-chip:hover, .wp-bar:hover { background: var(--wp-soft-border); }
 
-/* ── M12 返修：月视图甘特层（wc-*）────────────────── */
-/* 覆盖在月历 42 格之上的轻量甘特条：跨日连段、单日节点虚线、连接桩 */
+/* ── M12 基础原型：月历色条/节点/便签药丸（wc-*）────────────────── */
+/* 覆盖在月历格之上的排期条：浅底 + 主色细边框，节点虚线弱化，便签以药丸链接层展示 */
 .wc-bar {
   position: absolute;
-  height: 22px;
+  height: 20px;
   border-radius: 5px;
   display: flex;
   align-items: center;
@@ -257,46 +257,42 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border: 1px solid transparent;
   pointer-events: auto;
   cursor: pointer;
-  background: color-mix(in srgb, var(--wp-base) 16%, transparent);
-  border-color: color-mix(in srgb, var(--wp-base) 34%, transparent);
-  color: var(--wp-base);
-  box-shadow: inset 3px 0 0 var(--wp-base);
-}
-[data-theme="dark"] .wc-bar {
-  background: color-mix(in srgb, var(--wp-base) 26%, transparent);
+  border: 1px solid var(--wp-soft-border);
+  background: var(--wp-soft);
   color: var(--wp-base);
 }
-.wc-bar:hover { filter: brightness(1.06); }
-/* 连接桩：跨日连段的两端延伸小横线，边界段隐藏 */
-.wc-bar::before,
-.wc-bar::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 2px;
-  transform: translateY(-50%);
-  background: currentColor;
-  opacity: 0.3;
-}
-.wc-bar::before { left: -8px; }
-.wc-bar::after { right: -8px; }
-.wc-bar.wc-start::before { display: none; }
-.wc-bar.wc-end::after { display: none; }
-/* 单日节点：虚线弱化 + 无左侧粗条 */
+.wc-bar:hover { background: var(--wp-soft-border); }
+/* 单日节点：虚线弱化 */
 .wc-node {
   border-style: dashed;
   background: var(--wp-soft);
   color: var(--wp-base);
-  box-shadow: none;
   font-weight: 600;
 }
-[data-theme="dark"] .wc-node {
-  background: color-mix(in srgb, var(--wp-base) 16%, transparent);
+/* 便签链接药丸：绿色弱链接层，独立于排期条 */
+.wc-note-pill {
+  position: absolute;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--note);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border: 1px solid color-mix(in srgb, var(--note) 30%, transparent);
+  background: color-mix(in srgb, var(--note) 12%, transparent);
 }
+.wc-note-pill:hover { background: color-mix(in srgb, var(--note) 18%, transparent); }
 .wc-note-ico {
   width: 11px;
   height: 11px;

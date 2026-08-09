@@ -16,7 +16,6 @@ import WorkWeekView from "./work/WorkWeekView";
 import WorkMonthView from "./work/WorkMonthView";
 import WorkTodayView from "./work/WorkTodayView";
 import WorkProjectDialog from "./work/WorkProjectDialog";
-import QuickWeekDialog from "./work/QuickWeekDialog";
 import WorkRightPanel from "./work/WorkRightPanel";
 import { wpClass } from "./work/color";
 
@@ -33,8 +32,6 @@ interface Props {
   onBack?: () => void;
   /** true → 根节点填充父容器（flex-1 h-full），用于首页嵌入；false → 独立页 h-screen */
   embedded?: boolean;
-  /** 父级触发的「添加今日排期」；n 递增可重复触发，null 忽略 */
-  openNewEvent?: { date: string; n: number } | null;
   /** 独立页从 URL 深链读到的初始动作，挂载时生效一次 */
   initialAction?: CalendarInitialAction | null;
   /** 便签链接层数据源（首页嵌入时由父级传入；独立页为空时自行拉取未归档便签）。 */
@@ -59,12 +56,11 @@ function nextProjectColor(projects: WorkProject[]): WorkProjectColor {
   return counts[0].c;
 }
 
-const SUB_COPY = "月视图看项目并行和风险密度；周视图处理连续阶段；今日视图落到可执行事项。";
+const SUB_COPY = "添加连续阶段和单日节点，保存后写入数据库并在月/周/今日视图同步显示。";
 
 export default function CalendarPageClient({
   onBack,
   embedded = false,
-  openNewEvent = null,
   initialAction = null,
   notes,
   onOpenNote,
@@ -85,7 +81,6 @@ export default function CalendarPageClient({
     createItem,
     updateItem,
     deleteItem,
-    quickWeekPreview,
   } = useWorkCalendar();
 
   const [view, setView] = useState<CalendarView>("week");
@@ -99,12 +94,12 @@ export default function CalendarPageClient({
   const [showArchived, setShowArchived] = useState(false);
   const [showNoteLayer, setShowNoteLayer] = useState(true);
   const [newItemNonce, setNewItemNonce] = useState(0);
+  const [newPresetType, setNewPresetType] = useState<"range" | "node">("range");
   const [rightOpen, setRightOpen] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project: WorkProject | null }>({
     open: false,
     project: null,
   });
-  const [quickWeekOpen, setQuickWeekOpen] = useState(false);
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
   const [fetchedNotes, setFetchedNotes] = useState<Note[] | null>(null);
@@ -159,7 +154,7 @@ export default function CalendarPageClient({
     initialApplied.current = true;
     const { date, newEvent, eventId } = initialAction;
     if (newEvent && date) {
-      startNewItem(date, null);
+      startNewItem(date, null, "range");
     } else if (eventId) {
       setPendingItemId(eventId);
     }
@@ -176,14 +171,6 @@ export default function CalendarPageClient({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, pendingItemId]);
-
-  // 嵌入态父级「添加今日排期」：n 递增时切到该日并进入新建态（可重复触发）
-  useEffect(() => {
-    if (!openNewEvent) return;
-    setDayDate(fromDateStr(openNewEvent.date));
-    startNewItem(openNewEvent.date, null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openNewEvent]);
 
   const goToToday = useCallback(() => {
     const t = new Date();
@@ -258,21 +245,21 @@ export default function CalendarPageClient({
     [deleteProject, selectedProjectId]
   );
 
-  const handleEditProject = useCallback(() => {
-    const it = selectedItemId ? items.find((i) => i.id === selectedItemId) ?? null : null;
-    const fromProjectId = it ? it.projectId : selectedProjectId;
-    const target = fromProjectId ? projects.find((p) => p.id === fromProjectId) ?? null : null;
-    if (target) setProjectDialog({ open: true, project: target });
-  }, [selectedProjectId, selectedItemId, items, projects]);
-
   // ---- 排期条目 ----
-  const startNewItem = useCallback((dateStr: string, projectId: string | null) => {
+  const startNewItem = useCallback((dateStr: string, projectId: string | null, type: "range" | "node" = "range") => {
     setDayDate(fromDateStr(dateStr));
     setSelectedItemId(null);
     if (projectId) setSelectedProjectId(projectId);
+    setNewPresetType(type);
     setNewItemNonce((n) => n + 1);
     setRightOpen(true);
     setUiError(null);
+  }, []);
+
+  const handleCancelForm = useCallback(() => {
+    setSelectedItemId(null);
+    setNewItemNonce((n) => n + 1);
+    setRightOpen(false);
   }, []);
 
   const handleItemClick = useCallback((item: WorkScheduleItem) => {
@@ -315,22 +302,6 @@ export default function CalendarPageClient({
       void updateItem(item.id, { status: item.status === "done" ? "todo" : "done" }).catch(() => {});
     },
     [updateItem]
-  );
-
-  // ---- 快速录入一周 ----
-  const handleQuickWeekCreate = useCallback(
-    async (projectId: string, rows: { title: string; type: "range" | "node"; startDate: string; endDate: string }[]) => {
-      for (const r of rows) {
-        await createItem({
-          projectId,
-          title: r.title,
-          type: r.type,
-          startDate: r.startDate,
-          endDate: r.endDate,
-        });
-      }
-    },
-    [createItem]
   );
 
   const handleOpenNote = useCallback(
@@ -411,13 +382,7 @@ export default function CalendarPageClient({
     return projects.filter((p) => p.status === "active" || p.id === curId);
   }, [projects, selectedProject, selectedItem]);
 
-  // 指标
-  const mVisible = visibleItems.length;
-  const mRanges = useMemo(() => visibleItems.filter((i) => i.type === "range").length, [visibleItems]);
-  const mNodes = useMemo(() => visibleItems.filter((i) => i.type === "node").length, [visibleItems]);
-  const mNotes = useMemo(() => (showNoteLayer ? visibleItems.filter((i) => i.noteId).length : 0), [visibleItems, showNoteLayer]);
-
-  const titleLabel = useMemo(() => {
+  const periodLabel = useMemo(() => {
     if (view === "month") return `${monthDate.getFullYear()}年${monthDate.getMonth() + 1}月`;
     if (view === "week") {
       const end = addDays(weekStart, 6);
@@ -437,7 +402,7 @@ export default function CalendarPageClient({
     return (
       <div
         key={p.id}
-        className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors ${
+        className={`flex items-center gap-1 rounded-lg border px-1.5 py-0.5 transition-colors ${
           selected ? "border-primary/40 bg-primary/10" : "border-border-light"
         } ${hidden ? "opacity-50" : ""}`}
       >
@@ -449,7 +414,7 @@ export default function CalendarPageClient({
           className="flex items-center justify-center"
         >
           <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${hidden ? "border-border-strong" : "border-transparent"}`}>
-            <span className={`h-2 w-2 rounded-full ${hidden ? "bg-border-strong" : `wp-dot ${wpClass(p.colorKey)}`}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${hidden ? "bg-border-strong" : `wp-dot ${wpClass(p.colorKey)}`}`} />
           </span>
         </button>
         <button
@@ -490,22 +455,16 @@ export default function CalendarPageClient({
   const renderRightPanel = (
     <WorkRightPanel
       projects={rightSelectProjects}
-      allProjects={projects}
       selectedProject={selectedProject}
       selectedItem={selectedItem}
-      items={items}
       todayStr={todayDateStr}
-      colorOf={colorOf}
       newItemNonce={newItemNonce}
-      onEditProject={handleEditProject}
-      onArchiveProject={(p) => void handleArchiveProject(p)}
-      onRestoreProject={(p) => void handleRestoreProject(p)}
-      onDeleteProject={(p) => void handleDeleteProject(p)}
+      presetType={newPresetType}
       onCreateItem={handleCreateItem}
       onUpdateItem={handleUpdateItem}
       onDeleteItem={handleDeleteItem}
-      onItemClick={handleItemClick}
-      onAddItem={(projectId) => startNewItem(todayStr(), projectId)}
+      onNewProject={openNewProject}
+      onCancel={handleCancelForm}
     />
   );
 
@@ -541,12 +500,13 @@ export default function CalendarPageClient({
         ) : null}
 
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-bold leading-tight text-ink">{titleLabel}</h1>
+          <h1 className="truncate text-[22px] font-bold leading-tight text-ink">工作日历</h1>
           <p className="hidden text-xs leading-relaxed text-ink-muted sm:block">{SUB_COPY}</p>
         </div>
 
         {/* 导航 */}
         <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="hidden text-sm font-semibold text-ink sm:block">{periodLabel}</span>
           <button
             onClick={() => navigate(-1)}
             className="flex h-7 w-7 items-center justify-center rounded-btn text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
@@ -590,8 +550,8 @@ export default function CalendarPageClient({
           )}
         </div>
 
-        {/* 视图切换 */}
-        <div className="flex flex-shrink-0 overflow-hidden rounded-btn border border-border-light">
+        {/* 视图切换（segmented） */}
+        <div className="flex flex-shrink-0 items-center rounded-lg border border-border-light bg-panel-bg p-0.5">
           {(
             [
               ["today", "今日"],
@@ -602,7 +562,7 @@ export default function CalendarPageClient({
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`px-2.5 py-1 text-sm transition-colors ${
+              className={`px-2.5 py-1 text-sm rounded-md transition-colors ${
                 view === v ? "bg-primary font-semibold text-white" : "text-ink-muted hover:bg-surface-hover hover:text-ink"
               }`}
             >
@@ -612,7 +572,7 @@ export default function CalendarPageClient({
         </div>
       </header>
 
-      {/* 筛选行：项目 chip + 便签链接 + 操作 */}
+      {/* 筛选行：项目 chip + 便签链接 + 手动添加入口 + 归档开关 */}
       <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-border-light px-3 py-2">
         {emptyNoProjects ? (
           <span className="text-xs text-ink-muted">暂无项目，点击「新增项目」开始。</span>
@@ -622,13 +582,13 @@ export default function CalendarPageClient({
         <button
           type="button"
           onClick={() => setShowNoteLayer((v) => !v)}
-          className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors ${
+          className={`flex items-center gap-1 rounded-lg border px-1.5 py-0.5 transition-colors ${
             showNoteLayer ? "border-[var(--note)]/40 bg-[var(--note)]/10" : "border-border-light opacity-50"
           }`}
           title={showNoteLayer ? "点击隐藏便签链接" : "点击显示便签链接"}
         >
           <span className="flex h-4 w-4 items-center justify-center rounded-full border border-transparent">
-            <span className={`h-2 w-2 rounded-full ${showNoteLayer ? "bg-[var(--note)]" : "bg-border-strong"}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${showNoteLayer ? "bg-[var(--note)]" : "bg-border-strong"}`} />
           </span>
           <span className={`text-xs ${showNoteLayer ? "text-[var(--note)]" : "text-ink-secondary"}`}>便签链接</span>
         </button>
@@ -636,13 +596,22 @@ export default function CalendarPageClient({
         <div className="flex-1 min-w-0" />
 
         <button
-          onClick={() => startNewItem(todayStr(), null)}
+          onClick={() => startNewItem(todayStr(), null, "range")}
           className="flex items-center gap-1 rounded-btn bg-primary px-2.5 py-1 text-sm font-medium text-white transition-colors hover:bg-primary/90 whitespace-nowrap"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
           </svg>
-          新增排期
+          添加连续阶段
+        </button>
+        <button
+          onClick={() => startNewItem(todayStr(), null, "node")}
+          className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          添加单日节点
         </button>
         <button
           onClick={openNewProject}
@@ -652,17 +621,6 @@ export default function CalendarPageClient({
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           新增项目
-        </button>
-        <button
-          onClick={() => setQuickWeekOpen(true)}
-          disabled={activeProjects.length === 0}
-          title={activeProjects.length === 0 ? "请先新增项目" : "快速录入一周"}
-          className="flex items-center gap-1 rounded-btn px-2 py-1 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink whitespace-nowrap disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-          </svg>
-          快速录入
         </button>
         <Toggle label="显示归档" checked={showArchived} onChange={() => setShowArchived((v) => !v)} />
       </div>
@@ -677,14 +635,6 @@ export default function CalendarPageClient({
           {showArchived && archivedProjects.map((p) => renderChip(p, { secondary: true }))}
         </div>
       )}
-
-      {/* 指标行 */}
-      <div className="grid flex-shrink-0 grid-cols-2 gap-1.5 border-b border-border-light px-3 py-2 sm:grid-cols-4">
-        <Metric label="当前显示" value={`${mVisible} 项`} />
-        <Metric label="连续阶段" value={`${mRanges} 条`} />
-        <Metric label="单日节点" value={`${mNodes} 个`} />
-        <Metric label="便签链接" value={`${mNotes} 条`} />
-      </div>
 
       {/* 主体：视图 + 桌面右栏 */}
       <div className="flex min-h-0 flex-1">
@@ -702,16 +652,6 @@ export default function CalendarPageClient({
                 className="mt-4 rounded-btn bg-primary px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
               >
                 新增项目
-              </button>
-            </div>
-          ) : visibleItems.length === 0 && !loading ? (
-            <div className="py-16 text-center">
-              <p className="text-sm text-ink-muted">当前筛选下没有排期。</p>
-              <button
-                onClick={() => startNewItem(todayStr(), null)}
-                className="mt-3 rounded-btn px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-              >
-                新增排期
               </button>
             </div>
           ) : view === "week" ? (
@@ -750,8 +690,8 @@ export default function CalendarPageClient({
           )}
         </main>
 
-        {/* 桌面右栏：常驻 */}
-        <div className="hidden w-[300px] flex-shrink-0 sm:flex">{renderRightPanel}</div>
+        {/* 桌面右栏：手动添加/编辑表单 */}
+        <div className="hidden w-[286px] flex-shrink-0 sm:flex">{renderRightPanel}</div>
       </div>
 
       {/* 窄窗口：右栏抽屉 */}
@@ -760,7 +700,7 @@ export default function CalendarPageClient({
           <div className="fixed inset-0 z-30 bg-black/30 sm:hidden" onClick={() => setRightOpen(false)} />
           <div className="fixed inset-y-0 right-0 z-40 flex w-[85%] max-w-[340px] flex-col sm:hidden">
             <div className="flex flex-shrink-0 items-center justify-between border-b border-border-light bg-sidebar-bg px-3 py-1.5">
-              <span className="text-xs font-semibold text-ink-muted">编辑 / 详情</span>
+              <span className="text-xs font-semibold text-ink-muted">手动添加 / 编辑</span>
               <button
                 onClick={() => setRightOpen(false)}
                 className="rounded-btn p-1 text-ink-muted transition-colors hover:text-ink"
@@ -776,21 +716,13 @@ export default function CalendarPageClient({
         </>
       )}
 
-      {/* 弹窗 */}
+      {/* 新增项目弹窗 */}
       <WorkProjectDialog
         open={projectDialog.open}
         project={projectDialog.project}
         defaultColor={nextProjectColor(projects)}
         onClose={() => setProjectDialog({ open: false, project: null })}
         onSave={handleSaveProject}
-      />
-      <QuickWeekDialog
-        open={quickWeekOpen}
-        projects={activeProjects}
-        defaultWeekStart={toDateStr(weekStart)}
-        onClose={() => setQuickWeekOpen(false)}
-        onPreview={quickWeekPreview}
-        onCreateItems={handleQuickWeekCreate}
       />
     </div>
   );
@@ -816,14 +748,5 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       </span>
       {label}
     </button>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-btn border border-border-light bg-panel-bg px-2.5 py-1.5">
-      <div className="text-[10px] text-ink-muted">{label}</div>
-      <div className="text-sm font-bold leading-tight text-ink">{value}</div>
-    </div>
   );
 }

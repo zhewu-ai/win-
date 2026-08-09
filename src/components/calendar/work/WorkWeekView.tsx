@@ -33,7 +33,8 @@ function itemsOnDay(items: WorkScheduleItem[], dayStr: string): WorkScheduleItem
     });
 }
 
-function WeekCard({ item, colorOf, showNoteLayer, onClick }: {
+// 任务卡（原型 task-card）：浅底 + 1px 边框 + 4px 项目色左边条 + 标题 + 日期说明。
+function TaskCard({ item, colorOf, showNoteLayer, onClick }: {
   item: WorkScheduleItem;
   colorOf: (projectId: string) => WorkProjectColor;
   showNoteLayer: boolean;
@@ -44,7 +45,7 @@ function WeekCard({ item, colorOf, showNoteLayer, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className={`week-card group border border-border-light rounded-btn bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover ${wpClass(colorOf(item.projectId))}`}
+      className={`group rounded-btn border border-border-light bg-surface-strong/60 px-2 py-1.5 text-left transition-colors hover:bg-surface-hover ${wpClass(colorOf(item.projectId))}`}
       style={{ borderLeftWidth: 4, borderLeftColor: "var(--wp-base)" }}
     >
       <span className="flex items-center gap-1 min-w-0">
@@ -81,7 +82,7 @@ function WeekdayHead({ date, today, onSelectDay }: { date: Date; today: Date; on
   );
 }
 
-// 周视图（默认视图）：周一到周日七列，命中的排期显示为 week-card（左色条 + 标题 + 日期），今天高亮克制。
+// 周视图：周一到周日七列，命中的排期显示为 task-card（浅底 + 4px 项目色左条），今天列高亮，空列「无排期」。
 export default function WorkWeekView({ weekStart, items, today, colorOf, showNoteLayer, onItemClick, onSelectDay }: Props) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const dayStrMap = useMemo(() => {
@@ -94,15 +95,7 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
     return m;
   }, [items, days]);
 
-  const hasAny = days.some((d) => (dayStrMap.get(toDateStr(d))?.length ?? 0) > 0);
-
-  if (!hasAny) {
-    return (
-      <div className="py-14 text-center text-sm text-ink-muted">本周没有排期，点击右上角「新增排期」或「快速录入一周」开始。</div>
-    );
-  }
-
-  // 桌面：week-head + week-grid 七列
+  // 桌面：week-head + week-grid 七列（始终渲染，空列显示「无排期」）
   const desktop = (
     <div className="hidden sm:block">
       <div className="grid grid-cols-7 border-b border-border-light bg-surface-strong/40">
@@ -114,13 +107,19 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
         {days.map((d) => {
           const key = toDateStr(d);
           const dayItems = dayStrMap.get(key) ?? [];
+          const isToday = isSameDay(d, today);
           return (
-            <div key={key} className="flex flex-col items-stretch gap-1.5 border-r border-border-light/60 px-1.5 py-2 last:border-r-0">
+            <div
+              key={key}
+              className={`flex flex-col items-stretch gap-1.5 border-r border-border-light/60 px-1.5 py-2 last:border-r-0 ${
+                isToday ? "bg-primary/5" : ""
+              }`}
+            >
               {dayItems.length === 0 ? (
                 <span className="px-1 py-2 text-[11px] text-ink-muted/60">无排期</span>
               ) : (
                 dayItems.map((it) => (
-                  <WeekCard key={it.id} item={it} colorOf={colorOf} showNoteLayer={showNoteLayer} onClick={() => onItemClick(it)} />
+                  <TaskCard key={it.id} item={it} colorOf={colorOf} showNoteLayer={showNoteLayer} onClick={() => onItemClick(it)} />
                 ))
               )}
             </div>
@@ -159,7 +158,7 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
             <div className="flex flex-col gap-1.5 px-3 pb-2">
               {dayItems.length === 0 && <span className="px-1 py-1 text-xs text-ink-muted/60">无排期</span>}
               {dayItems.map((it) => (
-                <WeekCard key={it.id} item={it} colorOf={colorOf} showNoteLayer={showNoteLayer} onClick={() => onItemClick(it)} />
+                <TaskCard key={it.id} item={it} colorOf={colorOf} showNoteLayer={showNoteLayer} onClick={() => onItemClick(it)} />
               ))}
             </div>
           </div>

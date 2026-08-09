@@ -18,7 +18,6 @@ interface Props {
   /** M12 R2 管理员「日历」分组入口 */
   isAdmin?: boolean;
   onOpenCalendar?: () => void;
-  onOpenCalendarNew?: () => void;
   calendarActive?: boolean;
   /** M12 返修：工作日历筛选状态，同步入口卡今日预览 */
   calendarHiddenProjectIds?: Set<string>;
@@ -172,7 +171,6 @@ export default function NoteList({
   searchQuery,
   isAdmin,
   onOpenCalendar,
-  onOpenCalendarNew,
   calendarActive,
   calendarHiddenProjectIds,
   calendarShowNoteLayer,
@@ -469,7 +467,6 @@ export default function NoteList({
             />
             <CalendarCard
               onOpen={onOpenCalendar!}
-              onOpenNew={onOpenCalendarNew!}
               active={calendarActive}
               hiddenProjectIds={calendarHiddenProjectIds}
               showNoteLayer={calendarShowNoteLayer}

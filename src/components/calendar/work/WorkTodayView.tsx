@@ -57,7 +57,8 @@ function TodayItemCard({
     <button
       type="button"
       onClick={onClick}
-      className="group rounded-btn border border-border-light bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+      className={`group rounded-btn border border-border-light bg-surface-strong/60 px-2 py-1.5 text-left transition-colors hover:bg-surface-hover ${wpClass(colorOf(item.projectId))}`}
+      style={{ borderLeftWidth: 4, borderLeftColor: "var(--wp-base)" }}
     >
       <span className="flex items-center gap-1.5 min-w-0">
         <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full wp-dot ${wpClass(colorOf(item.projectId))}`} />

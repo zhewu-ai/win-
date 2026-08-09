@@ -8,7 +8,6 @@ import CalendarPageClient from "@/components/calendar/CalendarPageClient";
 import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { todayStr } from "@/lib/calendar-date";
 import { deleteNoteOfflineAware } from "@/lib/offline/persist";
 import { getDraft } from "@/lib/offline/draft";
 import type { Note } from "@/types";
@@ -25,9 +24,8 @@ export default function HomePage() {
   const mode = useLayoutMode();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
-  // M12 R2：右面板嵌入日历。calendarNewEvent 触发「+ 添加今日事件」弹窗（n 递增可重复触发）
+  // M12 工作日历：右面板嵌入日历
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [calendarNewEvent, setCalendarNewEvent] = useState<{ date: string; n: number } | null>(null);
   // M12 返修：工作日历筛选状态上提（隐藏项目 + 便签链接层），与左侧预览卡同步
   const [calendarHidden, setCalendarHidden] = useState<Set<string>>(new Set());
   const [calendarNoteLayer, setCalendarNoteLayer] = useState(true);
@@ -58,18 +56,13 @@ export default function HomePage() {
     });
   };
 
-  // M12 R2：打开右面板嵌入日历（不跳独立页）；newEvent 时联动弹出今日新建事件弹窗
-  const openCalendar = useCallback((opts?: { newEvent?: boolean }) => {
+  // M12 工作日历：打开/关闭右面板嵌入日历（不跳独立页）
+  const openCalendar = useCallback(() => {
     setCalendarOpen(true);
-    if (opts?.newEvent) {
-      const d = todayStr();
-      setCalendarNewEvent((prev) => ({ date: d, n: (prev?.n ?? 0) + 1 }));
-    }
   }, []);
 
   const closeCalendar = useCallback(() => {
     setCalendarOpen(false);
-    setCalendarNewEvent(null);
   }, []);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
@@ -325,8 +318,7 @@ export default function HomePage() {
             refreshing={refreshing}
             onCollapse={mode === "single" ? undefined : toggleSidebar}
             isAdmin={isAdmin}
-            onOpenCalendar={() => openCalendar()}
-            onOpenCalendarNew={() => openCalendar({ newEvent: true })}
+            onOpenCalendar={openCalendar}
             calendarActive={calendarOpen}
             calendarHiddenProjectIds={calendarHidden}
             calendarShowNoteLayer={calendarNoteLayer}
@@ -356,7 +348,6 @@ export default function HomePage() {
             <CalendarPageClient
               embedded
               onBack={mode === "single" ? closeCalendar : undefined}
-              openNewEvent={calendarNewEvent}
               notes={notes}
               onOpenNote={handleCalendarOpenNote}
               hiddenProjectIds={calendarHidden}

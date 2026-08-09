@@ -20,7 +20,6 @@ interface Props {
   isAdmin?: boolean;
   /** M12 R2：日历入口卡片回调（右面板嵌入展示，不跳独立页） */
   onOpenCalendar?: () => void;
-  onOpenCalendarNew?: () => void;
   calendarActive?: boolean;
   /** M12 返修：工作日历筛选状态，同步左侧预览卡 */
   calendarHiddenProjectIds?: Set<string>;
@@ -41,7 +40,6 @@ export default function Sidebar({
   onCollapse,
   isAdmin,
   onOpenCalendar,
-  onOpenCalendarNew,
   calendarActive,
   calendarHiddenProjectIds,
   calendarShowNoteLayer,
@@ -126,7 +124,6 @@ export default function Sidebar({
           searchQuery={searchQuery}
           isAdmin={isAdmin}
           onOpenCalendar={onOpenCalendar}
-          onOpenCalendarNew={onOpenCalendarNew}
           calendarActive={calendarActive}
           calendarHiddenProjectIds={calendarHiddenProjectIds}
           calendarShowNoteLayer={calendarShowNoteLayer}
