@@ -112,3 +112,39 @@ export interface FeedbackTicket {
     displayName: string | null;
   };
 }
+
+export type CalendarEventStatus = "todo" | "done" | "postponed";
+
+export interface CalendarEvent {
+  id: string;
+  noteId: string | null;
+  title: string;
+  description: string;
+  /** YYYY-MM-DD，按本地日期存储 */
+  date: string;
+  /** HH:mm，全天事件为 null */
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+  status: CalendarEventStatus;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  note: {
+    id: string;
+    title: string;
+    isArchived: boolean;
+    isTrashed: boolean;
+  } | null;
+}
+
+export interface CalendarEventInput {
+  title: string;
+  description?: string;
+  date: string;
+  allDay?: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
+  status?: CalendarEventStatus;
+  noteId?: string | null;
+}

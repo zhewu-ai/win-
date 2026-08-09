@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import OfflineBar from "@/components/OfflineBar";
+import TodayStrip from "@/components/calendar/TodayStrip";
 import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { deleteNoteOfflineAware } from "@/lib/offline/persist";
 import { getDraft } from "@/lib/offline/draft";
 import type { Note } from "@/types";
@@ -15,6 +18,9 @@ const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
 export default function HomePage() {
   const { notes, loading, refreshing, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
     useNotes(false);
+  const router = useRouter();
+  const { user } = useCurrentUser();
+  const isAdmin = user?.role === "admin";
 
   // 布局模式：≥720 双栏（侧栏固定 350px，仅手动折叠）/ <720 单栏（工具栏再按编辑区实际宽度细分）
   const mode = useLayoutMode();
@@ -230,6 +236,17 @@ export default function HomePage() {
     return () => window.removeEventListener("sticky-notes:changed", onChanged);
   }, [fetchNotes, searchQuery, selectedNoteId]);
 
+  // M12 普通用户直接访问 /calendar 被重定向回来时，提示无权限
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("notice") === "calendar_forbidden") {
+      showRefreshToast("无权限访问日历");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("notice");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [showRefreshToast]);
+
   // 防丢：重开后存在未同步草稿时自动打开对应便签，交给编辑器恢复
   useEffect(() => {
     if (loading) return;
@@ -245,6 +262,13 @@ export default function HomePage() {
   return (
     <div className="h-screen flex flex-col bg-page-bg">
       <OfflineBar />
+      {/* M12 首页今日条：仅管理员展示 */}
+      {isAdmin && (
+        <TodayStrip
+          onOpenNote={openNoteById}
+          onOpenCalendar={(path) => router.push(path)}
+        />
+      )}
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
             单栏 → 编辑打开时收起（复用 width/opacity 动画），否则全宽显示；
@@ -272,6 +296,7 @@ export default function HomePage() {
             onRefresh={handleRefresh}
             refreshing={refreshing}
             onCollapse={mode === "single" ? undefined : toggleSidebar}
+            isAdmin={isAdmin}
           />
         </div>
 

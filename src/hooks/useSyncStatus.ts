@@ -5,8 +5,11 @@ import { liveQuery } from "dexie";
 import { getDB } from "@/lib/offline/db";
 import { onSyncStateChange, runSync } from "@/lib/offline/sync";
 
-// 在线状态：单例共享，供多个组件订阅
-let currentOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+// 在线状态：单例共享，供多个组件订阅。
+// 用 `typeof window` 判断 SSR：Next.js 在服务端渲染 client 组件时会 polyfill navigator，
+// 导致 navigator.onLine 在 SSR 返回 false、与浏览器端不一致 → OfflineBar 水合错位。
+// SSR 无法预知客户端在线状态，默认按「在线」渲染（OfflineBar=null），与联网客户端一致。
+let currentOnline = typeof window !== "undefined" ? navigator.onLine : true;
 const onlineListeners = new Set<(v: boolean) => void>();
 
 function setOnline(v: boolean) {

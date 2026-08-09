@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { Note } from "@/types";
 import NoteList from "./NoteList";
 import AccountMenu from "./AccountMenu";
@@ -16,6 +17,8 @@ interface Props {
   onRefresh?: () => void;
   refreshing?: boolean;
   onCollapse?: () => void;
+  /** M12 管理员灰度：true 时展示「日历」入口。 */
+  isAdmin?: boolean;
 }
 
 export default function Sidebar({
@@ -30,6 +33,7 @@ export default function Sidebar({
   onRefresh,
   refreshing,
   onCollapse,
+  isAdmin,
 }: Props) {
   return (
     <div className="flex flex-col h-full min-h-0 bg-sidebar-bg">
@@ -99,6 +103,19 @@ export default function Sidebar({
           </button>
         )}
       </div>
+
+      {/* M12 日历入口：仅管理员展示 */}
+      {isAdmin && (
+        <Link
+          href="/calendar"
+          className="mx-3 mb-1 flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          日历
+        </Link>
+      )}
 
       {/* Note list */}
       <div className="flex-1 min-h-0 flex flex-col">
