@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, toErrorResponse } from "@/lib/auth";
 import { excelToText } from "@/lib/excel-text";
+import { parseExcelSchedule } from "@/lib/excel-schedule-parse";
 import { parseScheduleFile, AiParseError } from "@/lib/siliconflow";
-import type { CalendarImportDraft, CalendarImportYearNotice } from "@/types";
+import type {
+  CalendarImportDraft,
+  CalendarImportUsage,
+  CalendarImportYearNotice,
+} from "@/types";
 
 // M13 AI 排期导入：识别上传的图片/Excel，返回可编辑草稿。
 // 仅管理员；不直接入库（写入走 /confirm）；日志脱敏（不打印 key/base64/文件内容）。
@@ -87,13 +92,53 @@ export async function POST(request: Request) {
       }
     }
 
-    const { draft, usage } = await parseScheduleFile({
-      kind,
-      fileBuffer: buffer,
-      mimeType: mime || undefined,
-      filename,
-      excelText,
-    });
+    // M13 程序硬解析兜底：仅 Excel。AI 超时/调用失败/空草稿时自动启用确定性解析，
+    // 生成可编辑草稿返回（fallback=true），不直接入库；产出为空则原样抛 AI 错误。
+    const runProgramFallback = (): { draft: CalendarImportDraft; usage: CalendarImportUsage } | null => {
+      const r = parseExcelSchedule(buffer, filename);
+      if (r.draft.items.length === 0) return null;
+      return {
+        draft: r.draft,
+        usage: { model: "excel-program", promptTokens: 0, completionTokens: 0, durationMs: r.durationMs },
+      };
+    };
+
+    let draft: CalendarImportDraft;
+    let usage: CalendarImportUsage;
+    let fallback = false;
+    try {
+      const r = await parseScheduleFile({
+        kind,
+        fileBuffer: buffer,
+        mimeType: mime || undefined,
+        filename,
+        excelText,
+      });
+      draft = r.draft;
+      usage = r.usage;
+      // AI 返回空草稿（items/projects 均 0）→ 同样兜底
+      if (kind === "excel" && r.draft.items.length === 0 && r.draft.projects.length === 0) {
+        const fb = runProgramFallback();
+        if (fb) {
+          draft = fb.draft;
+          usage = fb.usage;
+          fallback = true;
+        }
+      }
+    } catch (e) {
+      if (e instanceof AiParseError && kind === "excel") {
+        const fb = runProgramFallback();
+        if (fb) {
+          draft = fb.draft;
+          usage = fb.usage;
+          fallback = true;
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
 
     // 2.2 异常年份检测：80%+ 条目落在当前年 ±1 年之外 → 给前端批量修正建议
     const currentYear = new Date().getFullYear();
@@ -118,11 +163,12 @@ export async function POST(request: Request) {
     console.log(
       `[calendar-import] parse ok kind=${kind} file=${filename} size=${buffer.length}B ` +
         `model=${usage.model} prompt=${usage.promptTokens} completion=${usage.completionTokens} ` +
-        `ms=${usage.durationMs} projects=${draft.projects.length} items=${draft.items.length} ` +
+        `ms=${usage.durationMs} fallback=${fallback} ` +
+        `projects=${draft.projects.length} items=${draft.items.length} ` +
         `warnings=${draft.warnings.length}`
     );
 
-    return NextResponse.json({ ok: true, kind, draft: draft as CalendarImportDraft, usage, yearNotice });
+    return NextResponse.json({ ok: true, kind, draft, usage, yearNotice, fallback });
   } catch (e) {
     if (e instanceof AiParseError) {
       const message =

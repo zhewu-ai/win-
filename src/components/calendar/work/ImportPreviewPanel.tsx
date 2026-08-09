@@ -1,16 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import type { CalendarImportDraft, CalendarImportUsage, CalendarImportYearNotice } from "@/types";
 import { wpClass } from "./color";
 
 // M13 AI 排期导入预览：展示识别出的草稿，支持编辑项目名/标题/起止日期、删除条目/项目、
 // 确认导入/取消。AI 结果必须经用户确认后才入库。
+// fallback=true：AI 未及时返回，草稿由程序硬解析生成，顶部横幅提示用户确认。
 
 interface Props {
   draft: CalendarImportDraft;
   usage?: CalendarImportUsage | null;
   /** M13 3.2 后端自动识别的文件类型，用于展示「已识别为 Excel/图片」。 */
   kind?: "image" | "excel" | null;
+  /** M13 程序硬解析兜底：AI 失败后由程序解析生成草稿。 */
+  fallback?: boolean;
   yearNotice?: CalendarImportYearNotice | null;
   busy?: boolean;
   error?: string | null;
@@ -27,6 +31,7 @@ export default function ImportPreviewPanel({
   draft,
   usage,
   kind,
+  fallback,
   yearNotice,
   busy,
   error,
@@ -35,6 +40,17 @@ export default function ImportPreviewPanel({
   onCancel,
   onDismissYearNotice,
 }: Props) {
+  /** QA② 项目分组折叠：默认全展开，条目多时可收起减少滚动。 */
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleCollapse = (tempId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(tempId)) next.delete(tempId);
+      else next.add(tempId);
+      return next;
+    });
+  };
+
   const patchProject = (tempId: string, patch: Partial<{ name: string }>) => {
     onUpdateDraft({
       ...draft,
@@ -86,11 +102,21 @@ export default function ImportPreviewPanel({
         <h2 className="text-[13px] font-bold text-ink">导入预览</h2>
         {usage && (
           <span className="text-[10px] text-ink-muted">
-            {kind ? (kind === "excel" ? "Excel" : "图片") : "AI"} · {usage.model.replace("Qwen/", "")} ·{" "}
-            {(usage.durationMs / 1000).toFixed(1)}s
+            {fallback && kind === "excel"
+              ? "Excel · 程序解析"
+              : `${kind ? (kind === "excel" ? "Excel" : "图片") : "AI"} · ${usage.model.replace("Qwen/", "")}`}{" "}
+            · {(usage.durationMs / 1000).toFixed(1)}s
           </span>
         )}
       </div>
+
+      {fallback && (
+        <div className="rounded-card bg-amber-500/10 px-3 py-2">
+          <p className="text-xs font-semibold text-amber-600">
+            AI 识别未及时返回，已使用 Excel 程序解析生成草稿，请确认。
+          </p>
+        </div>
+      )}
 
       {yearNotice && (
         <div className="rounded-card bg-amber-500/10 px-3 py-2">
@@ -147,6 +173,25 @@ export default function ImportPreviewPanel({
                 className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-ink outline-none focus:bg-surface-hover/60 rounded-input px-1.5 py-0.5"
                 aria-label="项目名"
               />
+              {its.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => toggleCollapse(p.tempId)}
+                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
+                  title={collapsed.has(p.tempId) ? "展开该项目排期" : "收起该项目排期"}
+                  aria-label={collapsed.has(p.tempId) ? "展开" : "收起"}
+                >
+                  <svg
+                    className={`h-3.5 w-3.5 transition-transform ${collapsed.has(p.tempId) ? "-rotate-90" : ""}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => removeProject(p.tempId)}
@@ -163,6 +208,14 @@ export default function ImportPreviewPanel({
 
             {its.length === 0 ? (
               <p className="mt-1.5 text-[11px] text-ink-muted">该项目下暂无排期</p>
+            ) : collapsed.has(p.tempId) ? (
+              <button
+                type="button"
+                onClick={() => toggleCollapse(p.tempId)}
+                className="mt-1.5 text-[11px] font-medium text-ink-muted transition-colors hover:text-ink"
+              >
+                {its.length} 条排期（已折叠，点击展开）
+              </button>
             ) : (
               <div className="mt-2 space-y-1.5">
                 {its.map((it) => (
@@ -229,7 +282,7 @@ export default function ImportPreviewPanel({
         <p className="text-xs text-amber-600">请先补充或删除空项目名后再导入。</p>
       )}
 
-      <div className="flex items-center gap-2 pt-1">
+      <div className="sticky bottom-0 -mx-3 mt-2 flex items-center gap-2 border-t border-border-light bg-sidebar-bg/95 px-3 pb-2 pt-2 backdrop-blur">
         <button
           type="button"
           onClick={onCancel}

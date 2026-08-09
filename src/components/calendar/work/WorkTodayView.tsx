@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import type { Note, WorkProjectColor, WorkScheduleItem } from "@/types";
-import { toDateStr, weekdayLabel } from "@/lib/calendar-date";
+import { addDays, fromDateStr, toDateStr, weekdayLabel } from "@/lib/calendar-date";
+import { futureKeyNodes } from "@/lib/schedule-nodes";
 import { wpClass } from "./color";
 
 interface Props {
@@ -116,6 +117,12 @@ export default function WorkTodayView({
     });
   }, [notes, dateStr, showNoteLayer]);
 
+  // QA⑥ 后续关键节点：从明天起 14 天，最多 3 条，交付/提交类优先（与封面共享关键词判定）。
+  const nextNodes = useMemo(
+    () => futureKeyNodes(items, toDateStr(addDays(date, 1)), 14, 3),
+    [items, dateStr]
+  );
+
   const emptyAll = todayRanges.length === 0 && todayNodes.length === 0 && todayNotes.length === 0;
 
   return (
@@ -135,6 +142,51 @@ export default function WorkTodayView({
         <span>排期 {todayRanges.length + todayNodes.length} 项</span>
         {showNoteLayer && <span>关联便签 {todayNotes.length} 条</span>}
       </div>
+
+      {/* QA⑥ 后续关键节点提示：点击跳转到该排期详情 */}
+      {nextNodes.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <SectionTitle label="后续关键节点" />
+          <div className="flex flex-col gap-1.5">
+            {nextNodes.map((n) => {
+              const offset = Math.round(
+                (fromDateStr(n.dateStr).getTime() - fromDateStr(dateStr).getTime()) / 86400000
+              );
+              const dd = fromDateStr(n.dateStr);
+              return (
+                <button
+                  key={n.item.id}
+                  type="button"
+                  onClick={() => onItemClick(n.item)}
+                  className="flex items-center gap-2 rounded-btn border border-border-light bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                >
+                  <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
+                    {isToday
+                      ? offset === 1
+                        ? "明天"
+                        : offset === 2
+                          ? "后天"
+                          : `${offset} 天后`
+                      : `${dd.getMonth() + 1}/${dd.getDate()}`}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                    {n.item.title || "未命名"}
+                  </span>
+                  <svg
+                    className="h-3 w-3 flex-shrink-0 text-ink-muted"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {emptyAll ? (
         <div className="rounded-btn border border-dashed border-border-light bg-panel-bg/40 px-3 py-6 text-center text-sm text-ink-muted">

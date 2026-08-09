@@ -108,11 +108,12 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
           const key = toDateStr(d);
           const dayItems = dayStrMap.get(key) ?? [];
           const isToday = isSameDay(d, today);
+          const isWeekend = d.getDay() === 0 || d.getDay() === 6;
           return (
             <div
               key={key}
               className={`flex min-h-0 flex-col items-stretch gap-1.5 overflow-y-auto border-r border-border-light/60 px-1.5 py-2 last:border-r-0 ${
-                isToday ? "bg-primary/5" : ""
+                isToday ? "bg-primary/5" : isWeekend ? "bg-page-bg/40" : ""
               }`}
             >
               {dayItems.length === 0 ? (
@@ -136,13 +137,14 @@ export default function WorkWeekView({ weekStart, items, today, colorOf, showNot
         const key = toDateStr(d);
         const dayItems = dayStrMap.get(key) ?? [];
         const isToday = isSameDay(d, today);
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         return (
           <div key={key}>
             <button
               type="button"
               onClick={() => onSelectDay(key)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-hover ${
-                isToday ? "bg-primary/5" : ""
+                isToday ? "bg-primary/5" : isWeekend ? "bg-page-bg/40" : ""
               }`}
             >
               <span className="text-sm font-medium text-ink">周{WEEK_LABELS[d.getDay() === 0 ? 6 : d.getDay() - 1]}</span>

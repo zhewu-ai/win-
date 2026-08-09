@@ -152,9 +152,11 @@ export default function CalendarPageClient({
     draft: CalendarImportDraft | null;
     usage: CalendarImportUsage | null;
     kind: "image" | "excel" | null;
+    /** M13 程序硬解析兜底：AI 失败后由后端程序解析生成草稿。 */
+    fallback: boolean;
     error: string | null;
     doneMessage: string | null;
-  }>({ step: "idle", draft: null, usage: null, kind: null, error: null, doneMessage: null });
+  }>({ step: "idle", draft: null, usage: null, kind: null, fallback: false, error: null, doneMessage: null });
   // 2.1 阶段进度与 AI 等待秒数；2.2 年份异常提示
   const [importStages, setImportStages] = useState<CalendarImportStage[] | null>(null);
   const [importElapsed, setImportElapsed] = useState(0);
@@ -472,6 +474,7 @@ export default function CalendarPageClient({
         draft: data.draft ?? null,
         usage: data.usage ?? null,
         kind: data.kind === "excel" || data.kind === "image" ? data.kind : null,
+        fallback: data.fallback === true,
         error: null,
       }));
       setYearNotice(data.yearNotice ?? null);
@@ -497,7 +500,7 @@ export default function CalendarPageClient({
     setImportStages(null);
     setImportElapsed(0);
     setYearNotice(null);
-    setImportState({ step: "idle", draft: null, usage: null, kind: null, error: null, doneMessage: null });
+    setImportState({ step: "idle", draft: null, usage: null, kind: null, fallback: false, error: null, doneMessage: null });
   }, []);
 
   const handleConfirmImport = useCallback(async () => {
@@ -519,7 +522,7 @@ export default function CalendarPageClient({
         return;
       }
       const msg = `已导入 ${data?.created?.items ?? 0} 条排期、${data?.created?.projects ?? 0} 个项目`;
-      setImportState({ step: "idle", draft: null, usage: null, kind: null, error: null, doneMessage: msg });
+      setImportState({ step: "idle", draft: null, usage: null, kind: null, fallback: false, error: null, doneMessage: msg });
       setYearNotice(null);
       void fetchProjects(true);
       void fetchItems();
@@ -691,6 +694,7 @@ export default function CalendarPageClient({
       importDraft={importState.draft}
       importUsage={importState.usage}
       importKind={importState.kind}
+      importFallback={importState.fallback}
       importStages={importStages}
       importElapsed={importElapsed}
       importYearNotice={yearNotice}

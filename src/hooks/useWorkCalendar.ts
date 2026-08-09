@@ -12,6 +12,12 @@ import type {
 // 工作日历数据 hook：项目 + 排期条目，范围拉取 + 增删改，带乐观更新与失败回滚。
 // 项目/条目均只属于当前管理员，接口层已校验。
 
+// QA⑤ 封面缩略信息同步：排期有变化后派发 window 事件，日历封面（CalendarCard）监听并重新拉取。
+function notifyScheduleChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("work-schedule-changed"));
+}
+
 export function useWorkCalendar() {
   const [projects, setProjects] = useState<WorkProject[]>([]);
   const [items, setItems] = useState<WorkScheduleItem[]>([]);
@@ -50,6 +56,7 @@ export function useWorkCalendar() {
       if (!res.ok || !data.ok) throw new Error(data.error || "FETCH_FAILED");
       setItems(data.items as WorkScheduleItem[]);
       setError(null);
+      notifyScheduleChanged();
       return data.items as WorkScheduleItem[];
     } catch {
       setError("加载排期失败");
@@ -126,6 +133,7 @@ export function useWorkCalendar() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "CREATE_FAILED");
       setItems((prev) => [...prev, data.item as WorkScheduleItem]);
+      notifyScheduleChanged();
       return data.item as WorkScheduleItem;
     },
     []
@@ -151,6 +159,7 @@ export function useWorkCalendar() {
         setItems((prev) =>
           prev.map((i) => (i.id === id ? data.item : i))
         );
+        notifyScheduleChanged();
         return data.item as WorkScheduleItem;
       } catch (e) {
         setItems(snapshot);
@@ -169,6 +178,7 @@ export function useWorkCalendar() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "DELETE_FAILED");
+      notifyScheduleChanged();
     } catch (e) {
       setItems(snapshot);
       throw e;

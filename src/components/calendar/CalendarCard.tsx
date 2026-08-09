@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { WorkScheduleItem } from "@/types";
-import { todayStr, weekdayLabel } from "@/lib/calendar-date";
+import { addDays, toDateStr, todayStr, weekdayLabel } from "@/lib/calendar-date";
+import { futureKeyNodes } from "@/lib/schedule-nodes";
 
 const MONTH_NAMES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
@@ -28,25 +29,32 @@ export default function CalendarCard({ onOpen, active, hiddenProjectIds, showNot
   const [items, setItems] = useState<WorkScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchToday = useCallback(async () => {
+  // QA④⑤ 拉取今天起 7 天范围：封面优先展示「未来关键交付节点」，并监听排期变更事件实时刷新（修复缩略信息不同步）。
+  const fetchRange = useCallback(async () => {
     const s = todayStr();
+    const to = toDateStr(addDays(new Date(), 7));
     try {
-      const res = await fetch(`/api/work-schedule-items?from=${s}&to=${s}`);
+      const res = await fetch(`/api/work-schedule-items?from=${s}&to=${to}`);
       const data = await res.json();
       if (res.ok && data.ok) setItems((data.items as WorkScheduleItem[]) ?? []);
     } catch {
-      // 静默降级：今日预览留空
+      // 静默降级：封面留空
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchToday();
-    const onFocus = () => void fetchToday();
+    void fetchRange();
+    const onFocus = () => void fetchRange();
+    const onChanged = () => void fetchRange();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [fetchToday]);
+    window.addEventListener("work-schedule-changed", onChanged);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("work-schedule-changed", onChanged);
+    };
+  }, [fetchRange]);
 
   const now = new Date();
   const dow = now.getDay();
@@ -57,8 +65,14 @@ export default function CalendarCard({ onOpen, active, hiddenProjectIds, showNot
   const visible = hiddenProjectIds?.size
     ? items.filter((it) => !hiddenProjectIds.has(it.projectId))
     : items;
-  const undone = visible.filter((it) => it.status !== "done");
+  // 徽标/「今日未完成」只计今天的未完成项（7 天范围数据用于封面关键节点）
+  const today = todayStr();
+  const undone = visible.filter(
+    (it) => it.status !== "done" && it.startDate <= today && it.endDate >= today
+  );
   const first2 = undone.slice(0, 2);
+  // QA④ 未来 7 天关键交付节点（无节点时回退到今日预览）
+  const nodes = futureKeyNodes(visible, today, 7, 2);
 
   const rootCls = active ? "card-selected card-selected-blue" : "card-surface";
   const muted = active ? "text-white/[0.78]" : "text-ink-muted";
@@ -102,7 +116,25 @@ export default function CalendarCard({ onOpen, active, hiddenProjectIds, showNot
             <div className={`mt-1 text-xs ${muted}`}>
               今日 · {dateLabel} · 未完成 {undone.length} 项
             </div>
-            {first2.length === 0 ? (
+            {nodes.length > 0 ? (
+              <div className="mt-1.5 space-y-1">
+                {nodes.map((n) => (
+                  <div key={n.item.id} className={`flex items-center gap-1.5 text-xs ${itemTitleCls}`}>
+                    <span
+                      className={`flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                        active ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-600"
+                      }`}
+                    >
+                      {n.daysFrom === 0 ? "今天" : n.daysFrom === 1 ? "明天" : `${n.daysFrom}天后`}
+                    </span>
+                    <span className="min-w-0 truncate">{n.item.title || "未命名排期"}</span>
+                    <span className={`ml-auto flex-shrink-0 text-[10px] ${active ? "text-white/60" : "text-ink-muted/70"}`}>
+                      {shortDate(n.dateStr)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : first2.length === 0 ? (
               <div className={`mt-1.5 text-xs ${muted}`}>今天暂无排期</div>
             ) : (
               <div className="mt-1.5 space-y-1">

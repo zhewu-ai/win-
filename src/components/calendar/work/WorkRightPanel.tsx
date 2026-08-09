@@ -47,6 +47,8 @@ interface Props {
   importDraft?: CalendarImportDraft | null;
   importUsage?: CalendarImportUsage | null;
   importKind?: "image" | "excel" | null;
+  /** M13 程序硬解析兜底标记：AI 失败后由程序解析生成草稿。 */
+  importFallback?: boolean;
   importStages?: CalendarImportStage[] | null;
   importElapsed?: number;
   importYearNotice?: CalendarImportYearNotice | null;
@@ -86,6 +88,7 @@ export default function WorkRightPanel({
   importDraft,
   importUsage,
   importKind,
+  importFallback,
   importStages,
   importElapsed,
   importYearNotice,
@@ -195,6 +198,7 @@ export default function WorkRightPanel({
           draft={importDraft}
           usage={importUsage}
           kind={importKind}
+          fallback={importFallback}
           yearNotice={importYearNotice}
           busy={importBusy}
           error={importError}
@@ -330,8 +334,11 @@ export default function WorkRightPanel({
                 onRetry={onRetryImport}
               />
             )}
-            <div className="flex items-center gap-1.5">
-              <label className="cursor-pointer rounded-btn border border-border-light bg-panel-bg px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-50">
+            <div className="flex flex-col gap-1">
+              <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-btn bg-primary px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50">
+                <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-6m-3 3l3-3 3 3M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                </svg>
                 上传给 AI
                 <input
                   type="file"
@@ -341,6 +348,7 @@ export default function WorkRightPanel({
                   onChange={handlePickFile}
                 />
               </label>
+              <p className="text-center text-[10px] text-ink-muted">支持 Excel、图片</p>
             </div>
             {importError && !importStages && <p className="mt-1.5 text-xs text-danger">{importError}</p>}
             {importDoneMessage && <p className="mt-1.5 text-xs text-success">✓ {importDoneMessage}</p>}

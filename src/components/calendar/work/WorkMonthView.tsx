@@ -85,10 +85,19 @@ export default function WorkMonthView({ monthDate, items, notes, today, colorOf,
     const rowLanes: number[][][] = Array.from({ length: 6 }, () => Array.from({ length: 7 }, () => [] as number[]));
     const rowHasLane2 = Array(6).fill(false);
 
+    // QA⑦ 连续月历去重：补位日期不渲染排期，同一条排期只在其真实所属月份出现一次。
+    // 把每条的可见段裁剪到本月真实日期范围内（跨月范围条在月边界截断，邻月各自显示所属部分）。
+    const isInMonth = (i: number): boolean => {
+      const d = cells[i].date;
+      return d.getFullYear() === monthDate.getFullYear() && d.getMonth() === monthDate.getMonth();
+    };
     const segOf = (it: WorkScheduleItem): { s: number; e: number } | null => {
-      const s = Math.max(0, dayDiff(gridStartStr, it.startDate));
-      const e = Math.min(41, dayDiff(gridStartStr, it.endDate));
+      let s = Math.max(0, dayDiff(gridStartStr, it.startDate));
+      let e = Math.min(41, dayDiff(gridStartStr, it.endDate));
       if (e < 0 || s > 41 || s > e) return null;
+      while (s <= e && !isInMonth(s)) s++;
+      while (e >= s && !isInMonth(e)) e--;
+      if (s > e) return null;
       return { s, e };
     };
 
@@ -184,11 +193,27 @@ export default function WorkMonthView({ monthDate, items, notes, today, colorOf,
       <div className="relative">
         {/* 42 格日历：行高固定，日期号左上，窄屏显示项目色点 */}
         <div className="grid grid-cols-7">
-          {cells.map(({ date, inMonth }) => {
+          {cells.map(({ date, inMonth }, i) => {
             const key = toDateStr(date);
             const isToday = isSameDay(date, today);
+            const isWeekend = i % 7 >= 5; // 周一开头，第 6/7 列为周六/周日
             const colors = dayColors.get(key) ?? [];
             const dayNotes = notesByDay.get(key) ?? [];
+            // QA③ 层级：选中 > 非本月 > 周末弱化 > 普通。
+            // accent-pink 是原始 CSS 变量，Tailwind 不给它生成透明度工具类，
+            // 周末底色用 inline color-mix（随主题色变、现代浏览器支持）。
+            const cellBg =
+              selectedDate === key
+                ? "bg-primary/10"
+                : !inMonth
+                  ? "bg-page-bg/40"
+                  : "";
+            const cellStyle =
+              isToday
+                ? { boxShadow: "inset 0 0 0 2px var(--primary)" }
+                : !inMonth || selectedDate === key || !isWeekend
+                  ? undefined
+                  : { backgroundColor: "color-mix(in srgb, var(--accent-pink) 5%, transparent)" };
             return (
               <div
                 key={key}
@@ -202,21 +227,26 @@ export default function WorkMonthView({ monthDate, items, notes, today, colorOf,
                     setSelectedDate(key);
                   }
                 }}
-                style={isToday ? { boxShadow: "inset 0 0 0 2px var(--primary)" } : undefined}
-                className={`relative h-[106px] cursor-pointer border-r border-b border-border-light/60 px-1 pt-1 transition-colors hover:bg-surface-hover [&:nth-child(7n)]:border-r-0 ${
-                  inMonth ? "" : "bg-page-bg/40"
-                } ${selectedDate === key ? "bg-primary/10" : ""}`}
+                style={cellStyle}
+                className={`relative h-[106px] cursor-pointer border-r border-b border-border-light/60 px-1 pt-1 transition-colors hover:bg-surface-hover [&:nth-child(7n)]:border-r-0 ${cellBg}`}
               >
                 <div className="flex items-start justify-between gap-1">
                   <span
                     className={`flex h-5 min-w-5 items-center justify-center self-start rounded-full px-1 text-xs font-semibold ${
-                      isToday ? "text-primary" : inMonth ? "text-ink" : "text-ink-muted/50"
+                      isToday
+                        ? "bg-primary text-white"
+                        : !inMonth
+                          ? "text-ink-muted/50"
+                          : isWeekend
+                            ? "text-accent-pink"
+                            : "text-ink"
                     }`}
                   >
                     {date.getDate()}
                   </span>
-                  {/* 2.6 便签链接层：右上角便签指示；1 条直接打开，多条进入当天日视图 */}
-                  {dayNotes.length > 0 && (
+                  {/* 2.6 便签链接层：右上角便签指示；1 条直接打开，多条进入当天日视图。
+                      QA⑦ 补位日期不显示，避免与真实所属月份的便签指示重复。 */}
+                  {inMonth && dayNotes.length > 0 && (
                     <button
                       type="button"
                       onClick={(ev) => {
