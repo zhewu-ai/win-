@@ -219,6 +219,26 @@
   box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(18, 26, 40, 0.16);
 }
 
+/* ── M12 工作日历项目色系 ─────────────────────────────── */
+/* 同一项目用同色系深浅变化：--wp-base 主色 / --wp-deep 深端 / --wp-soft 浅底 / --wp-soft-border 浅底描边 */
+.wp-blue { --wp-base: #4276dc; --wp-deep: #2f62c7; --wp-soft: rgba(66, 118, 220, 0.12); --wp-soft-border: rgba(66, 118, 220, 0.26); }
+.wp-red { --wp-base: #d95f4b; --wp-deep: #bf4a38; --wp-soft: rgba(217, 95, 75, 0.12); --wp-soft-border: rgba(217, 95, 75, 0.26); }
+.wp-green { --wp-base: #2fae9f; --wp-deep: #259187; --wp-soft: rgba(47, 174, 159, 0.12); --wp-soft-border: rgba(47, 174, 159, 0.26); }
+.wp-purple { --wp-base: #8468d0; --wp-deep: #6a4fbd; --wp-soft: rgba(132, 104, 208, 0.12); --wp-soft-border: rgba(132, 104, 208, 0.26); }
+.wp-gray { --wp-base: #8d949e; --wp-deep: #717885; --wp-soft: rgba(141, 148, 158, 0.12); --wp-soft-border: rgba(141, 148, 158, 0.26); }
+[data-theme="dark"] .wp-blue { --wp-base: #5d8cff; --wp-deep: #3569e6; --wp-soft: rgba(93, 140, 255, 0.18); --wp-soft-border: rgba(93, 140, 255, 0.4); }
+[data-theme="dark"] .wp-red { --wp-base: #ff7d66; --wp-deep: #e0543c; --wp-soft: rgba(255, 125, 102, 0.18); --wp-soft-border: rgba(255, 125, 102, 0.4); }
+[data-theme="dark"] .wp-green { --wp-base: #42c9bd; --wp-deep: #2f9e95; --wp-soft: rgba(66, 201, 189, 0.18); --wp-soft-border: rgba(66, 201, 189, 0.4); }
+[data-theme="dark"] .wp-purple { --wp-base: #a88bf0; --wp-deep: #8667dc; --wp-soft: rgba(168, 139, 240, 0.18); --wp-soft-border: rgba(168, 139, 240, 0.4); }
+[data-theme="dark"] .wp-gray { --wp-base: #9aa3ad; --wp-deep: #767f8a; --wp-soft: rgba(154, 163, 173, 0.18); --wp-soft-border: rgba(154, 163, 173, 0.4); }
+
+/* 应用类：实心点 / 浅底芯片 / 甘特条（左侧主色细边）/ 纯文字 */
+.wp-dot { background: var(--wp-base); }
+.wp-chip { background: var(--wp-soft); border: 1px solid var(--wp-soft-border); color: var(--wp-base); }
+.wp-bar { background: var(--wp-soft); border-left: 3px solid var(--wp-base); color: var(--wp-base); }
+.wp-text { color: var(--wp-base); }
+.wp-chip:hover, .wp-bar:hover { background: var(--wp-soft-border); }
+
 @keyframes toolbar-pop {
   from {
     opacity: 0;

@@ -37,6 +37,8 @@ model User {
   announcementReads AnnouncementRead[]
   userActivityLogs  UserActivityLog[]
   calendarEvents    CalendarEvent[]
+  workProjects      WorkProject[]
+  workScheduleItems WorkScheduleItem[]
 }
 
 model PasswordResetToken {
@@ -118,6 +120,7 @@ model Note {
   user User @relation(fields: [userId], references: [id])
   attachments Attachment[]
   calendarEvents CalendarEvent[]
+  workScheduleItems WorkScheduleItem[]
 
   @@index([userId, deletedAt, isArchived])
   @@index([userId, isArchived, deletedAt])
@@ -211,4 +214,52 @@ model CalendarEvent {
   @@index([userId, date, deletedAt])
   @@index([userId, status])
   @@index([noteId])
+}
+
+// M12 工作日历：项目是排期容器，排期条目是月/周/今日三视图共同读取的基本单元。
+model WorkProject {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  colorKey    String   @default("blue") // blue | red | green | purple | gray
+  status      String   @default("active") // active | archived
+  startDate   String? // YYYY-MM-DD
+  endDate     String? // YYYY-MM-DD
+  description String   @default("")
+  source      String   @default("manual") // manual；M13 AI 导入阶段扩展
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime?
+  deletedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+  scheduleItems WorkScheduleItem[]
+
+  @@index([userId, status, deletedAt])
+  @@index([userId, deletedAt])
+}
+
+model WorkScheduleItem {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  title     String
+  type      String   @default("range") // range（连续阶段）| node（单日节点）
+  startDate String // YYYY-MM-DD
+  endDate   String // YYYY-MM-DD；node 与 startDate 相同
+  status    String   @default("todo") // todo | done | postponed
+  noteId    String?
+  source    String   @default("manual") // manual；M13 AI 导入阶段扩展
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+  project WorkProject @relation(fields: [projectId], references: [id])
+  note Note? @relation(fields: [noteId], references: [id])
+
+  @@index([userId, startDate, endDate, deletedAt])
+  @@index([projectId, deletedAt])
+  @@index([noteId])
+  @@index([userId, status])
 }

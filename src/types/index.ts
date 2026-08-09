@@ -148,3 +148,85 @@ export interface CalendarEventInput {
   status?: CalendarEventStatus;
   noteId?: string | null;
 }
+
+// M12 工作日历人工闭环：项目 + 排期条目
+export type WorkProjectColor = "blue" | "red" | "green" | "purple" | "gray";
+export type WorkProjectStatus = "active" | "archived";
+export type WorkScheduleItemType = "range" | "node";
+
+export interface WorkProject {
+  id: string;
+  name: string;
+  colorKey: WorkProjectColor;
+  status: WorkProjectStatus;
+  /** YYYY-MM-DD，可空 */
+  startDate: string | null;
+  endDate: string | null;
+  description: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export interface WorkProjectInput {
+  name: string;
+  colorKey: WorkProjectColor;
+  startDate?: string | null;
+  endDate?: string | null;
+  description?: string;
+}
+
+export interface WorkScheduleItem {
+  id: string;
+  projectId: string;
+  title: string;
+  type: WorkScheduleItemType;
+  /** YYYY-MM-DD；node 与 startDate 相同 */
+  startDate: string;
+  endDate: string;
+  status: CalendarEventStatus;
+  noteId: string | null;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  note?: {
+    id: string;
+    title: string;
+    isArchived: boolean;
+    isTrashed: boolean;
+  } | null;
+}
+
+export interface WorkScheduleItemInput {
+  projectId: string;
+  title: string;
+  type: WorkScheduleItemType;
+  startDate: string;
+  endDate: string;
+  status?: CalendarEventStatus;
+  noteId?: string | null;
+}
+
+export interface QuickWeekDayInput {
+  mon?: string;
+  tue?: string;
+  wed?: string;
+  thu?: string;
+  fri?: string;
+  sat?: string;
+  sun?: string;
+}
+
+export interface QuickWeekNodeInput {
+  date: string;
+  title: string;
+}
+
+/** quick-week 接口返回的生成预览（不直接保存）。 */
+export interface QuickWeekPreviewRow {
+  title: string;
+  type: WorkScheduleItemType;
+  startDate: string;
+  endDate: string;
+}

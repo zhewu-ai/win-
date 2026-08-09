@@ -202,6 +202,15 @@ export default function HomePage() {
     [notes, applyNote, showRefreshToast, selectedNoteId]
   );
 
+  // M12：今日视图「今天编辑的便签」点击 → 关闭日历并打开对应便签
+  const handleCalendarOpenNote = useCallback(
+    (noteId: string) => {
+      setCalendarOpen(false);
+      void openNoteById(noteId);
+    },
+    [openNoteById]
+  );
+
   // M11.1.1 返回上一条：弹出栈顶来源便签并切回；来源已删除则仅提示不跳转。
   const goBackLinkedNote = useCallback(() => {
     const targetId = noteNavStack[noteNavStack.length - 1];
@@ -339,6 +348,8 @@ export default function HomePage() {
               embedded
               onBack={mode === "single" ? closeCalendar : undefined}
               openNewEvent={calendarNewEvent}
+              notes={notes}
+              onOpenNote={handleCalendarOpenNote}
             />
           ) : (
             <NoteEditor
