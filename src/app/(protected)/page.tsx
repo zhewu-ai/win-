@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import OfflineBar from "@/components/OfflineBar";
-import TodayStrip from "@/components/calendar/TodayStrip";
 import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -18,7 +16,6 @@ const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
 export default function HomePage() {
   const { notes, loading, refreshing, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
     useNotes(false);
-  const router = useRouter();
   const { user } = useCurrentUser();
   const isAdmin = user?.role === "admin";
 
@@ -262,13 +259,6 @@ export default function HomePage() {
   return (
     <div className="h-screen flex flex-col bg-page-bg">
       <OfflineBar />
-      {/* M12 首页今日条：仅管理员展示 */}
-      {isAdmin && (
-        <TodayStrip
-          onOpenNote={openNoteById}
-          onOpenCalendar={(path) => router.push(path)}
-        />
-      )}
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
             单栏 → 编辑打开时收起（复用 width/opacity 动画），否则全宽显示；

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Note } from "@/types";
 import { formatNoteTime } from "@/lib/format-time";
+import { displayPlainText } from "@/lib/link-parser";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -24,16 +25,16 @@ const ACCENT: Record<string, string> = {
 };
 
 function getAutoTitle(note: Note): string {
-  if (note.title) return note.title;
+  if (note.title) return displayPlainText(note.title);
   if (note.mode === "text") {
     const firstLine = note.content.split("\n")[0]?.trim();
-    if (firstLine) return firstLine;
+    if (firstLine) return displayPlainText(firstLine);
   }
   if (note.mode === "checklist" && note.checklistItems?.length > 0) {
     const firstItem = note.checklistItems.find(
       (i) => i.kind !== "heading" && i.text.trim().length > 0
     );
-    if (firstItem) return firstItem.text;
+    if (firstItem) return displayPlainText(firstItem.text);
   }
   return "无标题便签";
 }
@@ -44,9 +45,11 @@ function getSummaryLines(note: Note): string[] {
       .filter((i) => i.text.trim().length > 0)
       .slice(0, 3)
       .map((i) =>
-        i.kind === "heading"
-          ? i.text
-          : `${i.checked ? "✓" : "○"} ${i.text}`
+        displayPlainText(
+          i.kind === "heading"
+            ? i.text
+            : `${i.checked ? "✓" : "○"} ${i.text}`
+        )
       );
   }
   if (note.mode === "text" && note.content) {
@@ -55,7 +58,7 @@ function getSummaryLines(note: Note): string[] {
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
       .slice(0, 2);
-    return lines;
+    return lines.map(displayPlainText);
   }
   return [];
 }

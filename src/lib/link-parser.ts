@@ -19,6 +19,17 @@ export function unescapeLinkTitle(str: string): string {
   return str.replace(/\\([\\\]])/g, "$1");
 }
 
+/**
+ * 纯文本展示（供左侧便签列表标题/摘要等只读预览使用）：
+ * 把内部便签链接语法替换为显示标题（[[note:id|标题]] → 标题，含转义标题 A\]B → A]B）。
+ * 外部 URL 保持原文本（卡片里不做可点击链接）；残缺/非法内链语法保持原样，避免误删用户文本。
+ */
+export function displayPlainText(text: string): string {
+  return text.replace(NOTE_LINK_RE, (_m, _id: string, rawTitle: string) =>
+    unescapeLinkTitle(rawTitle)
+  );
+}
+
 // 外部 URL：http(s):// 或 www. 开头；在中文字符与常见全角标点处截断（这些不可能是 URL 一部分）。
 const URL_RE =
   /(?:https?:\/\/|www\.)[^\s<>"'　-〿＀-￯，。；：！？、]+/g;

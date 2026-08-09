@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import type { Note } from "@/types";
 import NoteList from "./NoteList";
 import AccountMenu from "./AccountMenu";
+import CalendarCard from "./calendar/CalendarCard";
 
 interface Props {
   notes: Note[];
@@ -104,18 +104,8 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* M12 日历入口：仅管理员展示 */}
-      {isAdmin && (
-        <Link
-          href="/calendar"
-          className="mx-3 mb-1 flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          日历
-        </Link>
-      )}
+      {/* M12 工作日历入口卡片：仅管理员展示 */}
+      {isAdmin && <CalendarCard />}
 
       {/* Note list */}
       <div className="flex-1 min-h-0 flex flex-col">
