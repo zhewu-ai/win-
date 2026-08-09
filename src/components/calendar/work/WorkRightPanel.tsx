@@ -46,13 +46,14 @@ interface Props {
   /** M13 AI 导入。 */
   importDraft?: CalendarImportDraft | null;
   importUsage?: CalendarImportUsage | null;
+  importKind?: "image" | "excel" | null;
   importStages?: CalendarImportStage[] | null;
   importElapsed?: number;
   importYearNotice?: CalendarImportYearNotice | null;
   importBusy?: boolean;
   importError?: string | null;
   importDoneMessage?: string | null;
-  onParseFile: (file: File, kind: "image" | "excel") => void;
+  onParseFile: (file: File) => void;
   onUpdateDraft: (draft: CalendarImportDraft) => void;
   onConfirmImport: () => void;
   onCancelImport: () => void;
@@ -84,6 +85,7 @@ export default function WorkRightPanel({
   onCancel,
   importDraft,
   importUsage,
+  importKind,
   importStages,
   importElapsed,
   importYearNotice,
@@ -180,9 +182,9 @@ export default function WorkRightPanel({
     }
   };
 
-  const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>, kind: "image" | "excel") => {
+  const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) onParseFile(f, kind);
+    if (f) onParseFile(f);
     e.target.value = "";
   };
 
@@ -192,6 +194,7 @@ export default function WorkRightPanel({
         <ImportPreviewPanel
           draft={importDraft}
           usage={importUsage}
+          kind={importKind}
           yearNotice={importYearNotice}
           busy={importBusy}
           error={importError}
@@ -329,23 +332,13 @@ export default function WorkRightPanel({
             )}
             <div className="flex items-center gap-1.5">
               <label className="cursor-pointer rounded-btn border border-border-light bg-panel-bg px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-50">
-                上传图片
+                上传给 AI
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept=".xlsx,.xls,.csv,image/png,image/jpeg,image/webp"
                   className="hidden"
                   disabled={importBusy}
-                  onChange={(e) => handlePickFile(e, "image")}
-                />
-              </label>
-              <label className="cursor-pointer rounded-btn border border-border-light bg-panel-bg px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-50">
-                上传 Excel
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  disabled={importBusy}
-                  onChange={(e) => handlePickFile(e, "excel")}
+                  onChange={handlePickFile}
                 />
               </label>
             </div>

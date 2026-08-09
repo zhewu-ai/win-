@@ -9,6 +9,8 @@ import { wpClass } from "./color";
 interface Props {
   draft: CalendarImportDraft;
   usage?: CalendarImportUsage | null;
+  /** M13 3.2 后端自动识别的文件类型，用于展示「已识别为 Excel/图片」。 */
+  kind?: "image" | "excel" | null;
   yearNotice?: CalendarImportYearNotice | null;
   busy?: boolean;
   error?: string | null;
@@ -24,6 +26,7 @@ const inputCls =
 export default function ImportPreviewPanel({
   draft,
   usage,
+  kind,
   yearNotice,
   busy,
   error,
@@ -83,7 +86,8 @@ export default function ImportPreviewPanel({
         <h2 className="text-[13px] font-bold text-ink">导入预览</h2>
         {usage && (
           <span className="text-[10px] text-ink-muted">
-            {usage.model.replace("Qwen/", "")} · {(usage.durationMs / 1000).toFixed(1)}s
+            {kind ? (kind === "excel" ? "Excel" : "图片") : "AI"} · {usage.model.replace("Qwen/", "")} ·{" "}
+            {(usage.durationMs / 1000).toFixed(1)}s
           </span>
         )}
       </div>

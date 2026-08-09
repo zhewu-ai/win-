@@ -151,14 +151,15 @@ export default function CalendarPageClient({
     step: "idle" | "uploading" | "preview" | "confirming";
     draft: CalendarImportDraft | null;
     usage: CalendarImportUsage | null;
+    kind: "image" | "excel" | null;
     error: string | null;
     doneMessage: string | null;
-  }>({ step: "idle", draft: null, usage: null, error: null, doneMessage: null });
+  }>({ step: "idle", draft: null, usage: null, kind: null, error: null, doneMessage: null });
   // 2.1 阶段进度与 AI 等待秒数；2.2 年份异常提示
   const [importStages, setImportStages] = useState<CalendarImportStage[] | null>(null);
   const [importElapsed, setImportElapsed] = useState(0);
   const [yearNotice, setYearNotice] = useState<CalendarImportYearNotice | null>(null);
-  const lastFileRef = useRef<{ file: File; kind: "image" | "excel" } | null>(null);
+  const lastFileRef = useRef<{ file: File } | null>(null);
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
@@ -432,9 +433,9 @@ export default function CalendarPageClient({
     [onOpenNote]
   );
 
-  // ---- M13 AI 排期导入 ----
-  const handleParseFile = useCallback(async (file: File, kind: "image" | "excel") => {
-    lastFileRef.current = { file, kind };
+  // ---- M13 AI 排期导入（3.1 单入口：后端按文件类型自动路由，前端不再传 kind） ----
+  const handleParseFile = useCallback(async (file: File) => {
+    lastFileRef.current = { file };
     setImportState((s) => ({ ...s, step: "uploading", error: null, doneMessage: null }));
     setYearNotice(null);
     setImportElapsed(0);
@@ -448,7 +449,6 @@ export default function CalendarPageClient({
     elapsedTimerRef.current = setInterval(() => setImportElapsed((e) => e + 1), 1000);
     try {
       const fd = new FormData();
-      fd.append("kind", kind);
       fd.append("file", file);
       const res = await fetch("/api/calendar-imports/parse", { method: "POST", body: fd });
       const data = await res.json().catch(() => null);
@@ -471,6 +471,7 @@ export default function CalendarPageClient({
         step: "preview",
         draft: data.draft ?? null,
         usage: data.usage ?? null,
+        kind: data.kind === "excel" || data.kind === "image" ? data.kind : null,
         error: null,
       }));
       setYearNotice(data.yearNotice ?? null);
@@ -484,7 +485,7 @@ export default function CalendarPageClient({
 
   const handleRetryImport = useCallback(() => {
     const last = lastFileRef.current;
-    if (last) void handleParseFile(last.file, last.kind);
+    if (last) void handleParseFile(last.file);
   }, [handleParseFile]);
 
   const handleUpdateDraft = useCallback((draft: CalendarImportDraft) => {
@@ -496,7 +497,7 @@ export default function CalendarPageClient({
     setImportStages(null);
     setImportElapsed(0);
     setYearNotice(null);
-    setImportState({ step: "idle", draft: null, usage: null, error: null, doneMessage: null });
+    setImportState({ step: "idle", draft: null, usage: null, kind: null, error: null, doneMessage: null });
   }, []);
 
   const handleConfirmImport = useCallback(async () => {
@@ -518,7 +519,7 @@ export default function CalendarPageClient({
         return;
       }
       const msg = `已导入 ${data?.created?.items ?? 0} 条排期、${data?.created?.projects ?? 0} 个项目`;
-      setImportState({ step: "idle", draft: null, usage: null, error: null, doneMessage: msg });
+      setImportState({ step: "idle", draft: null, usage: null, kind: null, error: null, doneMessage: msg });
       setYearNotice(null);
       void fetchProjects(true);
       void fetchItems();
@@ -689,6 +690,7 @@ export default function CalendarPageClient({
       onCancel={handleCancelForm}
       importDraft={importState.draft}
       importUsage={importState.usage}
+      importKind={importState.kind}
       importStages={importStages}
       importElapsed={importElapsed}
       importYearNotice={yearNotice}

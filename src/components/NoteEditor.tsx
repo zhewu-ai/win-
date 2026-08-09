@@ -100,10 +100,6 @@ export default function NoteEditor({
   // 迟滞：进入各档与退出各档阈值分开，退出 spacious 需 >780（桥接侧边栏自动收起时编辑区约跳到 720 的跳变，避免一次收窄中反复“收起→展开→再收起”）
   const [toolbarMode, setToolbarMode] = useState<"spacious" | "compact" | "minimal">("compact");
   const toolbarModeRef = useRef<"spacious" | "compact" | "minimal">("compact");
-  // M12 R3 2.4：便签/待办窄宽专注模式——编辑区宽 <420 时整条工具栏收起为极简条
-  // （返回/标题/保存状态/展开按钮），点展开恢复完整工具栏。
-  const [focusMode, setFocusMode] = useState(false);
-  const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const editorRootRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const currentNoteIdRef = useRef<string | null>(null);
@@ -408,7 +404,6 @@ export default function NoteEditor({
     // 自动收起时编辑区从 ~370 跳到 ~720 的跳变，避免一次连续收窄中出现
     // “compact → spacious → compact” 的来回切换。
     const update = (w: number) => {
-      setFocusMode(w < 420);
       const cur = toolbarModeRef.current;
       let next = cur;
       if (cur === "spacious") {
@@ -590,37 +585,7 @@ export default function NoteEditor({
         hidden
       />
       {/* Editor toolbar - always single line; low-freq ops live in "more" menu.
-          固定 padding/gap，不用 sm: 媒体断点，避免 640px 附近内容整体横移一跳。
-          M12 R3 2.4：窄宽专注模式下整条工具栏收起为极简条，展开后恢复完整工具栏。 */}
-      {focusMode && !toolbarExpanded ? (
-        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border-light bg-toolbar-bg">
-          {showBackButton && (
-            <button
-              onClick={onBack}
-              className="flex items-center justify-center w-icon-btn h-icon-btn flex-shrink-0 text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
-              title="返回列表"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
-          <div className="min-w-0 flex-1 truncate text-xs text-ink-muted" title={title}>
-            {title.trim() || "无标题便签"}
-          </div>
-          <SaveStatus status={saveStatus} onRetry={handleRetry} showText={false} syncStatus={note.syncStatus} />
-          <button
-            onClick={() => setToolbarExpanded(true)}
-            className="flex items-center justify-center w-icon-btn h-icon-btn flex-shrink-0 text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
-            title="展开工具栏"
-            aria-label="展开工具栏"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </div>
-      ) : (
+          固定 padding/gap，不用 sm: 媒体断点，避免 640px 附近内容整体横移一跳。 */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border-light bg-toolbar-bg min-h-[56px]">
         {showBackButton && (
           <button
@@ -747,8 +712,7 @@ export default function NoteEditor({
           </button>
           {moreOpen && (
             <div className="absolute right-0 top-full mt-1.5 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 menu-pop">
-              {toolbarMode === "minimal" && (
-                <>
+              {toolbarMode === "minimal" && (                <>
                   <div className="flex items-center gap-2 px-3.5 pt-2 pb-2.5">
                     {(
                       [
@@ -835,21 +799,8 @@ export default function NoteEditor({
               </button>
             </div>
           )}
-          {focusMode && (
-            <button
-              onClick={() => setToolbarExpanded(false)}
-              className="flex items-center justify-center w-icon-btn h-icon-btn flex-shrink-0 text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
-              title="收起工具栏"
-              aria-label="收起工具栏"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-          )}
         </div>
         </div>
-      )}
 
       {/* M12 返修：从日历便签进入的返回入口，点击回到工作日历并恢复视图上下文 */}
       {onCalendarReturn && calendarReturnLabel && (

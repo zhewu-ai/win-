@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Note, WorkProjectColor, WorkScheduleItem } from "@/types";
 import { fromDateStr, isSameDay, monthGrid, toDateStr } from "@/lib/calendar-date";
 import { wpClass } from "./color";
@@ -32,6 +32,11 @@ function dayDiff(a: string, b: string): number {
   return Math.round((fromDateStr(b).getTime() - fromDateStr(a).getTime()) / 86400000);
 }
 
+function formatMonthDay(dateStr: string): string {
+  const d = fromDateStr(dateStr);
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
 interface Bar {
   item: WorkScheduleItem;
   row: number;
@@ -49,6 +54,12 @@ interface Pill {
 export default function WorkMonthView({ monthDate, items, notes, today, colorOf, showNoteLayer, onItemClick, onSelectDay, onOpenNote }: Props) {
   const cells = useMemo(() => monthGrid(monthDate.getFullYear(), monthDate.getMonth()), [monthDate]);
   const gridStartStr = useMemo(() => toDateStr(cells[0].date), [cells]);
+
+  // 2.2 单击选中/高亮日期（不切视图），双击进入日视图；选中后提供「查看日程」入口
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [monthDate]);
 
   // 2.6 便签链接层：按天归集当天创建/更新的便签
   const notesByDay = useMemo(() => {
@@ -149,6 +160,27 @@ export default function WorkMonthView({ monthDate, items, notes, today, colorOf,
         ))}
       </div>
 
+      {/* 2.2 选中态：单击选中日期后显示「查看日程」入口（触控板/移动端双击不便的兜底） */}
+      {selectedDate && (
+        <div className="flex items-center gap-2 border-b border-border-light/60 px-1 py-1.5">
+          <span className="text-xs font-semibold text-ink">{formatMonthDay(selectedDate)}</span>
+          <button
+            type="button"
+            onClick={() => onSelectDay(selectedDate)}
+            className="rounded-btn text-xs font-semibold text-primary hover:underline"
+          >
+            查看日程 →
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedDate(null)}
+            className="ml-auto text-xs text-ink-muted hover:text-ink"
+          >
+            取消选中
+          </button>
+        </div>
+      )}
+
       <div className="relative">
         {/* 42 格日历：行高固定，日期号左上，窄屏显示项目色点 */}
         <div className="grid grid-cols-7">
@@ -162,17 +194,18 @@ export default function WorkMonthView({ monthDate, items, notes, today, colorOf,
                 key={key}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelectDay(key)}
+                onClick={() => setSelectedDate(key)}
+                onDoubleClick={() => onSelectDay(key)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    onSelectDay(key);
+                    setSelectedDate(key);
                   }
                 }}
                 style={isToday ? { boxShadow: "inset 0 0 0 2px var(--primary)" } : undefined}
                 className={`relative h-[106px] cursor-pointer border-r border-b border-border-light/60 px-1 pt-1 transition-colors hover:bg-surface-hover [&:nth-child(7n)]:border-r-0 ${
                   inMonth ? "" : "bg-page-bg/40"
-                }`}
+                } ${selectedDate === key ? "bg-primary/10" : ""}`}
               >
                 <div className="flex items-start justify-between gap-1">
                   <span

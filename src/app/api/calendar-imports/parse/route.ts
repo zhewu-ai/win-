@@ -12,7 +12,12 @@ const MAX_EXCEL_BYTES = 5 * 1024 * 1024;
 
 const IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp"];
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "webp"];
-const EXCEL_EXTS = ["xlsx", "xls"];
+const EXCEL_EXTS = ["xlsx", "xls", "csv"];
+const EXCEL_MIMES = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
+];
 
 function extOf(filename: string): string {
   const i = filename.lastIndexOf(".");
@@ -30,13 +35,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "INVALID_REQUEST" }, { status: 400 });
     }
 
-    const kind = String(formData.get("kind") ?? "");
     const file = formData.get("file");
     if (!file || !(file instanceof File)) {
       return NextResponse.json({ ok: false, error: "INVALID_REQUEST" }, { status: 400 });
-    }
-    if (kind !== "image" && kind !== "excel") {
-      return NextResponse.json({ ok: false, error: "INVALID_KIND" }, { status: 400 });
     }
 
     const filename = file.name || "untitled";
@@ -46,10 +47,22 @@ export async function POST(request: Request) {
     // PDF：明确拒绝且不调 AI
     if (mime === "application/pdf" || ext === "pdf") {
       return NextResponse.json(
-        { ok: false, error: "PDF_NOT_SUPPORTED", message: "暂不支持 PDF，请上传图片或 Excel。" },
+        { ok: false, error: "PDF_NOT_SUPPORTED", message: "当前仅支持图片和 Excel。" },
         { status: 400 }
       );
     }
+
+    // M13 3.2 自动路由：扩展名 + MIME 双判断，前端不再传 kind。
+    // Excel/CSV 优先，其次图片；PDF/未知类型拒绝，不进入 AI 调用。
+    const isExcel = EXCEL_EXTS.includes(ext) || EXCEL_MIMES.includes(mime);
+    const isImage = !isExcel && (IMAGE_MIMES.includes(mime) || IMAGE_EXTS.includes(ext));
+    if (!isExcel && !isImage) {
+      return NextResponse.json(
+        { ok: false, error: "UNSUPPORTED_TYPE", message: "当前仅支持图片和 Excel。" },
+        { status: 400 }
+      );
+    }
+    const kind: "image" | "excel" = isExcel ? "excel" : "image";
 
     const maxBytes = kind === "image" ? MAX_IMAGE_BYTES : MAX_EXCEL_BYTES;
     if (file.size > maxBytes) {
@@ -59,19 +72,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // 类型校验：图片看 mime/扩展名；Excel 看扩展名（mime 可能为 octet-stream）
-    const isImage = kind === "image" && (IMAGE_MIMES.includes(mime) || IMAGE_EXTS.includes(ext));
-    const isExcel = kind === "excel" && EXCEL_EXTS.includes(ext);
-    if (!isImage && !isExcel) {
-      return NextResponse.json(
-        { ok: false, error: "UNSUPPORTED_TYPE", message: "仅支持图片和 Excel。" },
-        { status: 400 }
-      );
-    }
-
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Excel：先提取结构化文本喂给 AI
+    // Excel/CSV：先提取结构化文本喂给 AI（SheetJS 自动识别 xlsx/xls/csv）
     let excelText: string | undefined;
     if (kind === "excel") {
       try {
@@ -119,7 +122,7 @@ export async function POST(request: Request) {
         `warnings=${draft.warnings.length}`
     );
 
-    return NextResponse.json({ ok: true, draft: draft as CalendarImportDraft, usage, yearNotice });
+    return NextResponse.json({ ok: true, kind, draft: draft as CalendarImportDraft, usage, yearNotice });
   } catch (e) {
     if (e instanceof AiParseError) {
       const message =

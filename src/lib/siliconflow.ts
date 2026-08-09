@@ -198,15 +198,23 @@ interface ChatMessageContent {
   content: unknown;
 }
 
+/** M13 3.3 按文件类型拆模型：Excel/图片优先用专用模型，未配置回退默认模型。 */
+function resolveModel(kind: "image" | "excel"): string {
+  const fallback = process.env.SILICONFLOW_MODEL || "Qwen/Qwen3.5-9B";
+  if (kind === "excel") return process.env.SILICONFLOW_EXCEL_MODEL || fallback;
+  if (kind === "image") return process.env.SILICONFLOW_IMAGE_MODEL || fallback;
+  return fallback;
+}
+
 /** 调 /chat/completions，返回 JSON 草稿原始对象 + usage。 */
 async function callChat(
-  messages: ChatMessageContent[]
+  messages: ChatMessageContent[],
+  model: string
 ): Promise<{ raw: unknown; usage: CalendarImportUsage }> {
   const apiKey = process.env.SILICONFLOW_API_KEY;
   if (!apiKey) {
     throw new AiParseError("AI_NOT_CONFIGURED", "AI 未配置（缺少 SILICONFLOW_API_KEY）");
   }
-  const model = process.env.SILICONFLOW_MODEL || "Qwen/Qwen3.5-9B";
   const startedAt = Date.now();
 
   const controller = new AbortController();
@@ -225,9 +233,9 @@ async function callChat(
         temperature: 0.1,
         max_tokens: 4096,
         response_format: { type: "json_object" },
-        // Qwen3 系为推理模型：默认先输出 reasoning_content 且可能耗尽 token 无最终答案，
-        // 关闭思考才能直接返回 JSON 正文。
-        ...(/Qwen3/i.test(model) ? { enable_thinking: false } : {}),
+        // M13 3.4：VL 模型不支持 `enable_thinking` 参数（硅基流动会报错），
+        // 只对非 VL 的 Qwen3 系关闭思考，才能直接返回 JSON 正文。
+        ...(/Qwen3/i.test(model) && !/Qwen3-VL/i.test(model) ? { enable_thinking: false } : {}),
       }),
       signal: controller.signal,
     });
@@ -322,7 +330,8 @@ export async function parseScheduleFile(input: ParseScheduleFileInput): Promise<
     });
   }
 
-  const { raw, usage } = await callChat(messages);
+  const model = resolveModel(input.kind);
+  const { raw, usage } = await callChat(messages, model);
   const draft = normalizeDraft(raw, now.getFullYear());
   return { draft, usage };
 }

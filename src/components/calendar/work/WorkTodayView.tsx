@@ -119,7 +119,7 @@ export default function WorkTodayView({
   const emptyAll = todayRanges.length === 0 && todayNodes.length === 0 && todayNotes.length === 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 px-0.5">
         <h2 className="text-base font-bold text-ink">
           {MONTH_NAMES[date.getMonth()]}月{date.getDate()}日
@@ -130,9 +130,15 @@ export default function WorkTodayView({
         {isToday && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">今天</span>}
       </div>
 
+      {/* 2.3 当天摘要：紧凑计数，排期少时下方不空荡 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-[11px] text-ink-muted">
+        <span>排期 {todayRanges.length + todayNodes.length} 项</span>
+        {showNoteLayer && <span>关联便签 {todayNotes.length} 条</span>}
+      </div>
+
       {emptyAll ? (
-        <div className="px-3 py-10 text-center text-sm text-ink-muted">
-          {isToday ? "今天无排期。" : "当天暂无排期。"}
+        <div className="rounded-btn border border-dashed border-border-light bg-panel-bg/40 px-3 py-6 text-center text-sm text-ink-muted">
+          {isToday ? "今天还没有排期" : "当天暂无排期"}
         </div>
       ) : (
         <div className="flex flex-col gap-4">
@@ -177,8 +183,8 @@ export default function WorkTodayView({
             )}
           </div>
 
-          {/* 今天节点 + 今天编辑的便签：宽屏分两栏 */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* 今天节点 + 今天编辑的便签：宽屏分两栏；便签层关闭时节点区独占整行 */}
+          <div className={showNoteLayer ? "grid gap-4 sm:grid-cols-2" : "flex flex-col gap-1.5"}>
             {/* 今天节点 / 当天节点 */}
             <div className="flex flex-col gap-1.5">
               <SectionTitle label={isToday ? "今天节点" : "当天节点"} />
@@ -220,38 +226,40 @@ export default function WorkTodayView({
               )}
             </div>
 
-            {/* 今天编辑的便签 / 当天编辑的便签（便签链接层，受开关控制） */}
-            <div className="flex flex-col gap-1.5">
-              <SectionTitle label={isToday ? "今天编辑的便签" : "当天编辑的便签"} />
-              {todayNotes.length === 0 ? (
-                <Empty text="暂无" />
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {todayNotes.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => onOpenNote(n.id)}
-                      className="flex items-center gap-2 rounded-btn border border-border-light bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
-                    >
-                      <svg className="h-3.5 w-3.5 flex-shrink-0 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="min-w-0 flex-1 truncate text-xs text-ink">{n.title || "未命名便签"}</span>
-                      <span className="flex-shrink-0 text-[11px] text-ink-muted">
-                        {n.createdAt && toDateStr(new Date(n.createdAt)) === dateStr
-                          ? isToday
-                            ? "今天创建"
-                            : "当天创建"
-                          : isToday
-                            ? "今天更新"
-                            : "当天更新"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* 今天编辑的便签 / 当天编辑的便签（便签链接层，受开关控制；关闭时整块隐藏） */}
+            {showNoteLayer && (
+              <div className="flex flex-col gap-1.5">
+                <SectionTitle label={isToday ? "今天编辑的便签" : "当天编辑的便签"} />
+                {todayNotes.length === 0 ? (
+                  <Empty text="暂无" />
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {todayNotes.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => onOpenNote(n.id)}
+                        className="flex items-center gap-2 rounded-btn border border-border-light bg-panel-bg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                      >
+                        <svg className="h-3.5 w-3.5 flex-shrink-0 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="min-w-0 flex-1 truncate text-xs text-ink">{n.title || "未命名便签"}</span>
+                        <span className="flex-shrink-0 text-[11px] text-ink-muted">
+                          {n.createdAt && toDateStr(new Date(n.createdAt)) === dateStr
+                            ? isToday
+                              ? "今天创建"
+                              : "当天创建"
+                            : isToday
+                              ? "今天更新"
+                              : "当天更新"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
