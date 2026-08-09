@@ -262,3 +262,20 @@ export interface CalendarImportUsage {
   completionTokens: number;
   durationMs: number;
 }
+
+/** M13 导入进度阶段（2.1 等待反馈）。 */
+export interface CalendarImportStage {
+  id: "upload" | "read" | "ai" | "draft" | "wait";
+  label: string;
+  status: "waiting" | "active" | "done" | "error";
+  /** status=error 时该阶段的具体错误。 */
+  error?: string;
+}
+
+/** M13 导入年份异常提示（2.2）：识别年份与当前年份明显不符时，前端提供批量修正。 */
+export interface CalendarImportYearNotice {
+  detectedYear: string;
+  abnormalCount: number;
+  total: number;
+  currentYear: number;
+}

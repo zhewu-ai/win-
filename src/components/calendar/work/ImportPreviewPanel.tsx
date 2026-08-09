@@ -1,6 +1,6 @@
 "use client";
 
-import type { CalendarImportDraft, CalendarImportUsage } from "@/types";
+import type { CalendarImportDraft, CalendarImportUsage, CalendarImportYearNotice } from "@/types";
 import { wpClass } from "./color";
 
 // M13 AI 排期导入预览：展示识别出的草稿，支持编辑项目名/标题/起止日期、删除条目/项目、
@@ -9,11 +9,13 @@ import { wpClass } from "./color";
 interface Props {
   draft: CalendarImportDraft;
   usage?: CalendarImportUsage | null;
+  yearNotice?: CalendarImportYearNotice | null;
   busy?: boolean;
   error?: string | null;
   onUpdateDraft: (draft: CalendarImportDraft) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  onDismissYearNotice?: () => void;
 }
 
 const inputCls =
@@ -22,11 +24,13 @@ const inputCls =
 export default function ImportPreviewPanel({
   draft,
   usage,
+  yearNotice,
   busy,
   error,
   onUpdateDraft,
   onConfirm,
   onCancel,
+  onDismissYearNotice,
 }: Props) {
   const patchProject = (tempId: string, patch: Partial<{ name: string }>) => {
     onUpdateDraft({
@@ -55,6 +59,24 @@ export default function ImportPreviewPanel({
     });
   };
 
+  // 2.2 批量改年份：把全部条目起止日期年份改为当前年
+  const applyYearFix = () => {
+    if (!yearNotice) return;
+    const toYear = String(yearNotice.currentYear);
+    onUpdateDraft({
+      ...draft,
+      items: draft.items.map((it) => ({
+        ...it,
+        startDate: `${toYear}${it.startDate.slice(4)}`,
+        endDate: `${toYear}${it.endDate.slice(4)}`,
+      })),
+    });
+    onDismissYearNotice?.();
+  };
+
+  const hasEmptyProjectName = draft.projects.some((p) => !p.name.trim());
+  const confirmDisabled = busy || draft.items.length === 0 || hasEmptyProjectName;
+
   return (
     <div className="flex flex-col gap-3 px-3 pt-3">
       <div className="flex items-center justify-between">
@@ -65,6 +87,30 @@ export default function ImportPreviewPanel({
           </span>
         )}
       </div>
+
+      {yearNotice && (
+        <div className="rounded-card bg-amber-500/10 px-3 py-2">
+          <p className="text-xs font-semibold text-amber-600">
+            检测到识别年份为 {yearNotice.detectedYear} 年，是否全部改为 {yearNotice.currentYear} 年？
+          </p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyYearFix}
+              className="rounded-btn bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-amber-500/90"
+            >
+              全部改为 {yearNotice.currentYear}
+            </button>
+            <button
+              type="button"
+              onClick={() => onDismissYearNotice?.()}
+              className="rounded-btn px-2 py-1 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover"
+            >
+              忽略
+            </button>
+          </div>
+        </div>
+      )}
 
       {draft.warnings.length > 0 && (
         <div className="rounded-card bg-amber-500/10 px-3 py-2">
@@ -109,6 +155,7 @@ export default function ImportPreviewPanel({
                 </svg>
               </button>
             </div>
+            {!p.name.trim() && <p className="mt-1 text-[11px] font-semibold text-danger">请补充项目名</p>}
 
             {its.length === 0 ? (
               <p className="mt-1.5 text-[11px] text-ink-muted">该项目下暂无排期</p>
@@ -174,6 +221,9 @@ export default function ImportPreviewPanel({
       })}
 
       {error && <p className="text-xs text-danger">{error}</p>}
+      {hasEmptyProjectName && !error && (
+        <p className="text-xs text-amber-600">请先补充或删除空项目名后再导入。</p>
+      )}
 
       <div className="flex items-center gap-2 pt-1">
         <button
@@ -188,7 +238,8 @@ export default function ImportPreviewPanel({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={busy || draft.items.length === 0}
+          disabled={confirmDisabled}
+          title={hasEmptyProjectName ? "请先补充项目名" : undefined}
           className="rounded-btn bg-primary px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
           {busy ? "导入中..." : `确认导入（${draft.items.length}）`}

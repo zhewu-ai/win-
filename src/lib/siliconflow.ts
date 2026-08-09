@@ -21,11 +21,29 @@ export class AiParseError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `你是排期表识别助手。请从用户提供的图片或表格文本中提取项目排期。
+function fmtDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// 当前日期/年份动态注入（2.2 年份上下文）：避免 AI 猜测往年年份。
+function buildSystemPrompt(now: Date): string {
+  const currentYear = now.getFullYear();
+  const currentDate = fmtDate(now);
+  return `你是排期表识别助手。请从用户提供的图片或表格文本中提取项目排期。
 只输出 JSON，不输出解释。
 日期必须输出 YYYY-MM-DD。
+当前日期是 ${currentDate}，当前年份是 ${currentYear} 年。
+如果排期表中只有月份和日期、没有完整年份，默认使用 ${currentYear} 年。
+不要猜测为 ${currentYear - 1} 年或其他往年年份，除非表格中明确写出该年份。
+不确定年份时，使用 ${currentYear} 年，并在 warnings 中说明「年份按当前年份补全」。
 如果某个任务跨多天，输出 startDate 和 endDate；如果只发生一天，startDate 和 endDate 相同。
 不要编造日期。
+项目名识别优先级：1) 表格/图片标题中的项目名；2) Excel 的 Sheet 名；3) 文件名。
+如果识别不到项目名，输出 name 为空字符串 ""，并在 warnings 中说明「未识别到项目名」。
+不要凭空捏造项目名。
 不确定时写入 warnings，并降低 confidence。
 输出必须符合以下 JSON 结构（CalendarImportDraft）：
 {
@@ -42,9 +60,10 @@ const SYSTEM_PROMPT = `你是排期表识别助手。请从用户提供的图片
   }],
   "warnings": ["说明哪些内容不确定"]
 }`;
+}
 
-/** 宽松日期归一化 → YYYY-MM-DD；无法解析返回 null。 */
-export function normalizeDate(s: unknown): string | null {
+/** 宽松日期归一化 → YYYY-MM-DD；无法解析返回 null。currentYear 用于「只有月/日、无年份」时补全年份。 */
+export function normalizeDate(s: unknown, currentYear?: number): string | null {
   if (typeof s !== "string") return null;
   const t = s.trim();
   if (isValidDateString(t)) return t;
@@ -56,6 +75,9 @@ export function normalizeDate(s: unknown): string | null {
   // M/D/YYYY（美式，常见于影视排期）→ MM/DD/YYYY
   m = t.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/);
   if (m) return pad(`${m[3]}-${m[1]}-${m[2]}`);
+  // M/D 或 M月D日（无年份，常见排期表）→ 当前年补全（2.2）
+  m = t.match(/^(\d{1,2})[/月.](\d{1,2})日?$/);
+  if (m) return pad(`${currentYear ?? new Date().getFullYear()}-${m[1]}-${m[2]}`);
   return null;
 }
 
@@ -80,7 +102,7 @@ function cleanId(s: unknown): string | undefined {
 }
 
 /** 把 AI 原始输出规范化为统一草稿；非法项进 warnings 并丢弃。 */
-export function normalizeDraft(raw: unknown): CalendarImportDraft {
+export function normalizeDraft(raw: unknown, currentYear = new Date().getFullYear()): CalendarImportDraft {
   const warnings: string[] = [];
   const projects: CalendarImportDraftProject[] = [];
   const items: CalendarImportDraftItem[] = [];
@@ -114,8 +136,8 @@ export function normalizeDraft(raw: unknown): CalendarImportDraft {
     if (!it || typeof it !== "object") continue;
     const r = it as Record<string, unknown>;
     const title = typeof r.title === "string" ? r.title.trim() : "";
-    let start = normalizeDate(r.startDate);
-    let end = normalizeDate(r.endDate);
+    let start = normalizeDate(r.startDate, currentYear);
+    let end = normalizeDate(r.endDate, currentYear);
     if (!title) continue;
     if (!start) {
       warnings.push(`「${title}」缺少可识别的开始日期，已跳过`);
@@ -129,13 +151,20 @@ export function normalizeDraft(raw: unknown): CalendarImportDraft {
       [start, end] = [end, start];
     }
 
-    // 项目归属：优先命中项目 tempId；否则归入第一个项目，无项目则兜底新建
+    // 2.2 异常年份：明显偏离当前年时给出提示，供前端批量修正
+    const y = Number(start.slice(0, 4));
+    if (Number.isFinite(y) && (y < currentYear - 1 || y > currentYear + 1)) {
+      warnings.push(`「${title}」年份异常（${y} 年），请在预览中确认是否应为 ${currentYear} 年`);
+    }
+
+    // 项目归属：优先命中项目 tempId；否则归入第一个项目，无项目则兜底空名项目（2.5 由用户在预览中补充项目名）
     let projectTempId = cleanId(r.projectTempId) ?? "";
     if (!projectIds.has(projectTempId)) {
       if (projects.length === 0) {
-        projects.push({ tempId: "p1", name: "导入项目" });
+        projects.push({ tempId: "p1", name: "" });
         projectIds.add("p1");
         projectTempId = "p1";
+        warnings.push("未识别到项目名，请在预览中补充项目名");
       } else {
         projectTempId = projects[0].tempId;
         warnings.push(`「${title}」未识别到所属项目，已归入「${projects[0].name}」`);
@@ -180,6 +209,8 @@ async function callChat(
   const model = process.env.SILICONFLOW_MODEL || "Qwen/Qwen3.5-9B";
   const startedAt = Date.now();
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
   let res: Response;
   try {
     res = await fetch(API_URL, {
@@ -198,9 +229,15 @@ async function callChat(
         // 关闭思考才能直接返回 JSON 正文。
         ...(/Qwen3/i.test(model) ? { enable_thinking: false } : {}),
       }),
+      signal: controller.signal,
     });
   } catch (e) {
+    if ((e as Error)?.name === "AbortError") {
+      throw new AiParseError("AI_TIMEOUT", "AI 识别超时，请重试");
+    }
     throw new AiParseError("AI_NETWORK_ERROR", "AI 服务请求失败");
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const durationMs = Date.now() - startedAt;
@@ -261,7 +298,9 @@ export interface ParseScheduleFileResult {
 
 /** 识别图片/Excel 排期 → 规范化草稿 + usage。 */
 export async function parseScheduleFile(input: ParseScheduleFileInput): Promise<ParseScheduleFileResult> {
-  const messages: ChatMessageContent[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  const now = new Date();
+  const messages: ChatMessageContent[] = [{ role: "system", content: buildSystemPrompt(now) }];
+  const filename = input.filename?.trim() ? input.filename.trim() : undefined;
 
   if (input.kind === "image") {
     const base64 = input.fileBuffer.toString("base64");
@@ -270,17 +309,20 @@ export async function parseScheduleFile(input: ParseScheduleFileInput): Promise<
       role: "user",
       content: [
         { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } },
-        { type: "text", text: "请识别图片中的项目排期，输出 CalendarImportDraft JSON。" },
+        {
+          type: "text",
+          text: `请识别图片中的项目排期，输出 CalendarImportDraft JSON。${filename ? `\n文件名：${filename}` : ""}`,
+        },
       ],
     });
   } else {
     messages.push({
       role: "user",
-      content: `请识别以下表格文本中的项目排期，输出 CalendarImportDraft JSON。\n\n${input.excelText ?? ""}`,
+      content: `请识别以下表格文本中的项目排期，输出 CalendarImportDraft JSON。${filename ? `\n文件名：${filename}` : ""}\n\n${input.excelText ?? ""}`,
     });
   }
 
   const { raw, usage } = await callChat(messages);
-  const draft = normalizeDraft(raw);
+  const draft = normalizeDraft(raw, now.getFullYear());
   return { draft, usage };
 }

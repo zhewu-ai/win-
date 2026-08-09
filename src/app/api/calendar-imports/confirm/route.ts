@@ -30,6 +30,18 @@ export async function POST(request: Request) {
     const projects = Array.isArray(draft.projects) ? draft.projects.slice(0, MAX_PROJECTS) : [];
     const items = Array.isArray(draft.items) ? draft.items.slice(0, MAX_ITEMS) : [];
 
+    // 2.5 项目名必填：空项目名且挂有排期 → 拒绝（避免静默丢弃）
+    const emptyNameProject = projects.find((p) => {
+      const name = typeof p.name === "string" ? p.name.trim() : "";
+      return !name && !!p.tempId && items.some((it) => it.projectTempId === p.tempId);
+    });
+    if (emptyNameProject) {
+      return NextResponse.json(
+        { ok: false, error: "EMPTY_PROJECT_NAME", message: "请补充项目名后再导入。" },
+        { status: 422 }
+      );
+    }
+
     return await prisma.$transaction(async (tx) => {
       // 1) 项目：校验 → 同名 active 复用，否则新建（缺失项目）
       const tempToReal = new Map<string, string>();

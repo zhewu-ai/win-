@@ -4,7 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import Link from "next/link";
 import type {
   CalendarImportDraft,
+  CalendarImportStage,
   CalendarImportUsage,
+  CalendarImportYearNotice,
   Note,
   WorkProject,
   WorkProjectColor,
@@ -47,6 +49,46 @@ interface Props {
 }
 
 const COLOR_CYCLE: WorkProjectColor[] = ["blue", "red", "green", "purple", "gray"];
+
+// M13 导入阶段定义（2.1）：上传文件 → 读取内容 → AI 识别 → 整理草稿 → 等待确认
+const IMPORT_STAGES: { id: CalendarImportStage["id"]; label: string }[] = [
+  { id: "upload", label: "上传文件" },
+  { id: "read", label: "读取内容" },
+  { id: "ai", label: "AI 识别" },
+  { id: "draft", label: "整理草稿" },
+  { id: "wait", label: "等待确认" },
+];
+const STAGE_ORDER: CalendarImportStage["id"][] = IMPORT_STAGES.map((s) => s.id);
+const AI_ERROR_CODES = new Set([
+  "AI_NOT_CONFIGURED",
+  "AI_NETWORK_ERROR",
+  "AI_HTTP_ERROR",
+  "AI_TIMEOUT",
+  "AI_EMPTY",
+  "AI_INVALID_JSON",
+  "INVALID_DRAFT",
+]);
+
+function buildStages(st: Partial<Record<CalendarImportStage["id"], CalendarImportStage["status"]>>): CalendarImportStage[] {
+  return IMPORT_STAGES.map((s) => ({ id: s.id, label: s.label, status: st[s.id] ?? "waiting" }));
+}
+
+/** 失败时标记失败阶段为 error，其前阶段 done、其后阶段 waiting。 */
+function failStages(
+  code: string | undefined,
+  message: string
+): CalendarImportStage[] {
+  const failedId = !code ? "ai" : code === "EXCEL_READ_FAILED" ? "read" : AI_ERROR_CODES.has(code) ? "ai" : "upload";
+  const fi = STAGE_ORDER.indexOf(failedId);
+  return IMPORT_STAGES.map((s) => {
+    const i = STAGE_ORDER.indexOf(s.id);
+    if (i === fi) return { id: s.id, label: s.label, status: "error", error: message };
+    if (i < fi) return { id: s.id, label: s.label, status: "done" };
+    return { id: s.id, label: s.label, status: "waiting" };
+  });
+}
+
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** 新建项目自动配色：优先未使用色，其次最少使用色。 */
 function nextProjectColor(projects: WorkProject[]): WorkProjectColor {
@@ -112,10 +154,17 @@ export default function CalendarPageClient({
     error: string | null;
     doneMessage: string | null;
   }>({ step: "idle", draft: null, usage: null, error: null, doneMessage: null });
+  // 2.1 阶段进度与 AI 等待秒数；2.2 年份异常提示
+  const [importStages, setImportStages] = useState<CalendarImportStage[] | null>(null);
+  const [importElapsed, setImportElapsed] = useState(0);
+  const [yearNotice, setYearNotice] = useState<CalendarImportYearNotice | null>(null);
+  const lastFileRef = useRef<{ file: File; kind: "image" | "excel" } | null>(null);
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     return () => {
       if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     };
   }, []);
 
@@ -385,21 +434,38 @@ export default function CalendarPageClient({
 
   // ---- M13 AI 排期导入 ----
   const handleParseFile = useCallback(async (file: File, kind: "image" | "excel") => {
+    lastFileRef.current = { file, kind };
     setImportState((s) => ({ ...s, step: "uploading", error: null, doneMessage: null }));
+    setYearNotice(null);
+    setImportElapsed(0);
+    // 2.1 阶段进度：上传文件 → 读取内容 → AI 识别
+    setImportStages(buildStages({ upload: "active" }));
+    await delay(150);
+    setImportStages(buildStages({ upload: "done", read: "active" }));
+    await delay(250);
+    setImportStages(buildStages({ upload: "done", read: "done", ai: "active" }));
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    elapsedTimerRef.current = setInterval(() => setImportElapsed((e) => e + 1), 1000);
     try {
       const fd = new FormData();
       fd.append("kind", kind);
       fd.append("file", file);
       const res = await fetch("/api/calendar-imports/parse", { method: "POST", body: fd });
       const data = await res.json().catch(() => null);
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       if (!res.ok) {
-        setImportState((s) => ({
-          ...s,
-          step: "idle",
-          error: data?.message || "识别失败，请重试",
-        }));
+        const message = data?.message || "识别失败，请重试";
+        setImportStages(failStages(data?.error, message));
+        setImportState((s) => ({ ...s, step: "idle", error: message }));
         return;
       }
+      // 成功：整理草稿 → 等待确认 → 进入预览
+      setImportStages(buildStages({ upload: "done", read: "done", ai: "done", draft: "active" }));
+      await delay(180);
+      setImportStages(buildStages({ upload: "done", read: "done", ai: "done", draft: "done", wait: "active" }));
+      await delay(280);
+      setImportStages(null);
+      setImportElapsed(0);
       setImportState((s) => ({
         ...s,
         step: "preview",
@@ -407,16 +473,29 @@ export default function CalendarPageClient({
         usage: data.usage ?? null,
         error: null,
       }));
+      setYearNotice(data.yearNotice ?? null);
     } catch {
-      setImportState((s) => ({ ...s, step: "idle", error: "网络错误，请重试" }));
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+      const message = "网络错误，请重试";
+      setImportStages(failStages(undefined, message));
+      setImportState((s) => ({ ...s, step: "idle", error: message }));
     }
   }, []);
+
+  const handleRetryImport = useCallback(() => {
+    const last = lastFileRef.current;
+    if (last) void handleParseFile(last.file, last.kind);
+  }, [handleParseFile]);
 
   const handleUpdateDraft = useCallback((draft: CalendarImportDraft) => {
     setImportState((s) => ({ ...s, draft }));
   }, []);
 
   const handleCancelImport = useCallback(() => {
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    setImportStages(null);
+    setImportElapsed(0);
+    setYearNotice(null);
     setImportState({ step: "idle", draft: null, usage: null, error: null, doneMessage: null });
   }, []);
 
@@ -440,6 +519,7 @@ export default function CalendarPageClient({
       }
       const msg = `已导入 ${data?.created?.items ?? 0} 条排期、${data?.created?.projects ?? 0} 个项目`;
       setImportState({ step: "idle", draft: null, usage: null, error: null, doneMessage: msg });
+      setYearNotice(null);
       void fetchProjects(true);
       void fetchItems();
       if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
@@ -609,6 +689,9 @@ export default function CalendarPageClient({
       onCancel={handleCancelForm}
       importDraft={importState.draft}
       importUsage={importState.usage}
+      importStages={importStages}
+      importElapsed={importElapsed}
+      importYearNotice={yearNotice}
       importBusy={importState.step === "uploading" || importState.step === "confirming"}
       importError={importState.error}
       importDoneMessage={importState.doneMessage}
@@ -616,6 +699,8 @@ export default function CalendarPageClient({
       onUpdateDraft={handleUpdateDraft}
       onConfirmImport={handleConfirmImport}
       onCancelImport={handleCancelImport}
+      onRetryImport={handleRetryImport}
+      onDismissYearNotice={() => setYearNotice(null)}
     />
   );
 

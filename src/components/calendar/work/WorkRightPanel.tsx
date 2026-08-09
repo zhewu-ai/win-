@@ -6,10 +6,13 @@ import type {
   WorkScheduleItem,
   WorkScheduleItemInput,
   CalendarImportDraft,
+  CalendarImportStage,
   CalendarImportUsage,
+  CalendarImportYearNotice,
 } from "@/types";
 import EventNotePicker from "../EventNotePicker";
 import ImportPreviewPanel from "./ImportPreviewPanel";
+import ImportStepPanel from "./ImportStepPanel";
 import { wpClass } from "./color";
 
 interface Props {
@@ -43,6 +46,9 @@ interface Props {
   /** M13 AI 导入。 */
   importDraft?: CalendarImportDraft | null;
   importUsage?: CalendarImportUsage | null;
+  importStages?: CalendarImportStage[] | null;
+  importElapsed?: number;
+  importYearNotice?: CalendarImportYearNotice | null;
   importBusy?: boolean;
   importError?: string | null;
   importDoneMessage?: string | null;
@@ -50,6 +56,8 @@ interface Props {
   onUpdateDraft: (draft: CalendarImportDraft) => void;
   onConfirmImport: () => void;
   onCancelImport: () => void;
+  onRetryImport?: () => void;
+  onDismissYearNotice?: () => void;
 }
 
 const inputCls =
@@ -76,6 +84,9 @@ export default function WorkRightPanel({
   onCancel,
   importDraft,
   importUsage,
+  importStages,
+  importElapsed,
+  importYearNotice,
   importBusy,
   importError,
   importDoneMessage,
@@ -83,6 +94,8 @@ export default function WorkRightPanel({
   onUpdateDraft,
   onConfirmImport,
   onCancelImport,
+  onRetryImport,
+  onDismissYearNotice,
 }: Props) {
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
@@ -179,11 +192,13 @@ export default function WorkRightPanel({
         <ImportPreviewPanel
           draft={importDraft}
           usage={importUsage}
+          yearNotice={importYearNotice}
           busy={importBusy}
           error={importError}
           onUpdateDraft={onUpdateDraft}
           onConfirm={onConfirmImport}
           onCancel={onCancelImport}
+          onDismissYearNotice={onDismissYearNotice}
         />
       ) : detailMode && detailProject ? (
         <ProjectDetail
@@ -304,6 +319,14 @@ export default function WorkRightPanel({
           {/* M13 AI 导入：辅助生成草稿，弱于手动添加 */}
           <div className="mx-3 mb-3 mt-2 flex-shrink-0 border-t border-border-light pt-2">
             <p className="mb-1.5 text-xs font-medium text-ink-muted">导入排期</p>
+            {importStages && (importBusy || importError) && (
+              <ImportStepPanel
+                stages={importStages}
+                elapsed={importElapsed ?? 0}
+                failed={Boolean(importError)}
+                onRetry={onRetryImport}
+              />
+            )}
             <div className="flex items-center gap-1.5">
               <label className="cursor-pointer rounded-btn border border-border-light bg-panel-bg px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-50">
                 上传图片
@@ -326,8 +349,7 @@ export default function WorkRightPanel({
                 />
               </label>
             </div>
-            {importBusy && <p className="mt-1.5 text-xs text-ink-muted">识别中...</p>}
-            {importError && !importBusy && <p className="mt-1.5 text-xs text-danger">{importError}</p>}
+            {importError && !importStages && <p className="mt-1.5 text-xs text-danger">{importError}</p>}
             {importDoneMessage && <p className="mt-1.5 text-xs text-success">✓ {importDoneMessage}</p>}
           </div>
         </>
