@@ -16,16 +16,47 @@ fn app_base_url() -> &'static str {
   }
 }
 
-// 仅允许加载可信域名，阻止任意外部 URL 在壳内打开。
-// 生产包主窗口与悬浮窗加载打包的 bootstrap 页（tauri:// 本地 origin），
+// 用系统默认浏览器打开外部链接（不新增 crate 依赖）。只允许 http/https scheme。
+fn open_external_system(url: &str) -> Result<(), String> {
+  if !(url.starts_with("http://") || url.starts_with("https://")) {
+    return Err("仅允许打开 http/https 链接".into());
+  }
+  let result = if cfg!(target_os = "windows") {
+    std::process::Command::new("cmd")
+      .args(["/C", "start", "", url])
+      .spawn()
+  } else if cfg!(target_os = "macos") {
+    std::process::Command::new("open").arg(url).spawn()
+  } else {
+    std::process::Command::new("xdg-open").arg(url).spawn()
+  };
+  result.map(|_| ()).map_err(|e| e.to_string())
+}
+
+// 仅允许加载可信域名；任意外部 http/https 链接转交系统默认浏览器打开（不困在 WebView 内），
+// 其余 scheme 一律阻止。生产包主窗口与悬浮窗加载打包的 bootstrap 页（tauri:// 本地 origin），
 // 由其探测连通性后再跳转线上域名，故本地 origin 也需放行。
-fn allowed_url(url: &Url) -> bool {
+fn handle_navigation(url: &Url) -> bool {
   let s = url.as_str();
-  s.starts_with(PROD_URL)
+  if s.starts_with(PROD_URL)
     || s.starts_with(DEV_URL)
     || s.starts_with("tauri://")
     || s.starts_with("http://tauri.localhost")
     || s.starts_with("https://tauri.localhost")
+  {
+    return true;
+  }
+  if s.starts_with("http://") || s.starts_with("https://") {
+    // 外部链接：尝试用系统浏览器打开，WebView 内不加载
+    let _ = open_external_system(s);
+    return false;
+  }
+  false
+}
+
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+  open_external_system(&url)
 }
 
 fn restore_window_geom(
@@ -77,7 +108,7 @@ fn open_floating_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
     .inner_size(360.0, 520.0)
     .min_inner_size(260.0, 340.0)
     .always_on_top(effective_aot)
-    .on_navigation(allowed_url);
+    .on_navigation(handle_navigation);
 
   // 恢复上次的窗口大小、位置与置顶状态
   if let Some(geom) = saved {
@@ -140,7 +171,7 @@ pub fn run() {
       .inner_size(1100.0, 760.0)
       .min_inner_size(320.0, 480.0)
       .center()
-      .on_navigation(allowed_url)
+      .on_navigation(handle_navigation)
       .build()?;
 
       let state = app.state::<WindowStateStore>();
@@ -178,7 +209,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       open_floating_note,
       toggle_always_on_top,
-      get_always_on_top
+      get_always_on_top,
+      open_external
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

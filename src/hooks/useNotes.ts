@@ -120,9 +120,16 @@ export function useNotes(archived = false) {
     []
   );
 
-  // Local reconcile after an editor PATCH — no full list refresh (avoids flicker)
+  // Local reconcile after an editor PATCH — no full list refresh (avoids flicker).
+  // M11.1: 内部链接 fallback 打开「当前列表没有的目标便签」时按 upsert 插入列表，
+  // 已有项（常规编辑路径）行为不变：仅 map 更新。
   const applyNote = useCallback((updated: Note) => {
-    setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    setNotes((prev) => {
+      const exists = prev.some((n) => n.id === updated.id);
+      return exists
+        ? prev.map((n) => (n.id === updated.id ? updated : n))
+        : [updated, ...prev];
+    });
   }, []);
 
   const deleteNote = useCallback(async (id: string) => {

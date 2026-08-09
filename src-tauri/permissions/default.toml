@@ -4,6 +4,7 @@ permissions = [
   "allow-open-floating-note",
   "allow-toggle-always-on-top",
   "allow-get-always-on-top",
+  "allow-open-external",
 ]
 
 [[permission]]
@@ -20,3 +21,8 @@ commands = { allow = ["toggle_always_on_top"] }
 identifier = "allow-get-always-on-top"
 description = "允许读取窗口置顶状态"
 commands = { allow = ["get_always_on_top"] }
+
+[[permission]]
+identifier = "allow-open-external"
+description = "允许用系统默认浏览器打开外部链接"
+commands = { allow = ["open_external"] }

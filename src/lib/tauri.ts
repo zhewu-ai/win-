@@ -19,3 +19,12 @@ export async function toggleAlwaysOnTop(): Promise<boolean> {
 export async function getAlwaysOnTop(): Promise<boolean> {
   return await invoke("get_always_on_top");
 }
+
+/** M11.1：外部链接打开。桌面壳走 open_external（系统浏览器，不困在 WebView）；网页端新标签。 */
+export async function openExternal(url: string): Promise<void> {
+  if (isTauri()) {
+    await invoke("open_external", { url });
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}

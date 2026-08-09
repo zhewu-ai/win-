@@ -8,6 +8,8 @@ import ChecklistEditor from "./ChecklistEditor";
 import ImageAttachments from "./ImageAttachments";
 import ImageUploadButton, { type ImageUploadHandle } from "./ImageUploadButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
+import LinkedText from "./LinkedText";
+import InsertNoteLinkDialog from "./InsertNoteLinkDialog";
 import ConfirmDialog from "./ConfirmDialog";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
@@ -29,6 +31,10 @@ interface Props {
   refreshing?: boolean;
   /** 页面在刷新前调用它 flush 本机未保存内容并重试失败载荷；返回 false 表示不能安全刷新 */
   refreshReadyRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
+  /** M11.1 点击内部链接时打开目标便签；返回 false 表示目标失效/无权限（链接变灰） */
+  onOpenNote?: (noteId: string) => Promise<boolean> | boolean | void;
+  /** M11.1 可插入链接的未归档便签列表（插入对话框搜索来源） */
+  linkableNotes?: Note[];
 }
 
 function formatEditorDate(dateStr?: string): string {
@@ -58,6 +64,8 @@ export default function NoteEditor({
   onRefresh,
   refreshing,
   refreshReadyRef,
+  onOpenNote,
+  linkableNotes,
 }: Props) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -73,6 +81,9 @@ export default function NoteEditor({
   >("saved");
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // M11.1 阅读模式：正文只读渲染（外部/内部链接可点），点击正文或菜单项回到编辑
+  const [preview, setPreview] = useState(false);
+  const [insertLinkOpen, setInsertLinkOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // 工具栏按编辑区实际容器宽度分三档（≥560 舒展 / 380-779 紧凑 / <380 极简）
   // 迟滞：进入各档与退出各档阈值分开，退出 spacious 需 >780（桥接侧边栏自动收起时编辑区约跳到 720 的跳变，避免一次收窄中反复“收起→展开→再收起”）
@@ -84,6 +95,7 @@ export default function NoteEditor({
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
   const prevNoteIdRef = useRef<string | null>(null);
   const prevUpdatedAtRef = useRef<string | undefined>(undefined);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -245,6 +257,9 @@ export default function NoteEditor({
 
     if (noteIdChanged) {
       flushPendingSave();
+      // 切换便签退出阅读模式/关闭插入对话框，避免旧便签的预览态残留
+      setPreview(false);
+      setInsertLinkOpen(false);
     }
 
     const localDirty =
@@ -413,6 +428,39 @@ export default function NoteEditor({
     setContent(value);
     debouncedSave({ content: value });
   };
+
+  // M11.1 插入内部便签链接：优先在 textarea 光标处插入并落到链接后，
+  // 无光标信息（如处于阅读模式）则追加到正文末尾。
+  const insertNoteLink = useCallback(
+    (target: Note) => {
+      setInsertLinkOpen(false);
+      setPreview(false);
+      const snippet = `[[note:${target.id}|${target.title || "未命名便签"}]]`;
+      const ta = contentRef.current;
+      if (!ta) {
+        const next = content
+          ? `${content}${content.endsWith("\n") ? "" : "\n"}${snippet}`
+          : snippet;
+        setContent(next);
+        immediateSave({ content: next });
+        return;
+      }
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const next = content.slice(0, start) + snippet + content.slice(end);
+      setContent(next);
+      immediateSave({ content: next });
+      requestAnimationFrame(() => {
+        const el = contentRef.current;
+        if (el) {
+          const pos = start + snippet.length;
+          el.focus();
+          el.setSelectionRange(pos, pos);
+        }
+      });
+    },
+    [content, immediateSave]
+  );
 
   const handleChecklistChange = (items: ChecklistItem[], groups: ChecklistGroup[]) => {
     setChecklistItems(items);
@@ -684,6 +732,36 @@ export default function NoteEditor({
                   <div className="my-1 h-px bg-border-light/60" />
                 </>
               )}
+              {mode === "text" && (
+                <>
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      setPreview((p) => !p);
+                    }}
+                    className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {preview ? "返回编辑" : "阅读模式"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      setInsertLinkOpen(true);
+                    }}
+                    className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                    </svg>
+                    插入便签链接
+                  </button>
+                  <div className="my-1 h-px bg-border-light/60" />
+                </>
+              )}
               <button
                 onClick={() => {
                   setMoreOpen(false);
@@ -764,13 +842,28 @@ export default function NoteEditor({
             />
 
             {mode === "text" ? (
-              <AutoGrowTextarea
-                value={content}
-                onChange={handleContentChange}
-                placeholder="开始记录..."
-                className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
-                minHeight={200}
-              />
+              preview ? (
+                <div
+                  className="w-full text-edit-body text-ink whitespace-pre-wrap break-words min-h-[200px] cursor-text"
+                  onClick={() => setPreview(false)}
+                  title="点击返回编辑"
+                >
+                  {content ? (
+                    <LinkedText text={content} onOpenNote={onOpenNote} />
+                  ) : (
+                    <span className="text-ink-muted/55">开始记录...</span>
+                  )}
+                </div>
+              ) : (
+                <AutoGrowTextarea
+                  value={content}
+                  onChange={handleContentChange}
+                  placeholder="开始记录..."
+                  className="w-full border-none outline-none bg-transparent text-edit-body text-ink placeholder:text-ink-muted/55"
+                  minHeight={200}
+                  innerRef={contentRef}
+                />
+              )
             ) : (
               <ChecklistEditor
                 items={checklistItems}
@@ -802,6 +895,13 @@ export default function NoteEditor({
         confirmLabel="删除"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirmOpen(false)}
+      />
+
+      <InsertNoteLinkDialog
+        open={insertLinkOpen}
+        notes={linkableNotes || []}
+        onSelect={insertNoteLink}
+        onClose={() => setInsertLinkOpen(false)}
       />
     </div>
   );

@@ -122,6 +122,35 @@ export default function HomePage() {
     toastTimerRef.current = setTimeout(() => setRefreshToast(null), 2000);
   }, []);
 
+  // M11.1 内部链接打开：列表已有目标 → 直接选中；否则按 id 拉取单条，
+  // 404/403/失败返回 false（链接变灰已失效）；归档目标不跳转、仅提示。
+  const openNoteById = useCallback(
+    async (noteId: string): Promise<boolean> => {
+      const existing = notes.find((n) => n.id === noteId);
+      if (existing) {
+        setSelectedNoteId(noteId);
+        setShowEditor(true);
+        return true;
+      }
+      try {
+        const res = await fetch(`/api/notes/${noteId}`);
+        if (res.status === 404 || res.status === 403 || !res.ok) return false;
+        const note = (await res.json()) as Note;
+        if (note.isArchived) {
+          showRefreshToast("该便签已归档，可前往归档页查看");
+          return true;
+        }
+        applyNote(note);
+        setSelectedNoteId(noteId);
+        setShowEditor(true);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [notes, applyNote, showRefreshToast]
+  );
+
   // 手动刷新：先保护本机未保存内容（flush + 重试失败载荷），再静默拉服务器最新列表。
   // 不覆盖本机本地 pending 队列（mirrorNote 已有保护，此处不引入覆盖）。
   const handleRefresh = useCallback(async () => {
@@ -235,6 +264,8 @@ export default function HomePage() {
             onRefresh={handleRefresh}
             refreshing={refreshing}
             refreshReadyRef={editorRefreshRef}
+            onOpenNote={openNoteById}
+            linkableNotes={notes}
           />
         </div>
       </div>

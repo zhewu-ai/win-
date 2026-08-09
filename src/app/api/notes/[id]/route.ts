@@ -13,6 +13,35 @@ import {
 
 const VALID_COLORS = ["yellow", "blue", "green", "pink", "gray"];
 
+// 单条便签读取：内部链接打开「当前列表没有的目标便签」用。
+// 只允许当前用户自己的未删除便签；未登录 401，他人/已删除 404。
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const session = await authOrResponse();
+  if (session instanceof NextResponse) return session;
+
+  const note = await prisma.note.findFirst({
+    where: {
+      id: id,
+      userId: session.userId,
+      deletedAt: null,
+    },
+    include: { attachments: true },
+  });
+
+  if (!note) {
+    return NextResponse.json(
+      { ok: false, error: "NOT_FOUND" },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json(serializeNote(note as unknown as Record<string, unknown>));
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
