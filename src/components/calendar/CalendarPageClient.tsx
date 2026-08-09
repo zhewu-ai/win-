@@ -885,7 +885,7 @@ export default function CalendarPageClient({
 
       {/* 主体：视图 + 桌面右栏 */}
       <div className="flex min-h-0 flex-1">
-        <main className="min-h-0 flex-1 overflow-y-auto px-2 py-3 scrollbar-thin sm:px-4">
+        <main className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-[clamp(10px,3vw,36px)] py-3">
           {(error || uiError) && (
             <div className="mb-3 rounded-card bg-danger/10 px-3 py-2 text-sm text-danger">{error || uiError}</div>
           )}
@@ -902,7 +902,7 @@ export default function CalendarPageClient({
               </button>
             </div>
           ) : view === "week" ? (
-            <div className="h-full min-h-0 overflow-x-auto">
+            <div className="mx-auto h-full min-h-0 w-full max-w-[1000px] overflow-x-auto">
               <div className="h-full min-w-[560px]">
                 <WorkWeekView
                   weekStart={weekStart}
@@ -917,7 +917,7 @@ export default function CalendarPageClient({
             </div>
           ) : view === "month" ? (
             /* 2.5 连续月份滚动：锚点月 ±3 个月纵向堆叠，上下滚动跨月；切换锚点月自动滚动定位 */
-            <div ref={monthContainerRef} className="flex flex-col gap-6">
+            <div ref={monthContainerRef} className="mx-auto flex w-full max-w-[1000px] flex-col gap-6">
               {monthRange.map((m) => (
                 <div key={`${m.getFullYear()}-${m.getMonth()}`} data-month={`${m.getFullYear()}-${m.getMonth()}`}>
                   <div className="mb-1.5 text-sm font-bold text-ink">
@@ -942,18 +942,20 @@ export default function CalendarPageClient({
               ))}
             </div>
           ) : (
-            <WorkTodayView
-              date={dayDate}
-              items={visibleItems}
-              notes={showNoteLayer ? notesForLayer : []}
-              today={today}
-              colorOf={colorOf}
-              projectNameOf={projectNameOf}
-              showNoteLayer={showNoteLayer}
-              onItemClick={handleItemClick}
-              onToggleDone={handleToggleDone}
-              onOpenNote={handleOpenNote}
-            />
+            <div className="mx-auto w-full max-w-[1000px]">
+              <WorkTodayView
+                date={dayDate}
+                items={visibleItems}
+                notes={showNoteLayer ? notesForLayer : []}
+                today={today}
+                colorOf={colorOf}
+                projectNameOf={projectNameOf}
+                showNoteLayer={showNoteLayer}
+                onItemClick={handleItemClick}
+                onToggleDone={handleToggleDone}
+                onOpenNote={handleOpenNote}
+              />
+            </div>
           )}
         </main>
 

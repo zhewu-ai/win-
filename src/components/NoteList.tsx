@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Note } from "@/types";
 import { formatNoteTime } from "@/lib/format-time";
 import { displayPlainText } from "@/lib/link-parser";
@@ -25,8 +25,6 @@ interface Props {
   /** M12 体验细修：多选状态上提（Sidebar 据此隐藏搜索框），本组件用受控 props */
   selectionMode?: boolean;
   onSelectionModeChange?: (active: boolean) => void;
-  /** M12 体验细修：刷新能力移入「三个点」菜单 */
-  onRefresh?: () => void;
 }
 
 const ACCENT: Record<string, string> = {
@@ -181,14 +179,28 @@ export default function NoteList({
   calendarShowNoteLayer,
   selectionMode = false,
   onSelectionModeChange,
-  onRefresh,
 }: Props) {
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const { isOnline } = useSyncStatus();
+  // 2.5 防御：记录选中前滚动位置，若选中后滚动容器被意外重置为 0 则恢复，保证底部选择不跳顶。
+  // 仅在容器确实被重置（scrollTop===0）且此前有滚动时恢复，不与用户主动滚动到顶部冲突。
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollBeforeSelectRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const el = listScrollRef.current;
+    if (!el || !selectedId) return;
+    if (el.scrollTop === 0 && scrollBeforeSelectRef.current > 0) {
+      el.scrollTop = scrollBeforeSelectRef.current;
+    }
+  }, [selectedId]);
+
+  const captureScroll = () => {
+    const el = listScrollRef.current;
+    if (el) scrollBeforeSelectRef.current = el.scrollTop;
+  };
 
   // 列表变化时剔除已消失的选中项（外部删除/搜索过滤后残留）
   useEffect(() => {
@@ -207,16 +219,6 @@ export default function NoteList({
       setConfirmOpen(false);
     }
   }, [notes.length, onSelectionModeChange]);
-
-  // 三个点菜单：点击外部关闭
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
 
   const pinned = notes.filter((n) => n.isPinned);
   const regular = notes.filter((n) => !n.isPinned);
@@ -337,6 +339,7 @@ export default function NoteList({
           return next;
         });
       } else {
+        captureScroll();
         onSelect(note.id);
       }
     };
@@ -424,7 +427,7 @@ export default function NoteList({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-sidebar-bg">
-      {selectionMode ? (
+      {selectionMode && (
         <div className="flex items-center gap-1.5 px-3 pt-2 flex-shrink-0">
           <span className="text-xs font-medium text-ink-muted flex-shrink-0">
             已选 {selectedSet.size} 条
@@ -454,58 +457,9 @@ export default function NoteList({
             删除
           </button>
         </div>
-      ) : (
-        <div className="flex justify-end px-3 pt-1 flex-shrink-0">
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              title="更多操作"
-              aria-label="更多操作"
-              aria-expanded={menuOpen}
-              className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:text-ink rounded-btn transition-colors"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="5" cy="12" r="1.7" />
-                <circle cx="12" cy="12" r="1.7" />
-                <circle cx="19" cy="12" r="1.7" />
-              </svg>
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-30 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onSelectionModeChange?.(true);
-                    setSelectedSet(new Set());
-                  }}
-                  className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
-                >
-                  <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  选择便签
-                </button>
-                {onRefresh && (
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onRefresh();
-                    }}
-                    className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    刷新
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-2.5 scrollbar-thin [scrollbar-gutter:stable]">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-2.5 scrollbar-thin [scrollbar-gutter:stable]">
         {/* M12 R2 日历分组：管理员展示，位于置顶/日期分组之上 */}
         {showCalendarGroup && (
           <div>

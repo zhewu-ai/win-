@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import NoteEditor from "@/components/NoteEditor";
 import OfflineBar from "@/components/OfflineBar";
@@ -45,6 +45,15 @@ export default function HomePage() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
   });
+  // M12 R3 2.2：恢复侧边栏收起/展开动画。
+  // 仅双栏启用 width/opacity 过渡（单栏保持即时收起）；模式切换首帧禁用过渡，
+  // 规避 R1 §9.6 记录的「双栏 350px ↔ 单栏 100% 同帧过渡被冻结在起始值」老 bug。
+  const [sidebarTransitionOff, setSidebarTransitionOff] = useState(true);
+  useLayoutEffect(() => {
+    setSidebarTransitionOff(true);
+    const id = requestAnimationFrame(() => setSidebarTransitionOff(false));
+    return () => cancelAnimationFrame(id);
+  }, [mode]);
 
   const toggleSidebar = () => {
     setSidebarCollapsed((prev) => {
@@ -318,6 +327,8 @@ export default function HomePage() {
   const panelActive = showEditor || calendarOpen || cameFromCalendar;
   // 日历面板可见：日历打开，或「从日历进入的便签已关闭」自动回到日历
   const showCalendarPanel = isAdmin && (calendarOpen || (cameFromCalendar && !showEditor));
+  // M12 R3 2.2：侧边栏展开态（渲染 border 与宽度类）
+  const sidebarExpanded = mode === "single" ? !panelActive : !sidebarCollapsed;
 
   return (
     <div className="h-screen flex flex-col bg-page-bg">
@@ -325,37 +336,46 @@ export default function HomePage() {
       <div className="flex-1 flex overflow-hidden">
         {/* 侧边栏：
             单栏 → 编辑打开或日历打开时收起，否则全宽显示；双栏 → 固定 350px，随手动折叠隐藏。
-            不带 width/opacity 过渡：transition-property 与宽度同帧变化会被浏览器冻结在起始值
-            （R1 §9.6 记录的老 bug：双栏 350px ↔ 单栏 100% 卡在 350px），改为即时收起，彻底消除。 */}
+            M12 R3 2.2：外层容器只负责宽度槽位（overflow-hidden 裁剪），内层固定 350px 防内容挤压；
+            双栏启用 width/opacity 过渡实现平滑收起/展开，模式切换首帧禁用过渡规避冻结 bug（R1 §9.6）。 */}
         <div
-          className={`${
+          className={`flex flex-shrink-0 flex-col bg-sidebar-bg overflow-hidden ${
+            sidebarExpanded ? "border-r border-border-light" : ""
+          } ${
             mode === "single"
               ? !panelActive
-                ? "flex w-full border-r border-border-light"
-                : "flex w-0 opacity-0 overflow-hidden pointer-events-none"
+                ? "w-full"
+                : "w-0 opacity-0 pointer-events-none"
               : sidebarCollapsed
-                ? "flex w-0 opacity-0 overflow-hidden pointer-events-none"
-                : "flex w-[350px] border-r border-border-light"
-          } flex-shrink-0 flex-col bg-sidebar-bg`}
+                ? "w-0 opacity-0 pointer-events-none"
+                : "w-[350px]"
+          }`}
+          style={
+            mode !== "single" && !sidebarTransitionOff
+              ? { transition: "width 200ms ease-in-out, opacity 150ms ease-in-out" }
+              : undefined
+          }
         >
-          <Sidebar
-            notes={notes}
-            selectedId={selectedNoteId}
-            onSelect={handleSelect}
-            onBulkDelete={handleBulkDelete}
-            loading={loading}
-            searchQuery={searchQuery}
-            onSearchChange={handleSearchChange}
-            onCreateNote={handleCreate}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-            onCollapse={mode === "single" ? undefined : toggleSidebar}
-            isAdmin={isAdmin}
-            onOpenCalendar={openCalendar}
-            calendarActive={calendarOpen}
-            calendarHiddenProjectIds={calendarHidden}
-            calendarShowNoteLayer={calendarNoteLayer}
-          />
+          <div className={`${mode === "single" ? "w-full" : "w-[350px]"} flex h-full flex-col`}>
+            <Sidebar
+              notes={notes}
+              selectedId={selectedNoteId}
+              onSelect={handleSelect}
+              onBulkDelete={handleBulkDelete}
+              loading={loading}
+              searchQuery={searchQuery}
+              onSearchChange={handleSearchChange}
+              onCreateNote={handleCreate}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+              onCollapse={mode === "single" ? undefined : toggleSidebar}
+              isAdmin={isAdmin}
+              onOpenCalendar={openCalendar}
+              calendarActive={calendarOpen}
+              calendarHiddenProjectIds={calendarHidden}
+              calendarShowNoteLayer={calendarNoteLayer}
+            />
+          </div>
         </div>
 
         {/* 折叠后的展开条 - 仅双栏 */}

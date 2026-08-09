@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Note } from "@/types";
 import NoteList from "./NoteList";
 import AccountMenu from "./AccountMenu";
@@ -46,10 +46,23 @@ export default function Sidebar({
 }: Props) {
   // M12 体验细修：多选状态由 NoteList 上报，据此隐藏搜索框（2.11）
   const [listSelectionMode, setListSelectionMode] = useState(false);
+  // M12 R3 2.1：「三个点」菜单上移到搜索行（搜索框与收起按钮之间），承载 选择便签/刷新 等低频操作
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  // 三个点菜单：点击外部关闭
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [moreOpen]);
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-sidebar-bg">
-      {/* Search：多选时隐藏（2.11）；刷新入口已移入「三个点」菜单（2.10） */}
+      {/* Search：多选时隐藏（2.11）；「三个点」菜单在搜索框右侧（2.1） */}
       {!listSelectionMode && (
         <div className="flex items-center gap-1.5 px-3 pt-3 pb-2 flex-shrink-0">
           <div className="flex-1 relative min-w-0">
@@ -85,6 +98,52 @@ export default function Sidebar({
               </button>
             )}
           </div>
+          {/* M12 R3 2.1：「三个点」菜单（选择便签 / 刷新 等低频操作），位于搜索框与收起按钮之间 */}
+          <div className="relative flex-shrink-0" ref={moreRef}>
+            <button
+              onClick={() => setMoreOpen((v) => !v)}
+              title="更多操作"
+              aria-label="更多操作"
+              aria-expanded={moreOpen}
+              className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:text-ink rounded-btn transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="1.7" />
+                <circle cx="12" cy="12" r="1.7" />
+                <circle cx="19" cy="12" r="1.7" />
+              </svg>
+            </button>
+            {moreOpen && (
+              <div className="absolute right-0 top-full mt-1 z-30 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl">
+                <button
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setListSelectionMode(true);
+                  }}
+                  className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
+                >
+                  <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  选择便签
+                </button>
+                {onRefresh && (
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onRefresh();
+                    }}
+                    className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-ink hover:bg-surface-hover transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    刷新
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           {onCollapse && (
             <button
               onClick={onCollapse}
@@ -115,7 +174,6 @@ export default function Sidebar({
           calendarShowNoteLayer={calendarShowNoteLayer}
           selectionMode={listSelectionMode}
           onSelectionModeChange={setListSelectionMode}
-          onRefresh={onRefresh}
         />
       </div>
 
