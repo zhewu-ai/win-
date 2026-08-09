@@ -11,7 +11,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:roundtrip": "tsx scripts/roundtrip-check.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

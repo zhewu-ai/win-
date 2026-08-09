@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useMemo, useRef, useState } from "react";
 import type { ChecklistItem, ChecklistGroup, Note } from "@/types";
 import { parseChecklistLine } from "@/lib/note-serializer";
 import LinkEditor from "./LinkEditor";
@@ -22,6 +22,139 @@ interface Props {
   linkableNotes?: Note[];
   onOpenNote?: (noteId: string) => Promise<boolean> | boolean | void;
 }
+
+interface RowProps {
+  row: ChecklistItem;
+  draggable: boolean;
+  dropTarget: { id: string; before: boolean } | null;
+  linkableNotes: Note[];
+  onOpenNote?: (noteId: string) => Promise<boolean> | boolean | void;
+  onToggle: (id: string) => void;
+  onTextChange: (id: string, text: string) => void;
+  onDelete: (id: string) => void;
+  onKeyDown: (e: KeyboardEvent, ed: Editor, id: string) => boolean;
+  onPasteLines: (lines: string[], id: string) => boolean;
+  onRowBlur: (e: React.FocusEvent<HTMLDivElement>) => void;
+  setEditorRef: (id: string, el: Editor | null) => void;
+  onHandlePointerDown: (e: React.PointerEvent, id: string) => void;
+  onHandlePointerMove: (e: React.PointerEvent) => void;
+  onHandlePointerUp: (e: React.PointerEvent) => void;
+  onHandlePointerCancel: () => void;
+}
+
+// 行级 memo：回调全部引用稳定、未改动的 row 对象引用不变，改一行只重渲那一行。
+const ChecklistRow = memo(function ChecklistRow({
+  row,
+  draggable,
+  dropTarget,
+  linkableNotes,
+  onOpenNote,
+  onToggle,
+  onTextChange,
+  onDelete,
+  onKeyDown,
+  onPasteLines,
+  onRowBlur,
+  setEditorRef,
+  onHandlePointerDown,
+  onHandlePointerMove,
+  onHandlePointerUp,
+  onHandlePointerCancel,
+}: RowProps) {
+  return (
+    <div data-row-id={row.id} className="relative flex items-start gap-2.5 group">
+      {dropTarget?.id === row.id && dropTarget.before && (
+        <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-primary" />
+      )}
+      {dropTarget?.id === row.id && !dropTarget.before && (
+        <div className="absolute -bottom-[3px] left-0 right-0 h-[3px] rounded-full bg-primary" />
+      )}
+      {draggable && (
+        <div
+          onPointerDown={(e) => onHandlePointerDown(e, row.id)}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          onPointerCancel={onHandlePointerCancel}
+          className="flex-shrink-0 mt-0.5 -ml-1 w-6 h-6 flex items-center justify-center text-ink-muted/30 hover:text-ink-muted/70 cursor-grab active:cursor-grabbing touch-none select-none"
+          title="拖动排序"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="5" r="1.5" />
+            <circle cx="15" cy="5" r="1.5" />
+            <circle cx="9" cy="12" r="1.5" />
+            <circle cx="15" cy="12" r="1.5" />
+            <circle cx="9" cy="19" r="1.5" />
+            <circle cx="15" cy="19" r="1.5" />
+          </svg>
+        </div>
+      )}
+      {row.kind === "heading" ? (
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <div className="flex-1 h-px bg-ink-muted/15" />
+          <LinkEditor
+            value={row.text}
+            onChange={(v) => onTextChange(row.id, v)}
+            onBlur={onRowBlur}
+            onKeyDown={(e, ed) => onKeyDown(e, ed, row.id)}
+            onPasteLines={(lines) => onPasteLines(lines, row.id)}
+            editorRef={(el) => setEditorRef(row.id, el)}
+            linkableNotes={linkableNotes}
+            onOpenNote={onOpenNote}
+            placeholder="小标题"
+            hidePlaceholderOnFocus
+            singleLine
+            className="flex-[1.5] min-w-0 w-0"
+            contentClassName="min-h-[18px] text-center text-xs font-semibold tracking-wide text-ink-muted/85"
+            dataPhOpacity="0.3"
+          />
+          <div className="flex-1 h-px bg-ink-muted/15" />
+        </div>
+      ) : (
+        <>
+          <button
+            onClick={() => onToggle(row.id)}
+            className={`flex-shrink-0 mt-0.5 w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
+              row.checked
+                ? "bg-primary border-primary text-white"
+                : "border-ink-muted/55 hover:border-ink-secondary"
+            }`}
+            title={row.checked ? "标记为未完成" : "标记为已完成"}
+          >
+            {row.checked && (
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+          <LinkEditor
+            value={row.text}
+            onChange={(v) => onTextChange(row.id, v)}
+            onBlur={onRowBlur}
+            onKeyDown={(e, ed) => onKeyDown(e, ed, row.id)}
+            onPasteLines={(lines) => onPasteLines(lines, row.id)}
+            editorRef={(el) => setEditorRef(row.id, el)}
+            linkableNotes={linkableNotes}
+            onOpenNote={onOpenNote}
+            placeholder="新待办..."
+            hidePlaceholderOnFocus
+            singleLine
+            className="flex-1 min-w-0 w-0"
+            contentClassName="min-h-[20px] text-edit-body leading-[1.5]"
+          />
+        </>
+      )}
+      <button
+        onClick={() => onDelete(row.id)}
+        className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-1 p-1 text-ink-muted hover:text-danger rounded-btn"
+        title="删除"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+});
 
 export default function ChecklistEditor({
   items,
@@ -59,6 +192,15 @@ export default function ChecklistEditor({
     [sortedRows]
   );
 
+  // 行级 memo 的稳定性基础：所有 handler 改为从 ref 读当前状态，
+  // 使它们在 items/active/completed 变化时引用不变，改一行只重渲那一行。
+  const itemsRef = useRef(items);
+  const activeRef = useRef<ChecklistItem[]>(active);
+  const completedRef = useRef<ChecklistItem[]>(completed);
+  itemsRef.current = items;
+  activeRef.current = active;
+  completedRef.current = completed;
+
   /** Re-emits rows with contiguous sortOrders: active first, then completed. */
   const commit = useCallback(
     (nextActive: ChecklistItem[], nextCompleted: ChecklistItem[]) => {
@@ -94,31 +236,33 @@ export default function ChecklistEditor({
     (id: string, text: string) => {
       const now = nowIso();
       onChange(
-        items.map((r) => (r.id === id ? { ...r, text, updatedAt: now } : r)),
+        itemsRef.current.map((r) =>
+          r.id === id ? { ...r, text, updatedAt: now } : r
+        ),
         []
       );
     },
-    [items, onChange]
+    [onChange]
   );
 
   const handleToggle = useCallback(
     (id: string) => {
-      const item = items.find((i) => i.id === id);
+      const item = itemsRef.current.find((i) => i.id === id);
       if (!item || item.kind === "heading") return;
       const now = nowIso();
       if (item.checked) {
         commit(
-          [...active, { ...item, checked: false, completedAt: null }],
-          completed.filter((r) => r.id !== id)
+          [...activeRef.current, { ...item, checked: false, completedAt: null }],
+          completedRef.current.filter((r) => r.id !== id)
         );
       } else {
         commit(
-          active.filter((r) => r.id !== id),
-          [...completed, { ...item, checked: true, completedAt: now }]
+          activeRef.current.filter((r) => r.id !== id),
+          [...completedRef.current, { ...item, checked: true, completedAt: now }]
         );
       }
     },
-    [items, active, completed, commit]
+    [commit]
   );
 
   const newTodo = useCallback(
@@ -151,62 +295,63 @@ export default function ChecklistEditor({
 
   const addTodoAfter = useCallback(
     (id: string) => {
-      const idx = active.findIndex((r) => r.id === id);
+      const activeList = activeRef.current;
+      const idx = activeList.findIndex((r) => r.id === id);
       const item = newTodo("");
       const nextActive =
         idx < 0
-          ? [...active, item]
-          : [...active.slice(0, idx + 1), item, ...active.slice(idx + 1)];
-      commit(nextActive, completed);
+          ? [...activeList, item]
+          : [...activeList.slice(0, idx + 1), item, ...activeList.slice(idx + 1)];
+      commit(nextActive, completedRef.current);
       focusRow(item.id);
     },
-    [active, completed, commit, newTodo, focusRow]
+    [commit, newTodo, focusRow]
   );
 
   const addTodoAtEnd = useCallback(() => {
     const item = newTodo("");
-    commit([...active, item], completed);
+    commit([...activeRef.current, item], completedRef.current);
     focusRow(item.id);
-  }, [active, completed, commit, newTodo, focusRow]);
+  }, [commit, newTodo, focusRow]);
 
   const insertHeadingAt = useCallback(
     (activeIndex: number) => {
       const item = newHeading("");
       const nextActive = [
-        ...active.slice(0, activeIndex),
+        ...activeRef.current.slice(0, activeIndex),
         item,
-        ...active.slice(activeIndex),
+        ...activeRef.current.slice(activeIndex),
       ];
-      commit(nextActive, completed);
+      commit(nextActive, completedRef.current);
       focusRow(item.id);
     },
-    [active, completed, commit, newHeading, focusRow]
+    [commit, newHeading, focusRow]
   );
 
   const addHeadingAtEnd = useCallback(() => {
     const item = newHeading("");
-    commit([...active, item], completed);
+    commit([...activeRef.current, item], completedRef.current);
     focusRow(item.id);
-  }, [active, completed, commit, newHeading, focusRow]);
+  }, [commit, newHeading, focusRow]);
 
   const deleteItem = useCallback(
     (id: string) => {
-      const nextActive = active.filter((r) => r.id !== id);
-      const nextCompleted = completed.filter((r) => r.id !== id);
+      const nextActive = activeRef.current.filter((r) => r.id !== id);
+      const nextCompleted = completedRef.current.filter((r) => r.id !== id);
       if (nextActive.length === 0 && nextCompleted.length === 0) {
         commit([newTodo("")], []);
         return;
       }
       commit(nextActive, nextCompleted);
     },
-    [active, completed, commit, newTodo]
+    [commit, newTodo]
   );
 
   // 行级键处理：Enter 加新待办、空行 Backspace 删行、Arrow 上下移焦。
   // 返回 true 表示已消费（LinkEditor 不再处理该键）。editor 参数取自 LinkEditor 实例。
   const handleRowKeyDown = useCallback(
     (e: KeyboardEvent, _editor: Editor, id: string): boolean => {
-      const item = items.find((i) => i.id === id);
+      const item = itemsRef.current.find((i) => i.id === id);
       if (!item) return false;
 
       if (e.key === "Enter") {
@@ -217,30 +362,32 @@ export default function ChecklistEditor({
 
       if (e.key === "Backspace" && item.text === "") {
         e.preventDefault();
-        if (items.length <= 1) return true;
-        const idx = active.findIndex((r) => r.id === id);
-        const prevId = idx > 0 ? active[idx - 1].id : undefined;
+        if (itemsRef.current.length <= 1) return true;
+        const activeList = activeRef.current;
+        const idx = activeList.findIndex((r) => r.id === id);
+        const prevId = idx > 0 ? activeList[idx - 1].id : undefined;
         deleteItem(id);
         if (prevId) focusRow(prevId);
         return true;
       }
 
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        const idx = active.findIndex((r) => r.id === id);
+        const activeList = activeRef.current;
+        const idx = activeList.findIndex((r) => r.id === id);
         if (e.key === "ArrowUp" && idx > 0) {
           e.preventDefault();
-          focusRow(active[idx - 1].id);
+          focusRow(activeList[idx - 1].id);
           return true;
         }
-        if (e.key === "ArrowDown" && idx >= 0 && idx < active.length - 1) {
+        if (e.key === "ArrowDown" && idx >= 0 && idx < activeList.length - 1) {
           e.preventDefault();
-          focusRow(active[idx + 1].id);
+          focusRow(activeList[idx + 1].id);
           return true;
         }
       }
       return false;
     },
-    [items, active, addTodoAfter, deleteItem, focusRow]
+    [addTodoAfter, deleteItem, focusRow]
   );
 
   const makeRow = useCallback(
@@ -279,11 +426,13 @@ export default function ChecklistEditor({
       if (clean.length === 1 && !hasMarker) return false;
 
       const now = nowIso();
-      const idx = active.findIndex((r) => r.id === id);
-      let nextActive = [...active];
+      const activeList = activeRef.current;
+      const completedList = completedRef.current;
+      const idx = activeList.findIndex((r) => r.id === id);
+      let nextActive = [...activeList];
       let pasted = parsedLines.map((p) => makeRow(p));
 
-      if (idx >= 0 && active[idx].text.trim() === "" && pasted.length > 0) {
+      if (idx >= 0 && activeList[idx].text.trim() === "" && pasted.length > 0) {
         const first = pasted[0];
         if (first.kind !== "heading") {
           nextActive[idx] = {
@@ -305,13 +454,13 @@ export default function ChecklistEditor({
       );
       const insertAt = idx + 1;
       nextActive.splice(insertAt, 0, ...activeInsert);
-      commit(nextActive, [...completed, ...completedInsert]);
+      commit(nextActive, [...completedList, ...completedInsert]);
       if (activeInsert.length > 0) {
         focusRow(nextActive[insertAt + activeInsert.length - 1].id);
       }
       return true;
     },
-    [active, completed, commit, makeRow, focusRow]
+    [commit, makeRow, focusRow]
   );
 
   // 容器空白处粘贴（未落入任何编辑器）：PM 已在编辑器内消费过的粘贴会 preventDefault，
@@ -336,27 +485,41 @@ export default function ChecklistEditor({
       const completedInsert = rows.filter(
         (r) => r.kind === "todo" && r.checked
       );
-      commit([...active, ...activeInsert], [...completed, ...completedInsert]);
+      commit(
+        [...activeRef.current, ...activeInsert],
+        [...completedRef.current, ...completedInsert]
+      );
       if (activeInsert.length > 0) {
         focusRow(activeInsert[activeInsert.length - 1].id);
       }
     },
-    [active, completed, commit, makeRow, focusRow]
+    [commit, makeRow, focusRow]
   );
 
   const handleBlur = useCallback(() => {
-    const nonEmpty = items.filter(
+    const nonEmpty = itemsRef.current.filter(
       (i) => i.kind === "heading" || i.text.trim() !== ""
     );
     if (nonEmpty.length === 0) {
-      if (items.length > 1) onChange([newTodo("")], []);
-    } else if (nonEmpty.length !== items.length) {
+      if (itemsRef.current.length > 1) onChange([newTodo("")], []);
+    } else if (nonEmpty.length !== itemsRef.current.length) {
       const remainingIds = new Set(nonEmpty.map((i) => i.id));
-      const nextActive = active.filter((r) => remainingIds.has(r.id));
-      const nextCompleted = completed.filter((r) => remainingIds.has(r.id));
+      const nextActive = activeRef.current.filter((r) => remainingIds.has(r.id));
+      const nextCompleted = completedRef.current.filter((r) =>
+        remainingIds.has(r.id)
+      );
       commit(nextActive, nextCompleted);
     }
-  }, [items, active, completed, commit, newTodo, onChange]);
+  }, [onChange, commit, newTodo]);
+
+  const handleRowBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && rootRef.current && rootRef.current.contains(next)) return;
+      handleBlur();
+    },
+    [handleBlur]
+  );
 
   // --- Pointer-event drag & drop (active rows only) ---
   // HTML5 DnD (draggable + dragstart/drop) is unreliable inside WebView2
@@ -407,17 +570,18 @@ export default function ChecklistEditor({
       dragIdRef.current = null;
       setDropTarget(null);
       if (!target || target.id === drag.id) return;
-      const from = active.findIndex((r) => r.id === drag.id);
+      const activeList = activeRef.current;
+      const from = activeList.findIndex((r) => r.id === drag.id);
       if (from < 0) return;
-      const list = [...active];
+      const list = [...activeList];
       const [moved] = list.splice(from, 1);
       let to = list.findIndex((r) => r.id === target.id);
       if (to < 0) to = list.length;
       if (!target.before) to += 1;
       list.splice(Math.max(0, to), 0, moved);
-      commit(list, completed);
+      commit(list, completedRef.current);
     },
-    [active, completed, commit, dropTarget]
+    [commit, dropTarget]
   );
 
   const handleHandlePointerCancel = useCallback(() => {
@@ -441,129 +605,35 @@ export default function ChecklistEditor({
     </div>
   );
 
-  const dragHandle = (row: ChecklistItem) => (
-    <div
-      onPointerDown={(e) => handleHandlePointerDown(e, row.id)}
-      onPointerMove={handleHandlePointerMove}
-      onPointerUp={handleHandlePointerUp}
-      onPointerCancel={handleHandlePointerCancel}
-      className="flex-shrink-0 mt-0.5 -ml-1 w-6 h-6 flex items-center justify-center text-ink-muted/30 hover:text-ink-muted/70 cursor-grab active:cursor-grabbing touch-none select-none"
-      title="拖动排序"
-    >
-      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="9" cy="5" r="1.5" />
-        <circle cx="15" cy="5" r="1.5" />
-        <circle cx="9" cy="12" r="1.5" />
-        <circle cx="15" cy="12" r="1.5" />
-        <circle cx="9" cy="19" r="1.5" />
-        <circle cx="15" cy="19" r="1.5" />
-      </svg>
-    </div>
-  );
-
-  const deleteButton = (row: ChecklistItem) => (
-    <button
-      onClick={() => deleteItem(row.id)}
-      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-1 p-1 text-ink-muted hover:text-danger rounded-btn"
-      title="删除"
-    >
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
-  );
-
-  const dropIndicator = (row: ChecklistItem) => (
-    <>
-      {dropTarget?.id === row.id && dropTarget.before && (
-        <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-primary" />
-      )}
-      {dropTarget?.id === row.id && !dropTarget.before && (
-        <div className="absolute -bottom-[3px] left-0 right-0 h-[3px] rounded-full bg-primary" />
-      )}
-    </>
-  );
-
-  const renderTodoRow = (row: ChecklistItem, draggable: boolean) => (
-    <div
-      key={row.id}
-      data-row-id={row.id}
-      className="relative flex items-start gap-2.5 group"
-    >
-      {dropIndicator(row)}
-      {draggable && dragHandle(row)}
-      <button
-        onClick={() => handleToggle(row.id)}
-        className={`flex-shrink-0 mt-0.5 w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center transition-colors ${
-          row.checked
-            ? "bg-primary border-primary text-white"
-            : "border-ink-muted/55 hover:border-ink-secondary"
-        }`}
-        title={row.checked ? "标记为未完成" : "标记为已完成"}
-      >
-        {row.checked && (
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </button>
-      <LinkEditor
-        value={row.text}
-        onChange={(v) => updateText(row.id, v)}
-        onBlur={(e) => {
-          const next = e.relatedTarget as Node | null;
-          if (next && rootRef.current && rootRef.current.contains(next)) return;
-          handleBlur();
-        }}
-        onKeyDown={(e, ed) => handleRowKeyDown(e, ed, row.id)}
-        onPasteLines={(lines) => handleRowPaste(lines, row.id)}
-        editorRef={(el) => setItemRef(row.id, el)}
-        linkableNotes={linkableNotes || []}
-        onOpenNote={onOpenNote}
-        placeholder="新待办..."
-        hidePlaceholderOnFocus
-        singleLine
-        className="flex-1 min-w-0 w-0"
-        contentClassName="min-h-[20px] text-edit-body leading-[1.5]"
-      />
-      {deleteButton(row)}
-    </div>
-  );
-
-  const renderHeadingRow = (row: ChecklistItem) => (
-    <div
-      key={row.id}
-      data-row-id={row.id}
-      className="relative flex items-center gap-2.5 group"
-    >
-      {dropIndicator(row)}
-      {dragHandle(row)}
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <div className="flex-1 h-px bg-ink-muted/15" />
-        <LinkEditor
-          value={row.text}
-          onChange={(v) => updateText(row.id, v)}
-          onBlur={(e) => {
-            const next = e.relatedTarget as Node | null;
-            if (next && rootRef.current && rootRef.current.contains(next)) return;
-            handleBlur();
-          }}
-          onKeyDown={(e, ed) => handleRowKeyDown(e, ed, row.id)}
-          onPasteLines={(lines) => handleRowPaste(lines, row.id)}
-          editorRef={(el) => setItemRef(row.id, el)}
-          linkableNotes={linkableNotes || []}
-          onOpenNote={onOpenNote}
-          placeholder="小标题"
-          hidePlaceholderOnFocus
-          singleLine
-          className="flex-[1.5] min-w-0 w-0"
-          contentClassName="min-h-[18px] text-center text-xs font-semibold tracking-wide text-ink-muted/85"
-          dataPhOpacity="0.3"
-        />
-        <div className="flex-1 h-px bg-ink-muted/15" />
-      </div>
-      {deleteButton(row)}
-    </div>
+  // 行级 memo 的稳定 props：链接列表与回调全部引用稳定，改一行只重渲那一行
+  const linkableNotesSafe = useMemo(() => linkableNotes || [], [linkableNotes]);
+  const rowHandlers = useMemo(
+    () => ({
+      onToggle: handleToggle,
+      onTextChange: updateText,
+      onDelete: deleteItem,
+      onKeyDown: handleRowKeyDown,
+      onPasteLines: handleRowPaste,
+      onRowBlur: handleRowBlur,
+      setEditorRef: setItemRef,
+      onHandlePointerDown: handleHandlePointerDown,
+      onHandlePointerMove: handleHandlePointerMove,
+      onHandlePointerUp: handleHandlePointerUp,
+      onHandlePointerCancel: handleHandlePointerCancel,
+    }),
+    [
+      handleToggle,
+      updateText,
+      deleteItem,
+      handleRowKeyDown,
+      handleRowPaste,
+      handleRowBlur,
+      setItemRef,
+      handleHandlePointerDown,
+      handleHandlePointerMove,
+      handleHandlePointerUp,
+      handleHandlePointerCancel,
+    ]
   );
 
   return (
@@ -571,9 +641,14 @@ export default function ChecklistEditor({
       {active.map((row, idx) => (
         <Fragment key={row.id}>
           {insertDivider(idx, `div-${idx}-top`)}
-          {row.kind === "heading"
-            ? renderHeadingRow(row)
-            : renderTodoRow(row, true)}
+          <ChecklistRow
+            row={row}
+            draggable
+            dropTarget={dropTarget}
+            linkableNotes={linkableNotesSafe}
+            onOpenNote={onOpenNote}
+            {...rowHandlers}
+          />
         </Fragment>
       ))}
       {insertDivider(active.length, "div-end")}
@@ -623,7 +698,17 @@ export default function ChecklistEditor({
           </button>
           {!completedCollapsed && (
             <div className="mt-1 space-y-1">
-              {completed.map((row) => renderTodoRow(row, false))}
+              {completed.map((row) => (
+                <ChecklistRow
+                  key={row.id}
+                  row={row}
+                  draggable={false}
+                  dropTarget={dropTarget}
+                  linkableNotes={linkableNotesSafe}
+                  onOpenNote={onOpenNote}
+                  {...rowHandlers}
+                />
+              ))}
             </div>
           )}
         </div>

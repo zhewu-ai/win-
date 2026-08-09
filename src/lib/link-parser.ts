@@ -4,9 +4,20 @@ export type LinkSegment =
   | { type: "note"; noteId: string; title: string };
 
 // 内部便签链接语法：[[note:NOTE_ID|显示标题]]
-// noteId 只允许字母/数字/下划线/连字符（cuid 形状），标题用 [^\]]+ 避免吞掉 ]]。
-const NOTE_LINK_RE = /\[\[note:([A-Za-z0-9_-]+)\|([^\]]+)\]\]/g;
+// noteId 只允许字母/数字/下划线/连字符（cuid 形状）；标题允许任意字符，
+// 其中 \ 与 ] 用 escapeLinkTitle 转义（如 A]B → A\]B），避免标题里的裸 ] 吞掉 ]] 边界。
+const NOTE_LINK_RE = /\[\[note:([A-Za-z0-9_-]+)\|((?:\\.|[^\]])+)\]\]/g;
 const NOTE_ID_RE = /^[A-Za-z0-9_-]+$/;
+
+/** 序列化内部链接标题：先转义 \ 再转义 ]，保证标题含 ]/\\ 也能无损 round-trip。 */
+export function escapeLinkTitle(title: string): string {
+  return title.replace(/\\/g, "\\\\").replace(/\]/g, "\\]");
+}
+
+/** 反解 escapeLinkTitle 的输出（把 \\ 还原为 \、\] 还原为 ]）。 */
+export function unescapeLinkTitle(str: string): string {
+  return str.replace(/\\([\\\]])/g, "$1");
+}
 
 // 外部 URL：http(s):// 或 www. 开头；在中文字符与常见全角标点处截断（这些不可能是 URL 一部分）。
 const URL_RE =
@@ -84,7 +95,7 @@ export function parseNoteLinks(text: string): LinkSegment[] {
     if (m.index > last) chunks.push({ type: "text", text: text.slice(last, m.index) });
     const noteId = m[1];
     if (NOTE_ID_RE.test(noteId)) {
-      chunks.push({ type: "note", noteId, title: m[2] });
+      chunks.push({ type: "note", noteId, title: unescapeLinkTitle(m[2]) });
     } else {
       chunks.push({ type: "text", text: m[0] });
     }

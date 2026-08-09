@@ -10,7 +10,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import NoteLinkView from "@/components/NoteLinkView";
-import { findUrlSpans, parseNoteLinks } from "./link-parser";
+import { escapeLinkTitle, findUrlSpans, parseNoteLinks } from "./link-parser";
 
 // ──────────────────────────────────────────────────────────────────────────
 // noteText：单个正文块（text 便签正文 / 待办行 / 小标题共用）。
@@ -64,9 +64,9 @@ const NoteLink = Node.create({
   addNodeView() {
     return ReactNodeViewRenderer(NoteLinkView);
   },
-  // 复制/导出文本时输出原始语法，保证剪贴板内容与存储格式一致
+  // 复制/导出文本时输出原始语法，保证剪贴板内容与存储格式一致（标题转义防 ] 破坏语法）
   renderText({ node }) {
-    return `[[note:${node.attrs.id}|${node.attrs.title}]]`;
+    return `[[note:${node.attrs.id}|${escapeLinkTitle(node.attrs.title)}]]`;
   },
 });
 
@@ -149,7 +149,7 @@ export function serializeNoteText(doc: PMNode): string {
     } else if (child.type.name === "hardBreak") {
       out += "\n";
     } else if (child.type.name === "noteLink") {
-      out += `[[note:${child.attrs.id}|${child.attrs.title}]]`;
+      out += `[[note:${child.attrs.id}|${escapeLinkTitle(child.attrs.title)}]]`;
     }
   });
   return out;

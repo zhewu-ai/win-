@@ -17,6 +17,7 @@ import { saveNoteUpdate } from "@/lib/offline/persist";
 import { clearDraft, getDraft } from "@/lib/offline/draft";
 import { useDraftRecovery } from "@/hooks/useDraftRecovery";
 import { serializeNoteText } from "@/lib/note-text-schema";
+import { escapeLinkTitle } from "@/lib/link-parser";
 import type { Editor } from "@tiptap/react";
 
 const DEBOUNCE_MS = 800;
@@ -440,7 +441,7 @@ export default function NoteEditor({
       setInsertLinkOpen(false);
       const ed = contentEditorRef.current;
       if (!ed) {
-        const snippet = `[[note:${target.id}|${target.title || "未命名便签"}]]`;
+        const snippet = `[[note:${target.id}|${escapeLinkTitle(target.title || "未命名便签")}]]`;
         const next = content
           ? `${content}${content.endsWith("\n") ? "" : "\n"}${snippet}`
           : snippet;
@@ -460,11 +461,19 @@ export default function NoteEditor({
     [content, immediateSave]
   );
 
-  const handleChecklistChange = (items: ChecklistItem[], groups: ChecklistGroup[]) => {
-    setChecklistItems(items);
-    setChecklistGroups(groups);
-    debouncedSave({ checklistItems: items, checklistGroups: groups, mode: "checklist" });
-  };
+  // 稳定引用：ChecklistEditor 的 useCallback 依赖它，不稳定会让行级 memo 失效
+  const handleChecklistChange = useCallback(
+    (items: ChecklistItem[], groups: ChecklistGroup[]) => {
+      setChecklistItems(items);
+      setChecklistGroups(groups);
+      debouncedSave({
+        checklistItems: items,
+        checklistGroups: groups,
+        mode: "checklist",
+      });
+    },
+    [debouncedSave]
+  );
 
   const handleColorChange = async (newColor: NoteColor) => {
     setColor(newColor);
