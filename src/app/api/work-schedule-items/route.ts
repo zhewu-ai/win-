@@ -34,6 +34,8 @@ export async function GET(request: Request) {
       where: {
         userId: admin.id,
         deletedAt: null,
+        // 阻塞审计 P1：所属项目已删除的排期一律不返回（归档项目 deletedAt 为空，不受影响）。
+        project: { deletedAt: null },
         ...(hasRange ? { startDate: { lte: toStr }, endDate: { gte: fromStr } } : {}),
         ...(projectId ? { projectId } : {}),
       },

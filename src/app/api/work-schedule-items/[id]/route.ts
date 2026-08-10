@@ -14,7 +14,7 @@ import { isNoteOwnedBy, isValidDateString } from "@/lib/calendar";
 
 async function findOwnedItem(userId: string, id: string) {
   return prisma.workScheduleItem.findFirst({
-    where: { id, userId, deletedAt: null },
+    where: { id, userId, deletedAt: null, project: { deletedAt: null } },
     include: ITEM_INCLUDE,
   });
 }
