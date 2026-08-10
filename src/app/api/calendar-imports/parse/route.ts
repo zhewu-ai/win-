@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { requireUser, toErrorResponse } from "@/lib/auth";
 import { excelToText } from "@/lib/excel-text";
 import { parseExcelSchedule } from "@/lib/excel-schedule-parse";
 import { parseScheduleFile, AiParseError } from "@/lib/siliconflow";
+import { assignProjectColors } from "@/lib/project-colors";
 import type {
   CalendarImportDraft,
   CalendarImportUsage,
@@ -31,7 +33,7 @@ function extOf(filename: string): string {
 
 export async function POST(request: Request) {
   try {
-    await requireUser();
+    const user = await requireUser();
 
     let formData: FormData;
     try {
@@ -138,6 +140,20 @@ export async function POST(request: Request) {
       } else {
         throw e;
       }
+    }
+
+    // M12 QA 颜色返修：导入草稿自动配色——结合用户已有项目色 + 本次草稿去重，
+    // 保证一次导入多个项目不撞色（AI 给的颜色合法且未占用才保留）。
+    if (draft.projects.length > 0) {
+      const existing = await prisma.workProject.findMany({
+        where: { userId: user.id, deletedAt: null },
+        select: { colorKey: true },
+      });
+      const colors = assignProjectColors(
+        existing.map((p) => p.colorKey),
+        draft.projects.map((p) => p.colorKey)
+      );
+      draft.projects = draft.projects.map((p, i) => ({ ...p, colorKey: colors[i] }));
     }
 
     // 2.2 异常年份检测：80%+ 条目落在当前年 ±1 年之外 → 给前端批量修正建议

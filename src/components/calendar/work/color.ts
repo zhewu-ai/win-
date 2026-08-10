@@ -2,8 +2,13 @@ import type { WorkProjectColor } from "@/types";
 
 const WP_CLASS: Record<WorkProjectColor, string> = {
   blue: "wp-blue",
-  red: "wp-red",
+  cyan: "wp-cyan",
   green: "wp-green",
+  lime: "wp-lime",
+  amber: "wp-amber",
+  orange: "wp-orange",
+  red: "wp-red",
+  pink: "wp-pink",
   purple: "wp-purple",
   gray: "wp-gray",
 };

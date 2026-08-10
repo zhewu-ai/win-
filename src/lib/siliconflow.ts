@@ -1,4 +1,5 @@
 import { isValidDateString } from "./calendar";
+import { isValidProjectColor } from "./project-colors";
 import type {
   CalendarImportDraft,
   CalendarImportDraftItem,
@@ -47,7 +48,7 @@ function buildSystemPrompt(now: Date): string {
 不确定时写入 warnings，并降低 confidence。
 输出必须符合以下 JSON 结构（CalendarImportDraft）：
 {
-  "projects": [{ "tempId": "p1", "name": "项目名", "colorKey": "blue|red|green|purple|gray（可省略）" }],
+  "projects": [{ "tempId": "p1", "name": "项目名", "colorKey": "blue|cyan|green|lime|amber|orange|red|pink|purple|gray（可省略，尽量给多个项目不同色）" }],
   "items": [{
     "tempId": "i1",
     "projectTempId": "p1",
@@ -119,7 +120,7 @@ export function normalizeDraft(raw: unknown, currentYear = new Date().getFullYea
     const pr = p as Record<string, unknown>;
     const name = typeof pr.name === "string" ? pr.name.trim() : "";
     if (!name) continue;
-    const colorKey = ["blue", "red", "green", "purple", "gray"].includes(String(pr.colorKey ?? ""))
+    const colorKey = isValidProjectColor(String(pr.colorKey ?? ""))
       ? (String(pr.colorKey) as CalendarImportDraftProject["colorKey"])
       : undefined;
     projects.push({

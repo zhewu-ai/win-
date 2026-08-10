@@ -24,6 +24,7 @@ import WorkTodayView from "./work/WorkTodayView";
 import WorkProjectDialog from "./work/WorkProjectDialog";
 import WorkRightPanel from "./work/WorkRightPanel";
 import { wpClass } from "./work/color";
+import { assignProjectColors } from "@/lib/project-colors";
 
 type CalendarView = "week" | "month" | "today";
 
@@ -50,7 +51,12 @@ interface Props {
   onFilterChange?: (hidden: Set<string>, noteLayer: boolean) => void;
 }
 
-const COLOR_CYCLE: WorkProjectColor[] = ["blue", "red", "green", "purple", "gray"];
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** 新建项目自动配色：优先未使用色，其次最少使用色。 */
+function nextProjectColor(projects: WorkProject[]): WorkProjectColor {
+  return assignProjectColors(projects.map((p) => p.colorKey), [undefined])[0];
+}
 
 // M13 导入阶段定义（2.1）：上传文件 → 读取内容 → AI 识别 → 整理草稿 → 等待确认
 const IMPORT_STAGES: { id: CalendarImportStage["id"]; label: string }[] = [
@@ -88,18 +94,6 @@ function failStages(
     if (i < fi) return { id: s.id, label: s.label, status: "done" };
     return { id: s.id, label: s.label, status: "waiting" };
   });
-}
-
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** 新建项目自动配色：优先未使用色，其次最少使用色。 */
-function nextProjectColor(projects: WorkProject[]): WorkProjectColor {
-  const used = projects.map((p) => p.colorKey);
-  const unused = COLOR_CYCLE.find((c) => !used.includes(c));
-  if (unused) return unused;
-  const counts = COLOR_CYCLE.map((c) => ({ c, n: used.filter((u) => u === c).length }));
-  counts.sort((a, b) => a.n - b.n);
-  return counts[0].c;
 }
 
 export default function CalendarPageClient({

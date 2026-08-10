@@ -2,17 +2,14 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { isValidDateString } from "./calendar";
 import type { QuickWeekDayInput, QuickWeekNodeInput, QuickWeekPreviewRow } from "@/types";
+// 色板集中定义于纯模块 project-colors（API 校验 + 前端共用），此处透传保持既有导入路径。
+export { PROJECT_COLOR_KEYS, isValidProjectColor } from "./project-colors";
 
 // M12 工作日历人工闭环：work-projects / work-schedule-items 路由层共用的校验与序列化。
 
-export const PROJECT_COLOR_KEYS = ["blue", "red", "green", "purple", "gray"] as const;
 export const PROJECT_STATUSES = ["active", "archived"] as const;
 export const ITEM_TYPES = ["range", "node"] as const;
 export const ITEM_STATUSES = ["todo", "done", "postponed"] as const;
-
-export function isValidProjectColor(s: string): boolean {
-  return (PROJECT_COLOR_KEYS as readonly string[]).includes(s);
-}
 
 export function isValidProjectStatus(s: string): boolean {
   return (PROJECT_STATUSES as readonly string[]).includes(s);
@@ -42,6 +39,7 @@ export async function isProjectOwnedBy(
 const PROJECT_INCLUDE = {} as const satisfies Prisma.WorkProjectInclude;
 const ITEM_INCLUDE = {
   note: { select: { id: true, title: true, isArchived: true, deletedAt: true } },
+  project: { select: { colorKey: true } },
 } as const satisfies Prisma.WorkScheduleItemInclude;
 
 export type WorkProjectRow = Prisma.WorkProjectGetPayload<{
@@ -71,6 +69,7 @@ export function serializeItem(i: WorkScheduleItemRow) {
   return {
     id: i.id,
     projectId: i.projectId,
+    colorKey: i.project?.colorKey,
     title: i.title,
     type: i.type,
     startDate: i.startDate,

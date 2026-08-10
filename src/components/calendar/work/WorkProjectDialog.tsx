@@ -16,8 +16,13 @@ interface Props {
 
 const COLOR_OPTIONS: { key: WorkProjectColor; label: string }[] = [
   { key: "blue", label: "蓝" },
-  { key: "red", label: "红" },
+  { key: "cyan", label: "青" },
   { key: "green", label: "绿" },
+  { key: "lime", label: "黄绿" },
+  { key: "amber", label: "琥珀" },
+  { key: "orange", label: "橙" },
+  { key: "red", label: "红" },
+  { key: "pink", label: "粉" },
   { key: "purple", label: "紫" },
   { key: "gray", label: "灰" },
 ];

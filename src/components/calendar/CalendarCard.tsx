@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { WorkScheduleItem } from "@/types";
 import { addDays, toDateStr, todayStr, weekdayLabel } from "@/lib/calendar-date";
 import { futureKeyNodes } from "@/lib/schedule-nodes";
+import { wpClass } from "./work/color";
 
 const MONTH_NAMES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
@@ -121,6 +122,10 @@ export default function CalendarCard({ onOpen, active, hiddenProjectIds, showNot
                 {nodes.map((n) => (
                   <div key={n.item.id} className={`flex items-center gap-1.5 text-xs ${itemTitleCls}`}>
                     <span
+                      className={`h-1.5 w-1.5 flex-shrink-0 rounded-full wp-dot ${wpClass(n.item.colorKey)}`}
+                      aria-hidden="true"
+                    />
+                    <span
                       className={`flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
                         active ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-600"
                       }`}
@@ -141,9 +146,9 @@ export default function CalendarCard({ onOpen, active, hiddenProjectIds, showNot
                 {first2.map((it) => (
                   <div key={it.id} className={`flex items-center gap-1.5 text-xs ${itemTitleCls}`}>
                     <span
-                      className={`flex-shrink-0 ${
+                      className={`flex-shrink-0 wp-dot ${wpClass(it.colorKey)} ${
                         it.type === "node" ? "w-1.5 h-1.5 rounded-full" : "w-1 h-3 rounded-sm"
-                      } ${active ? "bg-white/70" : "bg-ink-muted/40"}`}
+                      }`}
                       aria-hidden="true"
                     />
                     <span className="min-w-0 truncate">{it.title || "未命名排期"}</span>

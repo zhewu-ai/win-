@@ -224,13 +224,23 @@
 /* ── M12 工作日历项目色系 ─────────────────────────────── */
 /* 同一项目用同色系深浅变化：--wp-base 主色 / --wp-deep 深端 / --wp-soft 浅底 / --wp-soft-border 浅底描边 */
 .wp-blue { --wp-base: #4276dc; --wp-deep: #2f62c7; --wp-soft: rgba(66, 118, 220, 0.12); --wp-soft-border: rgba(66, 118, 220, 0.26); }
-.wp-red { --wp-base: #d95f4b; --wp-deep: #bf4a38; --wp-soft: rgba(217, 95, 75, 0.12); --wp-soft-border: rgba(217, 95, 75, 0.26); }
+.wp-cyan { --wp-base: #2aa6c9; --wp-deep: #1f8bb0; --wp-soft: rgba(42, 166, 201, 0.12); --wp-soft-border: rgba(42, 166, 201, 0.26); }
 .wp-green { --wp-base: #2fae9f; --wp-deep: #259187; --wp-soft: rgba(47, 174, 159, 0.12); --wp-soft-border: rgba(47, 174, 159, 0.26); }
+.wp-lime { --wp-base: #8ab345; --wp-deep: #6f9a34; --wp-soft: rgba(138, 179, 69, 0.12); --wp-soft-border: rgba(138, 179, 69, 0.26); }
+.wp-amber { --wp-base: #e0a025; --wp-deep: #c6871c; --wp-soft: rgba(224, 160, 37, 0.12); --wp-soft-border: rgba(224, 160, 37, 0.26); }
+.wp-orange { --wp-base: #e5822e; --wp-deep: #c96a1f; --wp-soft: rgba(229, 130, 46, 0.12); --wp-soft-border: rgba(229, 130, 46, 0.26); }
+.wp-red { --wp-base: #d95f4b; --wp-deep: #bf4a38; --wp-soft: rgba(217, 95, 75, 0.12); --wp-soft-border: rgba(217, 95, 75, 0.26); }
+.wp-pink { --wp-base: #e05a7e; --wp-deep: #c2436a; --wp-soft: rgba(224, 90, 126, 0.12); --wp-soft-border: rgba(224, 90, 126, 0.26); }
 .wp-purple { --wp-base: #8468d0; --wp-deep: #6a4fbd; --wp-soft: rgba(132, 104, 208, 0.12); --wp-soft-border: rgba(132, 104, 208, 0.26); }
 .wp-gray { --wp-base: #8d949e; --wp-deep: #717885; --wp-soft: rgba(141, 148, 158, 0.12); --wp-soft-border: rgba(141, 148, 158, 0.26); }
 [data-theme="dark"] .wp-blue { --wp-base: #5d8cff; --wp-deep: #3569e6; --wp-soft: rgba(93, 140, 255, 0.18); --wp-soft-border: rgba(93, 140, 255, 0.4); }
-[data-theme="dark"] .wp-red { --wp-base: #ff7d66; --wp-deep: #e0543c; --wp-soft: rgba(255, 125, 102, 0.18); --wp-soft-border: rgba(255, 125, 102, 0.4); }
+[data-theme="dark"] .wp-cyan { --wp-base: #46c6e8; --wp-deep: #2899c2; --wp-soft: rgba(70, 198, 232, 0.18); --wp-soft-border: rgba(70, 198, 232, 0.4); }
 [data-theme="dark"] .wp-green { --wp-base: #42c9bd; --wp-deep: #2f9e95; --wp-soft: rgba(66, 201, 189, 0.18); --wp-soft-border: rgba(66, 201, 189, 0.4); }
+[data-theme="dark"] .wp-lime { --wp-base: #b0d05a; --wp-deep: #7fa63c; --wp-soft: rgba(176, 208, 90, 0.18); --wp-soft-border: rgba(176, 208, 90, 0.4); }
+[data-theme="dark"] .wp-amber { --wp-base: #f5b944; --wp-deep: #d99a2a; --wp-soft: rgba(245, 185, 68, 0.18); --wp-soft-border: rgba(245, 185, 68, 0.4); }
+[data-theme="dark"] .wp-orange { --wp-base: #ffa04d; --wp-deep: #e07f2e; --wp-soft: rgba(255, 160, 77, 0.18); --wp-soft-border: rgba(255, 160, 77, 0.4); }
+[data-theme="dark"] .wp-red { --wp-base: #ff7d66; --wp-deep: #e0543c; --wp-soft: rgba(255, 125, 102, 0.18); --wp-soft-border: rgba(255, 125, 102, 0.4); }
+[data-theme="dark"] .wp-pink { --wp-base: #ff7da2; --wp-deep: #e05a82; --wp-soft: rgba(255, 125, 162, 0.18); --wp-soft-border: rgba(255, 125, 162, 0.4); }
 [data-theme="dark"] .wp-purple { --wp-base: #a88bf0; --wp-deep: #8667dc; --wp-soft: rgba(168, 139, 240, 0.18); --wp-soft-border: rgba(168, 139, 240, 0.4); }
 [data-theme="dark"] .wp-gray { --wp-base: #9aa3ad; --wp-deep: #767f8a; --wp-soft: rgba(154, 163, 173, 0.18); --wp-soft-border: rgba(154, 163, 173, 0.4); }
 
@@ -242,7 +252,7 @@
 .wp-chip:hover, .wp-bar:hover { background: var(--wp-soft-border); }
 
 /* ── M12 基础原型：月历色条/节点/便签药丸（wc-*）────────────────── */
-/* 覆盖在月历格之上的排期条：浅底 + 主色细边框，节点虚线弱化，便签以药丸链接层展示 */
+/* 覆盖在月历格之上的排期条：浅底 + 主色 4px 左实线 + 主色文字（QA 颜色返修增强项目识别） */
 .wc-bar {
   position: absolute;
   height: 20px;
@@ -250,7 +260,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 7px;
+  padding: 0 7px 0 4px;
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
@@ -260,13 +270,15 @@
   pointer-events: auto;
   cursor: pointer;
   border: 1px solid var(--wp-soft-border);
+  border-left: 4px solid var(--wp-base);
   background: var(--wp-soft);
   color: var(--wp-base);
 }
 .wc-bar:hover { background: var(--wp-soft-border); }
-/* 单日节点：虚线弱化 */
+/* 单日节点：其余边框虚线弱化，左色条保持实线以突出项目色 */
 .wc-node {
   border-style: dashed;
+  border-left-style: solid;
   background: var(--wp-soft);
   color: var(--wp-base);
   font-weight: 600;

@@ -150,7 +150,17 @@ export interface CalendarEventInput {
 }
 
 // M12 工作日历人工闭环：项目 + 排期条目
-export type WorkProjectColor = "blue" | "red" | "green" | "purple" | "gray";
+export type WorkProjectColor =
+  | "blue"
+  | "cyan"
+  | "green"
+  | "lime"
+  | "amber"
+  | "orange"
+  | "red"
+  | "pink"
+  | "purple"
+  | "gray";
 export type WorkProjectStatus = "active" | "archived";
 export type WorkScheduleItemType = "range" | "node";
 
@@ -180,6 +190,8 @@ export interface WorkProjectInput {
 export interface WorkScheduleItem {
   id: string;
   projectId: string;
+  /** 所属项目颜色（左侧封面等需要项目色点，随 item 返回；旧数据可能缺失）。 */
+  colorKey?: WorkProjectColor;
   title: string;
   type: WorkScheduleItemType;
   /** YYYY-MM-DD；node 与 startDate 相同 */
