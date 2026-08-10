@@ -279,3 +279,53 @@ export interface CalendarImportYearNotice {
   total: number;
   currentYear: number;
 }
+
+// --- M13 AI 自然语言调整排期 ---
+
+export type ScheduleAdjustmentConfidence = "high" | "medium" | "low";
+
+export interface ScheduleAdjustmentCreateChange {
+  type: "create";
+  projectId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}
+
+export interface ScheduleAdjustmentUpdateChange {
+  type: "update";
+  itemId: string;
+  before: { title: string; startDate: string; endDate: string };
+  after: { title: string; startDate: string; endDate: string };
+  reason: string;
+}
+
+export interface ScheduleAdjustmentNoopChange {
+  type: "noop";
+  itemId?: string;
+  reason: string;
+}
+
+export type ScheduleAdjustmentChange =
+  | ScheduleAdjustmentCreateChange
+  | ScheduleAdjustmentUpdateChange
+  | ScheduleAdjustmentNoopChange;
+
+export interface ScheduleAdjustmentDraft {
+  summary: string;
+  confidence: ScheduleAdjustmentConfidence;
+  warnings: string[];
+  changes: ScheduleAdjustmentChange[];
+}
+
+/** 用户确认后提交的变更（只含 create/update；noop 不入库）。 */
+export interface ScheduleAdjustmentApplyChange {
+  type: "create" | "update";
+  projectId: string;
+  itemId?: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}

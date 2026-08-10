@@ -193,7 +193,7 @@ export function normalizeDraft(raw: unknown, currentYear = new Date().getFullYea
   return { projects, items, warnings };
 }
 
-interface ChatMessageContent {
+export interface ChatMessageContent {
   role: string;
   content: unknown;
 }
@@ -206,8 +206,17 @@ function resolveModel(kind: "image" | "excel"): string {
   return fallback;
 }
 
+/** M13 AI 调整排期：文字模型回退链 adjust → excel → 默认。 */
+export function resolveTextModel(kind: "adjust" | "excel" = "excel"): string {
+  const fallback = process.env.SILICONFLOW_MODEL || "Qwen/Qwen3.5-9B";
+  if (kind === "adjust") {
+    return process.env.SILICONFLOW_SCHEDULE_ADJUST_MODEL || process.env.SILICONFLOW_EXCEL_MODEL || fallback;
+  }
+  return process.env.SILICONFLOW_EXCEL_MODEL || fallback;
+}
+
 /** 调 /chat/completions，返回 JSON 草稿原始对象 + usage。 */
-async function callChat(
+export async function callChat(
   messages: ChatMessageContent[],
   model: string
 ): Promise<{ raw: unknown; usage: CalendarImportUsage }> {

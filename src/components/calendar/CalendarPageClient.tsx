@@ -8,6 +8,8 @@ import type {
   CalendarImportUsage,
   CalendarImportYearNotice,
   Note,
+  ScheduleAdjustmentApplyChange,
+  ScheduleAdjustmentDraft,
   WorkProject,
   WorkProjectColor,
   WorkProjectInput,
@@ -161,6 +163,14 @@ export default function CalendarPageClient({
   const [importStages, setImportStages] = useState<CalendarImportStage[] | null>(null);
   const [importElapsed, setImportElapsed] = useState(0);
   const [yearNotice, setYearNotice] = useState<CalendarImportYearNotice | null>(null);
+
+  // M13 AI 自然语言调整排期：只生成草稿，用户确认后才 apply 写库。
+  const [adjustState, setAdjustState] = useState<{
+    busy: boolean;
+    error: string | null;
+    draft: ScheduleAdjustmentDraft | null;
+    usage: CalendarImportUsage | null;
+  }>({ busy: false, error: null, draft: null, usage: null });
   const lastFileRef = useRef<{ file: File } | null>(null);
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -535,6 +545,57 @@ export default function CalendarPageClient({
     }
   }, [importState.draft, fetchProjects, fetchItems]);
 
+  // ---- M13 AI 自然语言调整排期 ----
+  const handleAdjustPreview = useCallback(async (projectId: string, instruction: string) => {
+    setAdjustState({ busy: true, error: null, draft: null, usage: null });
+    try {
+      const res = await fetch("/api/calendar-adjustments/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, instruction, rangeDays: 30 }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setAdjustState((s) => ({ ...s, busy: false, error: data?.message || data?.error || "生成草稿失败，请重试" }));
+        return;
+      }
+      setAdjustState({ busy: false, error: null, draft: data.draft ?? null, usage: data.usage ?? null });
+    } catch {
+      setAdjustState((s) => ({ ...s, busy: false, error: "网络错误，请重试" }));
+    }
+  }, []);
+
+  const handleApplyAdjustment = useCallback(
+    async (changes: ScheduleAdjustmentApplyChange[]) => {
+      if (changes.length === 0) return;
+      const projectId = changes[0].projectId;
+      setAdjustState((s) => ({ ...s, busy: true, error: null }));
+      try {
+        const res = await fetch("/api/calendar-adjustments/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, changes }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setAdjustState((s) => ({ ...s, busy: false, error: data?.message || data?.error || "应用失败，请重试" }));
+          return;
+        }
+        // 写库成功后回到表单，刷新项目与排期（fetchItems 会派发 work-schedule-changed 通知封面）
+        setAdjustState({ busy: false, error: null, draft: null, usage: null });
+        void fetchProjects(true);
+        void fetchItems();
+      } catch {
+        setAdjustState((s) => ({ ...s, busy: false, error: "网络错误，应用失败" }));
+      }
+    },
+    [fetchProjects, fetchItems]
+  );
+
+  const handleCancelAdjust = useCallback(() => {
+    setAdjustState({ busy: false, error: null, draft: null, usage: null });
+  }, []);
+
   // ---- 筛选 ----
   const toggleHidden = useCallback((id: string) => {
     setHiddenProjectIds((prev) => {
@@ -707,6 +768,13 @@ export default function CalendarPageClient({
       onCancelImport={handleCancelImport}
       onRetryImport={handleRetryImport}
       onDismissYearNotice={() => setYearNotice(null)}
+      adjustDraft={adjustState.draft}
+      adjustUsage={adjustState.usage}
+      adjustBusy={adjustState.busy}
+      adjustError={adjustState.error}
+      onAdjustPreview={handleAdjustPreview}
+      onApplyAdjustment={handleApplyAdjustment}
+      onCancelAdjust={handleCancelAdjust}
     />
   );
 

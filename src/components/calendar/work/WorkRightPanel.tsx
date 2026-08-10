@@ -9,10 +9,13 @@ import type {
   CalendarImportStage,
   CalendarImportUsage,
   CalendarImportYearNotice,
+  ScheduleAdjustmentApplyChange,
+  ScheduleAdjustmentDraft,
 } from "@/types";
 import EventNotePicker from "../EventNotePicker";
 import ImportPreviewPanel from "./ImportPreviewPanel";
 import ImportStepPanel from "./ImportStepPanel";
+import AdjustPreviewPanel from "./AdjustPreviewPanel";
 import { wpClass } from "./color";
 
 interface Props {
@@ -61,6 +64,14 @@ interface Props {
   onCancelImport: () => void;
   onRetryImport?: () => void;
   onDismissYearNotice?: () => void;
+  /** M13 AI 自然语言调整排期。 */
+  adjustDraft?: ScheduleAdjustmentDraft | null;
+  adjustUsage?: CalendarImportUsage | null;
+  adjustBusy?: boolean;
+  adjustError?: string | null;
+  onAdjustPreview: (projectId: string, instruction: string) => void;
+  onApplyAdjustment: (changes: ScheduleAdjustmentApplyChange[]) => void;
+  onCancelAdjust: () => void;
 }
 
 const inputCls =
@@ -101,6 +112,13 @@ export default function WorkRightPanel({
   onCancelImport,
   onRetryImport,
   onDismissYearNotice,
+  adjustDraft,
+  adjustUsage,
+  adjustBusy,
+  adjustError,
+  onAdjustPreview,
+  onApplyAdjustment,
+  onCancelAdjust,
 }: Props) {
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
@@ -110,6 +128,11 @@ export default function WorkRightPanel({
   const [status, setStatus] = useState<"todo" | "done">("todo");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // M13 AI 调整排期面板（默认折叠，只占一个小入口）。
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustProjectId, setAdjustProjectId] = useState("");
+  const [adjustInstruction, setAdjustInstruction] = useState("");
 
   const editing = Boolean(selectedItem);
   const detailMode = Boolean(detailProject && !selectedItem);
@@ -140,6 +163,17 @@ export default function WorkRightPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem, newItemNonce, detailProject]);
+
+  // AI 调整排期项目默认：当前选中项目 → 第一个项目；用户已选则保持。
+  useEffect(() => {
+    if (adjustProjectId && projects.some((p) => p.id === adjustProjectId)) return;
+    const pid =
+      (selectedProject && projects.some((p) => p.id === selectedProject.id) ? selectedProject.id : null) ??
+      projects[0]?.id ??
+      "";
+    setAdjustProjectId(pid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, selectedProject]);
 
   const noProjects = projects.length === 0;
 
@@ -191,6 +225,15 @@ export default function WorkRightPanel({
     e.target.value = "";
   };
 
+  const handleAdjustPreview = () => {
+    const pid = adjustProjectId;
+    const text = adjustInstruction.trim();
+    if (!pid || !text) return;
+    onAdjustPreview(pid, text);
+  };
+
+  const adjustProjectName = projects.find((p) => p.id === adjustProjectId)?.name ?? "";
+
   return (
     <aside className="flex h-full min-h-0 w-full flex-col overflow-y-auto border-l border-border-light bg-sidebar-bg scrollbar-thin">
       {importDraft ? (
@@ -206,6 +249,17 @@ export default function WorkRightPanel({
           onConfirm={onConfirmImport}
           onCancel={onCancelImport}
           onDismissYearNotice={onDismissYearNotice}
+        />
+      ) : adjustDraft ? (
+        <AdjustPreviewPanel
+          draft={adjustDraft}
+          projectId={adjustProjectId}
+          projectName={adjustProjectName}
+          usage={adjustUsage}
+          busy={adjustBusy}
+          error={adjustError}
+          onApply={onApplyAdjustment}
+          onCancel={onCancelAdjust}
         />
       ) : detailMode && detailProject ? (
         <ProjectDetail
@@ -352,6 +406,70 @@ export default function WorkRightPanel({
             </div>
             {importError && !importStages && <p className="mt-1.5 text-xs text-danger">{importError}</p>}
             {importDoneMessage && <p className="mt-1.5 text-xs text-success">✓ {importDoneMessage}</p>}
+          </div>
+
+          {/* M13 AI 调整排期：选项目 + 一句话 → AI 生成可确认的变更草稿（独立于文件导入） */}
+          <div className="mx-3 mb-3 flex-shrink-0 border-t border-border-light pt-2">
+            <button
+              type="button"
+              onClick={() => setAdjustOpen((v) => !v)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-btn border border-border-light bg-panel-bg px-3 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
+            >
+              <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h10M7 16h6M12 3l2.5 2.5M6 3l2.5 2.5M3 6v12a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              AI 调整排期
+            </button>
+            {adjustOpen && (
+              <div className="mt-2 flex flex-col gap-2 rounded-card border border-border-light bg-panel-bg/60 p-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-ink-muted">选择项目</label>
+                  <select
+                    value={adjustProjectId}
+                    onChange={(e) => setAdjustProjectId(e.target.value)}
+                    className={inputCls}
+                    disabled={adjustBusy}
+                  >
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-ink-muted">调整说明</label>
+                  <textarea
+                    value={adjustInstruction}
+                    onChange={(e) => setAdjustInstruction(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    placeholder="例如：今天需要先提前交一版给客户，后面的交单帧顺延一天。"
+                    className={`${inputCls} resize-none`}
+                    disabled={adjustBusy}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustOpen(false)}
+                    className="rounded-btn px-2.5 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-hover"
+                  >
+                    收起
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={handleAdjustPreview}
+                    disabled={adjustBusy || !adjustProjectId || !adjustInstruction.trim()}
+                    className="rounded-btn bg-primary px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {adjustBusy ? "生成中..." : "生成草稿"}
+                  </button>
+                </div>
+                {adjustError && <p className="text-xs text-danger">{adjustError}</p>}
+              </div>
+            )}
           </div>
         </>
       )}
