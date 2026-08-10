@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   WorkProject,
   WorkScheduleItem,
@@ -76,6 +76,25 @@ interface Props {
 
 const inputCls =
   "w-full px-2.5 py-1.5 text-sm text-ink bg-panel-bg border border-border-light rounded-input outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all";
+
+// 拖拽导入类型白名单（与服务端 parse 路由一致，供拖拽即时提示）
+const DRAG_EXCEL_EXTS = ["xlsx", "xls", "csv"];
+const DRAG_IMAGE_EXTS = ["png", "jpg", "jpeg", "webp"];
+const DRAG_EXCEL_MIMES = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
+];
+const DRAG_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp"];
+
+function dragFileKind(file: File): "excel" | "image" | "reject" {
+  const i = file.name.lastIndexOf(".");
+  const ext = i >= 0 ? file.name.slice(i + 1).toLowerCase() : "";
+  if (ext === "pdf" || file.type === "application/pdf") return "reject";
+  if (DRAG_EXCEL_EXTS.includes(ext) || DRAG_EXCEL_MIMES.includes(file.type)) return "excel";
+  if (DRAG_IMAGE_EXTS.includes(ext) || DRAG_IMAGE_MIMES.includes(file.type)) return "image";
+  return "reject";
+}
 
 export default function WorkRightPanel({
   projects,
@@ -223,6 +242,48 @@ export default function WorkRightPanel({
     const f = e.target.files?.[0];
     if (f) onParseFile(f);
     e.target.value = "";
+  };
+
+  // 拖拽导入：进入/离开用深度计数避免子元素边界抖动；drop 做类型/数量校验后复用 onParseFile。
+  const [dragActive, setDragActive] = useState(false);
+  const [dragError, setDragError] = useState<string | null>(null);
+  const dragDepthRef = useRef(0);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (importBusy) return;
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0;
+      setDragActive(false);
+    }
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    if (importBusy) return;
+    setDragError(null);
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return; // 非文件拖拽（文本等）放行
+    if (files.length > 1) {
+      setDragError("一次仅支持导入 1 个文件");
+      return;
+    }
+    const f = files[0];
+    if (dragFileKind(f) === "reject") {
+      setDragError("当前仅支持 Excel 和图片");
+      return;
+    }
+    onParseFile(f);
   };
 
   const handleAdjustPreview = () => {
@@ -388,12 +449,20 @@ export default function WorkRightPanel({
                 onRetry={onRetryImport}
               />
             )}
-            <div className="flex flex-col gap-1">
+            <div
+              className={`flex flex-col gap-1 rounded-card border-2 border-dashed p-2 transition-colors ${
+                dragActive ? "border-primary/60 bg-primary/5" : "border-transparent"
+              } ${importBusy ? "opacity-60" : ""}`}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-btn bg-primary px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50">
                 <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-6m-3 3l3-3 3 3M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
                 </svg>
-                上传给 AI
+                {dragActive ? "松开以上传给 AI" : "上传给 AI"}
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv,image/png,image/jpeg,image/webp"
@@ -403,6 +472,7 @@ export default function WorkRightPanel({
                 />
               </label>
               <p className="text-center text-[10px] text-ink-muted">支持 Excel、图片</p>
+              {dragError && <p className="text-center text-[11px] text-danger">{dragError}</p>}
             </div>
             {importError && !importStages && <p className="mt-1.5 text-xs text-danger">{importError}</p>}
             {importDoneMessage && <p className="mt-1.5 text-xs text-success">✓ {importDoneMessage}</p>}

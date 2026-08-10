@@ -11,6 +11,8 @@ import { useSyncStatus } from "@/hooks/useSyncStatus";
 
 export interface ImageUploadHandle {
   open: () => void;
+  /** 直接上传图片文件（拖拽/粘贴复用同一套上传逻辑）。 */
+  uploadFiles: (files: File[]) => Promise<void>;
 }
 
 interface Props {
@@ -32,18 +34,27 @@ const ImageUploadButton = forwardRef<ImageUploadHandle, Props>(
       fileInputRef.current?.click();
     };
 
-    useImperativeHandle(ref, () => ({ open: handleSelectFiles }));
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-
+    // 拖拽/粘贴上传共用：离线拦截、非图片过滤、循环上传、onUploaded 收尾。
+    const uploadFiles = async (files: File[]) => {
+      if (uploading) return;
+      if (!isOnline) {
+        const msg = "离线模式下暂不支持上传图片";
+        if (hidden) alert(msg);
+        else setError(msg);
+        return;
+      }
+      const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      if (images.length === 0) {
+        const msg = "仅支持上传图片";
+        if (hidden) alert(msg);
+        else setError(msg);
+        return;
+      }
       setError(null);
       setUploading(true);
-
       try {
         const uploaded: Attachment[] = [];
-        for (const file of Array.from(files)) {
+        for (const file of images) {
           const formData = new FormData();
           formData.append("file", file);
 
@@ -71,9 +82,17 @@ const ImageUploadButton = forwardRef<ImageUploadHandle, Props>(
         if (hidden) alert(`上传失败：${message}`);
       } finally {
         setUploading(false);
-        // Reset file input so re-selecting same file triggers change
-        if (fileInputRef.current) fileInputRef.current.value = "";
       }
+    };
+
+    useImperativeHandle(ref, () => ({ open: handleSelectFiles, uploadFiles }));
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      await uploadFiles(Array.from(files));
+      // Reset file input so re-selecting same file triggers change
+      if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
     if (hidden) {

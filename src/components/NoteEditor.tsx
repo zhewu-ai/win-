@@ -562,6 +562,35 @@ export default function NoteEditor({
     }
   };
 
+  // 便签图片拖拽/粘贴上传：capture 阶段在 Tiptap/textarea 处理前拦截，
+  // 图片走附件上传，其余拖拽/粘贴放行不打扰既有行为。
+  const handleEditorDrop = (e: React.DragEvent) => {
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return; // 非文件拖拽（选中文本等）放行
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    e.preventDefault(); // 文件拖拽一律阻止浏览器默认（打开/导航）
+    if (!currentNoteIdRef.current) return;
+    if (images.length === 0) {
+      alert("仅支持上传图片");
+      return;
+    }
+    void imageUploadRef.current?.uploadFiles(images);
+  };
+
+  const handleEditorPaste = (e: React.ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return; // 纯文本/链接粘贴放行
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentNoteIdRef.current) return;
+    if (images.length === 0) {
+      alert("仅支持上传图片");
+      return;
+    }
+    void imageUploadRef.current?.uploadFiles(images);
+  };
+
   if (!note) {
     return (
       <div className="flex-1 flex items-center justify-center text-ink-muted text-sm bg-panel-bg">
@@ -863,6 +892,8 @@ export default function NoteEditor({
       <div
         className="flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]"
         onKeyDown={handleKeyDown}
+        onDropCapture={handleEditorDrop}
+        onPasteCapture={handleEditorPaste}
       >
         <div className="min-h-full flex flex-col">
           <div className="max-w-paper mx-auto w-full px-[clamp(12px,4vw,48px)] pt-5 pb-8 space-y-4 flex-1">
