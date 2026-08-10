@@ -15,8 +15,7 @@ interface Props {
   onBulkDelete: (ids: string[]) => Promise<void>;
   loading?: boolean;
   searchQuery?: string;
-  /** M12 R2 管理员「日历」分组入口 */
-  isAdmin?: boolean;
+  /** M12 R2「日历」分组入口 */
   onOpenCalendar?: () => void;
   calendarActive?: boolean;
   /** M12 返修：工作日历筛选状态，同步入口卡今日预览 */
@@ -172,7 +171,6 @@ export default function NoteList({
   onBulkDelete,
   loading,
   searchQuery,
-  isAdmin,
   onOpenCalendar,
   calendarActive,
   calendarHiddenProjectIds,
@@ -242,9 +240,9 @@ export default function NoteList({
     )
   );
 
-  // M12 R2：管理员「日历」分组并入列表结构（置顶/日期分组顺位下移）；
-  // 管理员空便签列表下入口仍可见，故空态只在非管理员时 early-return。
-  const showCalendarGroup = Boolean(isAdmin && onOpenCalendar);
+  // M12 R2：「日历」分组并入列表结构（置顶/日期分组顺位下移）；
+  // 空便签列表下入口仍可见，故空态只在无日历入口时 early-return。
+  const showCalendarGroup = Boolean(onOpenCalendar);
 
   if (loading) {
     return (
@@ -476,7 +474,7 @@ export default function NoteList({
           </div>
         )}
 
-        {/* 管理员空便签列表：入口仍可见，下方行内空提示 */}
+        {/* 空便签列表：日历入口仍可见，下方行内空提示 */}
         {notes.length === 0 && (
           <div className="py-10 text-center">
             <p className="text-ink-muted text-[15px] font-semibold">

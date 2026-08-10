@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import { isProjectOwnedBy } from "@/lib/work-calendar";
 import { generateAdjustmentDraft } from "@/lib/schedule-adjust";
 import { addDays, todayStr, toDateStr } from "@/lib/calendar-date";
@@ -13,7 +13,7 @@ const MAX_RANGE_DAYS = 60;
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: Record<string, unknown>;
     try {
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-    if (!projectId || !(await isProjectOwnedBy(admin.id, projectId))) {
+    if (!projectId || !(await isProjectOwnedBy(user.id, projectId))) {
       return NextResponse.json({ ok: false, error: "INVALID_PROJECT" }, { status: 400 });
     }
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         : 30;
 
     const project = await prisma.workProject.findFirst({
-      where: { id: projectId, userId: admin.id, deletedAt: null },
+      where: { id: projectId, userId: user.id, deletedAt: null },
       select: { name: true },
     });
     if (!project) {
@@ -57,12 +57,12 @@ export async function POST(request: Request) {
     // 只取当前项目的必要排期上下文，不给全量数据。
     const [futureRows, recentRows] = await Promise.all([
       prisma.workScheduleItem.findMany({
-        where: { userId: admin.id, projectId, deletedAt: null, startDate: { lte: futureEnd }, endDate: { gte: futureStart } },
+        where: { userId: user.id, projectId, deletedAt: null, startDate: { lte: futureEnd }, endDate: { gte: futureStart } },
         orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
         select: { id: true, title: true, type: true, startDate: true, endDate: true, status: true },
       }),
       prisma.workScheduleItem.findMany({
-        where: { userId: admin.id, projectId, deletedAt: null, startDate: { gte: recentStart, lte: today } },
+        where: { userId: user.id, projectId, deletedAt: null, startDate: { gte: recentStart, lte: today } },
         orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
         select: { id: true, title: true, type: true, startDate: true, endDate: true, status: true },
       }),

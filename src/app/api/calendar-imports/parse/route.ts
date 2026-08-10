@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import { excelToText } from "@/lib/excel-text";
 import { parseExcelSchedule } from "@/lib/excel-schedule-parse";
 import { parseScheduleFile, AiParseError } from "@/lib/siliconflow";
@@ -31,7 +31,7 @@ function extOf(filename: string): string {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    await requireUser();
 
     let formData: FormData;
     try {

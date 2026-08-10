@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import {
   EVENT_INCLUDE,
   isNoteOwnedBy,
@@ -9,12 +9,12 @@ import {
   serializeEvent,
 } from "@/lib/calendar";
 
-// 日历事件：仅管理员可访问；未登录 401、非 admin 403。
+// 日历事件：所有已登录用户可用；未登录 401、禁用 403。
 // GET 范围接口必须带 from/to，避免一次拉全量。
 
 export async function GET(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
     const events = await prisma.calendarEvent.findMany({
       where: {
-        userId: admin.id,
+        userId: user.id,
         deletedAt: null,
         date: { gte: from, lte: to },
       },
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: Record<string, unknown>;
     try {
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (noteId !== null && !(await isNoteOwnedBy(admin.id, noteId))) {
+    if (noteId !== null && !(await isNoteOwnedBy(user.id, noteId))) {
       return NextResponse.json(
         { ok: false, error: "INVALID_NOTE" },
         { status: 400 }
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
 
     const created = await prisma.calendarEvent.create({
       data: {
-        userId: admin.id,
+        userId: user.id,
         title,
         description,
         date: body.date,

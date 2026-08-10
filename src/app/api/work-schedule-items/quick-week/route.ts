@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import { isProjectOwnedBy, quickWeekParse } from "@/lib/work-calendar";
 import { isValidDateString } from "@/lib/calendar";
 
@@ -9,7 +9,7 @@ const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: Record<string, unknown>;
     try {
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     const projectId = typeof body.projectId === "string" ? body.projectId : "";
-    if (!projectId || !(await isProjectOwnedBy(admin.id, projectId))) {
+    if (!projectId || !(await isProjectOwnedBy(user.id, projectId))) {
       return NextResponse.json({ ok: false, error: "INVALID_PROJECT" }, { status: 400 });
     }
 

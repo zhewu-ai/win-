@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import {
   EVENT_INCLUDE,
   isNoteOwnedBy,
@@ -24,10 +24,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { id } = await params;
 
-    const existing = await findOwnedEvent(admin.id, id);
+    const existing = await findOwnedEvent(user.id, id);
     if (!existing) {
       return NextResponse.json(
         { ok: false, error: "NOT_FOUND" },
@@ -121,7 +121,7 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      if (noteId !== null && !(await isNoteOwnedBy(admin.id, noteId))) {
+      if (noteId !== null && !(await isNoteOwnedBy(user.id, noteId))) {
         return NextResponse.json(
           { ok: false, error: "INVALID_NOTE" },
           { status: 400 }
@@ -154,10 +154,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { id } = await params;
 
-    const existing = await findOwnedEvent(admin.id, id);
+    const existing = await findOwnedEvent(user.id, id);
     if (!existing) {
       return NextResponse.json(
         { ok: false, error: "NOT_FOUND" },

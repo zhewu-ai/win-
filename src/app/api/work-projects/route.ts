@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import {
   PROJECT_INCLUDE,
   isValidProjectColor,
@@ -9,18 +9,18 @@ import {
 } from "@/lib/work-calendar";
 import { isValidDateString } from "@/lib/calendar";
 
-// 工作日历项目：仅管理员可访问；未登录 401、非 admin 403；只能访问自己的数据。
+// 工作日历项目：所有已登录用户可用；未登录 401、禁用 403；只能访问自己的数据。
 // GET 默认只返回 active（status=archived 时仅归档），?status=all 返回全部未删除。
 
 export async function GET(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
     const projects = await prisma.workProject.findMany({
       where: {
-        userId: admin.id,
+        userId: user.id,
         deletedAt: null,
         ...(status === "all" ? {} : { status: "active" }),
       },
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: Record<string, unknown>;
     try {
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
     const created = await prisma.workProject.create({
       data: {
-        userId: admin.id,
+        userId: user.id,
         name,
         colorKey,
         startDate,

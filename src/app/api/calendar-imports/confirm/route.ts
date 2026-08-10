@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import { isValidProjectColor, ITEM_INCLUDE } from "@/lib/work-calendar";
 import { isValidDateString } from "@/lib/calendar";
 import type { CalendarImportDraft } from "@/types";
@@ -14,7 +14,7 @@ const MAX_ITEMS = 200;
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: { draft?: unknown };
     try {
@@ -56,14 +56,14 @@ export async function POST(request: Request) {
         let realId = nameToReal.get(name);
         if (!realId) {
           const existing = await tx.workProject.findFirst({
-            where: { userId: admin.id, name, status: "active", deletedAt: null },
+            where: { userId: user.id, name, status: "active", deletedAt: null },
             select: { id: true },
           });
           realId = existing?.id;
           if (!realId) {
             const colorKey = isValidProjectColor(String(p.colorKey ?? "")) ? String(p.colorKey) : "blue";
             const created = await tx.workProject.create({
-              data: { userId: admin.id, name, colorKey, source: "ai_import" },
+              data: { userId: user.id, name, colorKey, source: "ai_import" },
             });
             realId = created.id;
             createdProjects.push(created);
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         const type = it.startDate === it.endDate ? "node" : "range";
         const created = await tx.workScheduleItem.create({
           data: {
-            userId: admin.id,
+            userId: user.id,
             projectId: realProjectId,
             title,
             type,

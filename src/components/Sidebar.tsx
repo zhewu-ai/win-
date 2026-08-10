@@ -17,8 +17,6 @@ interface Props {
   onRefresh?: () => void;
   refreshing?: boolean;
   onCollapse?: () => void;
-  /** M12 管理员灰度：true 时列表顶部展示「日历」分组入口卡片。 */
-  isAdmin?: boolean;
   /** M12 R2：日历入口卡片回调（右面板嵌入展示，不跳独立页） */
   onOpenCalendar?: () => void;
   calendarActive?: boolean;
@@ -38,7 +36,6 @@ export default function Sidebar({
   onCreateNote,
   onRefresh,
   onCollapse,
-  isAdmin,
   onOpenCalendar,
   calendarActive,
   calendarHiddenProjectIds,
@@ -167,7 +164,6 @@ export default function Sidebar({
           onBulkDelete={onBulkDelete}
           loading={loading}
           searchQuery={searchQuery}
-          isAdmin={isAdmin}
           onOpenCalendar={onOpenCalendar}
           calendarActive={calendarActive}
           calendarHiddenProjectIds={calendarHiddenProjectIds}

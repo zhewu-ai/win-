@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import {
   PROJECT_INCLUDE,
   isValidProjectColor,
@@ -23,10 +23,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { id } = await params;
 
-    const existing = await findOwnedProject(admin.id, id);
+    const existing = await findOwnedProject(user.id, id);
     if (!existing) {
       return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
     }
@@ -112,10 +112,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { id } = await params;
 
-    const existing = await findOwnedProject(admin.id, id);
+    const existing = await findOwnedProject(user.id, id);
     if (!existing) {
       return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
     }

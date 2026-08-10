@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import {
   ITEM_INCLUDE,
   isValidItemType,
@@ -14,7 +14,7 @@ import { isNoteOwnedBy, isValidDateString } from "@/lib/calendar";
 
 export async function GET(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
     const items = await prisma.workScheduleItem.findMany({
       where: {
-        userId: admin.id,
+        userId: user.id,
         deletedAt: null,
         // 阻塞审计 P1：所属项目已删除的排期一律不返回（归档项目 deletedAt 为空，不受影响）。
         project: { deletedAt: null },
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: Record<string, unknown>;
     try {
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     const projectId = typeof body.projectId === "string" ? body.projectId : "";
-    if (!projectId || !(await isProjectOwnedBy(admin.id, projectId))) {
+    if (!projectId || !(await isProjectOwnedBy(user.id, projectId))) {
       return NextResponse.json({ ok: false, error: "INVALID_PROJECT" }, { status: 400 });
     }
 
@@ -101,13 +101,13 @@ export async function POST(request: Request) {
     if (noteId !== null && typeof noteId !== "string") {
       return NextResponse.json({ ok: false, error: "INVALID_NOTE" }, { status: 400 });
     }
-    if (noteId !== null && !(await isNoteOwnedBy(admin.id, noteId))) {
+    if (noteId !== null && !(await isNoteOwnedBy(user.id, noteId))) {
       return NextResponse.json({ ok: false, error: "INVALID_NOTE" }, { status: 400 });
     }
 
     const created = await prisma.workScheduleItem.create({
       data: {
-        userId: admin.id,
+        userId: user.id,
         projectId,
         title,
         type,

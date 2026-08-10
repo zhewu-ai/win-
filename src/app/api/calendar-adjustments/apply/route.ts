@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, toErrorResponse } from "@/lib/auth";
+import { requireUser, toErrorResponse } from "@/lib/auth";
 import { isProjectOwnedBy } from "@/lib/work-calendar";
 import { isValidDateString } from "@/lib/calendar";
 import type { ScheduleAdjustmentApplyChange } from "@/types";
@@ -11,7 +11,7 @@ const MAX_CHANGES = 100;
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const user = await requireUser();
 
     let body: Record<string, unknown>;
     try {
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-    if (!projectId || !(await isProjectOwnedBy(admin.id, projectId))) {
+    if (!projectId || !(await isProjectOwnedBy(user.id, projectId))) {
       return NextResponse.json({ ok: false, error: "INVALID_PROJECT" }, { status: 400 });
     }
 
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const updateIds = validated.filter((c) => c.type === "update").map((c) => c.itemId as string);
     if (updateIds.length > 0) {
       const found = await prisma.workScheduleItem.findMany({
-        where: { id: { in: updateIds }, userId: admin.id, projectId, deletedAt: null },
+        where: { id: { in: updateIds }, userId: user.id, projectId, deletedAt: null },
         select: { id: true },
       });
       if (found.length !== updateIds.length) {
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
           if (ch.type === "create") {
             await tx.workScheduleItem.create({
               data: {
-                userId: admin.id,
+                userId: user.id,
                 projectId,
                 title: ch.title,
                 type,
