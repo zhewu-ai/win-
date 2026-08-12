@@ -18,9 +18,12 @@ jobs:
           - platform: windows-latest
             artifact: windows-installer
             target: ""
+            bundle-path: src-tauri/target/release/bundle/
           - platform: macos-latest
             artifact: mac-installer
+            # --target 会把产物放到 target/<triple>/release/bundle/，路径见 bundle-path
             target: --target universal-apple-darwin
+            bundle-path: src-tauri/target/universal-apple-darwin/release/bundle/
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +55,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: src-tauri/target/release/bundle/
+          path: ${{ matrix.bundle-path }}
           if-no-files-found: error
 
   release:
