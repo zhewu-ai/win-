@@ -108,6 +108,8 @@ fn open_floating_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
     .inner_size(360.0, 520.0)
     .min_inner_size(260.0, 340.0)
     .always_on_top(effective_aot)
+    // 必须禁用壳内拖放处理，否则系统文件拖入不会触发前端 HTML5 drop（Windows 尤甚）
+    .disable_drag_drop_handler()
     .on_navigation(handle_navigation);
 
   // 恢复上次的窗口大小、位置与置顶状态
@@ -171,6 +173,8 @@ pub fn run() {
       .inner_size(1100.0, 760.0)
       .min_inner_size(320.0, 480.0)
       .center()
+      // 禁用壳内拖放处理，让文件拖入直接落到前端 HTML5 drop（Windows WebView2 必需）
+      .disable_drag_drop_handler()
       .on_navigation(handle_navigation)
       .build()?;
 
