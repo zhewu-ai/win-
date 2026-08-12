@@ -18,7 +18,7 @@ import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
 import { saveNoteUpdate } from "@/lib/offline/persist";
 import { clearDraft, getDraft } from "@/lib/offline/draft";
 import { useDraftRecovery } from "@/hooks/useDraftRecovery";
-import { serializeNoteText, parseNoteText, docToNotePayload } from "@/lib/note-text-schema";
+import { serializeNoteText, parseNoteText, docToNotePayload, emptyChecklistRow } from "@/lib/note-text-schema";
 import { escapeLinkTitle } from "@/lib/link-parser";
 import type { Editor } from "@tiptap/react";
 
@@ -516,6 +516,28 @@ export default function NoteEditor({
     [content, immediateSave, unified, handleDocChange]
   );
 
+  // P0 块插入：在光标所在顶层块之后插入一个待办块（含一行空行），渲染后聚焦首行便于直接输入
+  const insertChecklistBlock = useCallback(() => {
+    const ed = contentEditorRef.current;
+    if (!ed || !unified) return;
+    const $pos = ed.state.selection.$from;
+    const end = $pos.end(1) ?? ed.state.doc.content.size;
+    ed.chain()
+      .focus()
+      .insertContentAt(Math.min(end, ed.state.doc.content.size), {
+        type: "checklistBlock",
+        attrs: { rows: [emptyChecklistRow()] },
+      })
+      .run();
+    setTimeout(() => {
+      const blocks = Array.from(document.querySelectorAll("[data-checklist-block]"));
+      const ce = blocks[blocks.length - 1]?.querySelector(
+        "[contenteditable=true]"
+      ) as HTMLElement | null;
+      ce?.focus();
+    }, 60);
+  }, [unified]);
+
   // 稳定引用：ChecklistEditor 的 useCallback 依赖它，不稳定会让行级 memo 失效
   const handleChecklistChange = useCallback(
     (items: ChecklistItem[], groups: ChecklistGroup[]) => {
@@ -709,6 +731,20 @@ export default function NoteEditor({
         {/* Color picker - spacious 显示色球 / compact 显示颜色按钮 / minimal 收进更多菜单 */}
         <ColorPicker selected={color} onChange={handleColorChange} mode={toolbarMode} />
 
+        {/* M16 P0：统一编辑器下插入待办块（便签/待办不再互斥，正文可混排） */}
+        {unified && (
+          <button
+            onClick={insertChecklistBlock}
+            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
+            title="插入待办清单"
+            aria-label="插入待办清单"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </button>
+        )}
+
         <div className="flex-1" />
 
         {/* 保存状态：常态（已保存+无待同步）返回 null 不占位；仅过程/异常态显示。
@@ -825,7 +861,7 @@ export default function NoteEditor({
                   <div className="my-1 h-px bg-border-light/60" />
                 </>
               )}
-              {mode === "text" && (
+              {(unified || mode === "text") && (
                 <>
                   <button
                     onClick={() => {

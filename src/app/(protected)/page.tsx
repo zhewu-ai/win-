@@ -111,6 +111,19 @@ export default function HomePage() {
     }
   };
 
+  // M16 P0：新建待办 = 创建默认含 checklist block 的文档（mode=checklist，打开时统一编辑器渲染待办块）
+  const handleCreateTodo = async () => {
+    setCalendarOpen(false);
+    setCameFromCalendar(false);
+    try {
+      const note = await createNote({ mode: "checklist" });
+      setSelectedNoteId(note.id);
+      setShowEditor(true);
+    } catch {
+      alert("新建待办失败");
+    }
+  };
+
   const handleSelect = (id: string) => {
     // 手动点左侧列表视为新路径起点，清空内部链接返回栈；同时关闭日历面板
     setCalendarOpen(false);
@@ -352,6 +365,7 @@ export default function HomePage() {
               searchQuery={searchQuery}
               onSearchChange={handleSearchChange}
               onCreateNote={handleCreate}
+              onCreateTodo={handleCreateTodo}
               onRefresh={handleRefresh}
               refreshing={refreshing}
               onCollapse={mode === "single" ? undefined : toggleSidebar}

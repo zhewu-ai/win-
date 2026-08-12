@@ -215,6 +215,11 @@ function emptyRow(): ChecklistItem {
   };
 }
 
+/** 导出空待办行：供「插入待办块」构造 checklistBlock attrs.rows 使用。 */
+export function emptyChecklistRow(): ChecklistItem {
+  return emptyRow();
+}
+
 /** checklistBlock：atom 叶子块，行存 attrs.rows（JSON），不建子节点——行编辑复用 ChecklistRow（singleLine LinkEditor）。 */
 const ChecklistBlock = Node.create({
   name: "checklistBlock",

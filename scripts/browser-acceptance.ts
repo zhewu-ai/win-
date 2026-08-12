@@ -215,6 +215,60 @@ async function main() {
   assert("H 回滚: 旧待办显示模式切换按钮", hModeBtn2);
   await shot(page, "H-legacy-checklist");
 
+  // ══ I. 新建待办下拉 → 创建默认含 checklist block 的文档（回到统一模式，清掉 H 的 ?m16=legacy）══
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle2" });
+  await page.waitForSelector('button[data-note-id]', { timeout: 15000 });
+  await dismissAnnouncement();
+  const beforeIds = await page.$$eval("button[data-note-id]", (els) =>
+    els.map((e) => e.getAttribute("data-note-id"))
+  );
+  await page.click('button[title="新建"]');
+  await sleep(400);
+  await page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll("button")).find((x) => x.textContent?.trim() === "新建待办");
+    (b as HTMLButtonElement | undefined)?.click();
+  });
+  await sleep(1500);
+  await page.waitForSelector("[data-checklist-block]", { timeout: 8000 });
+  const iRows = await page.$$eval("[data-checklist-block] [data-row-id]", (els) => els.length);
+  assert("I 新建待办: 打开后渲染待办块", iRows >= 1, `got ${iRows}`);
+  await shot(page, "I-new-todo");
+  // 清理：删掉刚创建的测试待办（列表里新建前不存在的那个 id）
+  const afterIds = await page.$$eval("button[data-note-id]", (els) =>
+    els.map((e) => e.getAttribute("data-note-id"))
+  );
+  const iNewId = afterIds.find((id) => !beforeIds.includes(id)) ?? null;
+  if (iNewId) {
+    await page.evaluate((id) => fetch(`/api/notes/${id}`, { method: "DELETE" }), iNewId).catch(() => {});
+    await sleep(400);
+  }
+
+  // ══ J. 正文工具栏「插入待办清单」→ 普通便签出现待办块 ══
+  await openNote(legtext);
+  await page.waitForSelector(".ProseMirror", { timeout: 8000 });
+  await page.click('button[title="插入待办清单"]');
+  await sleep(900);
+  const jBlocks = await page.$$eval(".ProseMirror [data-checklist-block]", (els) => els.length);
+  assert("J 插入待办: 正文出现待办块", jBlocks >= 1, `got ${jBlocks}`);
+  const jRows = await page.$$eval("[data-checklist-block] [data-row-id]", (els) => els.length);
+  assert("J 插入待办: 含一行可编辑行", jRows >= 1, `got ${jRows}`);
+  await shot(page, "J-insert-checklist");
+
+  // ══ K. 统一待办更多菜单有「插入便签链接」（不再按 mode=text 隐藏）══
+  await openNote(legcheck);
+  await page.waitForSelector("[data-checklist-block]", { timeout: 8000 });
+  // 侧栏与编辑器各有一个「更多操作」按钮，点编辑器面板（DOM 中最后一个）的
+  await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('button[title="更多操作"]'));
+    btns[btns.length - 1]?.click();
+  });
+  await sleep(400);
+  const kHasLink = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("button")).some((b) => b.textContent?.trim() === "插入便签链接")
+  );
+  assert("K 统一待办: 更多菜单有插入便签链接", kHasLink);
+  await page.keyboard.press("Escape");
+
   await browser.close();
   console.log(fails === 0 ? "\nALL PASS" : `\n${fails} FAILURES`);
   process.exit(fails === 0 ? 0 : 1);

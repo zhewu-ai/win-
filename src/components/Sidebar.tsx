@@ -14,6 +14,8 @@ interface Props {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onCreateNote: () => void;
+  /** M16 P0：新建待办（创建默认含 checklist block 的文档） */
+  onCreateTodo?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
   onCollapse?: () => void;
@@ -34,6 +36,7 @@ export default function Sidebar({
   searchQuery,
   onSearchChange,
   onCreateNote,
+  onCreateTodo,
   onRefresh,
   onCollapse,
   onOpenCalendar,
@@ -46,6 +49,19 @@ export default function Sidebar({
   // M12 R3 2.1：「三个点」菜单上移到搜索行（搜索框与收起按钮之间），承载 选择便签/刷新 等低频操作
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  // M16 P0：底部「新建」按钮下拉（新建便签 / 新建待办）
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement>(null);
+
+  // 新建下拉：点击外部关闭
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (createMenuRef.current && !createMenuRef.current.contains(e.target as Node)) setCreateMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [createMenuOpen]);
 
   // 三个点菜单：点击外部关闭
   useEffect(() => {
@@ -175,16 +191,52 @@ export default function Sidebar({
 
       {/* Bottom global footer: 新建 + account */}
       <div className="flex items-center gap-2 px-3 py-2 border-t border-border-light flex-shrink-0 bg-sidebar-bg">
-        <button
-          onClick={onCreateNote}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors whitespace-nowrap"
-          title="新建便签"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
-          </svg>
-          新建
-        </button>
+        <div className="relative flex-shrink-0" ref={createMenuRef}>
+          <button
+            onClick={() => (onCreateTodo ? setCreateMenuOpen((o) => !o) : onCreateNote())}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors whitespace-nowrap"
+            title="新建"
+            aria-expanded={createMenuOpen}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+            </svg>
+            新建
+            {onCreateTodo && (
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
+          </button>
+          {createMenuOpen && onCreateTodo && (
+            <div className="absolute left-0 bottom-full mb-1.5 w-36 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 menu-pop">
+              <button
+                onClick={() => {
+                  setCreateMenuOpen(false);
+                  onCreateNote();
+                }}
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+              >
+                <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                新建便签
+              </button>
+              <button
+                onClick={() => {
+                  setCreateMenuOpen(false);
+                  onCreateTodo();
+                }}
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+              >
+                <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                新建待办
+              </button>
+            </div>
+          )}
+        </div>
         <div className="flex-1" />
         <AccountMenu dropdownPos="bottom-full mb-1.5" />
       </div>

@@ -196,14 +196,18 @@ export default function NoteDocumentEditor({
 
   // 外部正文状态变化（切便签由 resetKey 重建、远端更新走这里）：
   // 与自身输出回环相同（投影相等）则跳过，否则替换 doc 不丢撤销栈。
+  // M16 风险点修复：documentJson 为权威（非 null）时直接按它比较——否则加粗/斜体等
+  // 只改 documentJson 不改投影的改动会被判为"无变化"而跳过应用；旧数据（null）回退投影比较。
   useEffect(() => {
     if (!editor) return;
     const current = docToNotePayload(editor.getJSON());
     const upToDate =
-      current.content === content &&
-      JSON.stringify(current.checklistItems) ===
-        JSON.stringify(checklistItems) &&
-      current.mode === mode;
+      documentJson !== null
+        ? current.documentJson === documentJson
+        : current.content === content &&
+          JSON.stringify(current.checklistItems) ===
+            JSON.stringify(checklistItems) &&
+          current.mode === mode;
     if (upToDate) return;
     closeSuggest();
     const doc = editor.schema.nodeFromJSON(
