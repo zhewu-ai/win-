@@ -6,19 +6,21 @@ export const QUOTA_EXCEEDED_ERROR = "STORAGE_QUOTA_EXCEEDED";
 export const QUOTA_EXCEEDED_MESSAGE =
   "存储空间不足，无法上传图片。请删除不需要的图片或便签后再试。";
 
-/** 便签文本占用（UTF-8 字节）：title + content + checklistItems + checklistGroups。
+/** 便签文本占用（UTF-8 字节）：title + content + checklistItems + checklistGroups + documentJson。
  * checklist 字段在 SQLite 中按 JSON 字符串存储，按存储串计字节。 */
 export function noteSizeBytes(note: {
   title?: string | null;
   content?: string | null;
   checklistItems?: string | null;
   checklistGroups?: string | null;
+  documentJson?: string | null;
 }): number {
   return (
     Buffer.byteLength(note.title ?? "", "utf8") +
     Buffer.byteLength(note.content ?? "", "utf8") +
     Buffer.byteLength(note.checklistItems ?? "[]", "utf8") +
-    Buffer.byteLength(note.checklistGroups ?? "[]", "utf8")
+    Buffer.byteLength(note.checklistGroups ?? "[]", "utf8") +
+    Buffer.byteLength(note.documentJson ?? "", "utf8")
   );
 }
 
@@ -28,12 +30,17 @@ export function notePayloadSizeBytes(data: {
   content?: unknown;
   checklistItems?: unknown;
   checklistGroups?: unknown;
+  documentJson?: unknown;
 }): number {
   return (
     Buffer.byteLength(typeof data.title === "string" ? data.title : "", "utf8") +
     Buffer.byteLength(typeof data.content === "string" ? data.content : "", "utf8") +
     Buffer.byteLength(JSON.stringify(data.checklistItems ?? []), "utf8") +
-    Buffer.byteLength(JSON.stringify(data.checklistGroups ?? []), "utf8")
+    Buffer.byteLength(JSON.stringify(data.checklistGroups ?? []), "utf8") +
+    Buffer.byteLength(
+      typeof data.documentJson === "string" ? data.documentJson : "",
+      "utf8"
+    )
   );
 }
 
@@ -89,6 +96,7 @@ export async function recalculateStorageUsage(userId: string): Promise<number> {
       content: true,
       checklistItems: true,
       checklistGroups: true,
+      documentJson: true,
     },
   });
   const attSum = await prisma.attachment.aggregate({

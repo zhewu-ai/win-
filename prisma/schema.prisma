@@ -106,6 +106,8 @@ model Note {
   mode         String    @default("text")
   checklistItems String  @default("[]")
   checklistGroups String @default("[]")
+  // M16 统一文档：Tiptap JSON 权威结构；content/checklistItems 为派生投影。null=旧数据（打开时懒迁移）。
+  documentJson String?
   sortOrder    Int       @default(0)
   windowX      Int?
   windowY      Int?

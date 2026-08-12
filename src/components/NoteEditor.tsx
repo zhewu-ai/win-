@@ -9,6 +9,8 @@ import ImageAttachments from "./ImageAttachments";
 import ImageUploadButton, { type ImageUploadHandle } from "./ImageUploadButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import LinkEditor from "./LinkEditor";
+import NoteDocumentEditor, { type DocumentPayload } from "./NoteDocumentEditor";
+import { isUnifiedEditorEnabled } from "@/lib/features";
 import InsertNoteLinkDialog from "./InsertNoteLinkDialog";
 import ConfirmDialog from "./ConfirmDialog";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
@@ -16,7 +18,7 @@ import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
 import { saveNoteUpdate } from "@/lib/offline/persist";
 import { clearDraft, getDraft } from "@/lib/offline/draft";
 import { useDraftRecovery } from "@/hooks/useDraftRecovery";
-import { serializeNoteText } from "@/lib/note-text-schema";
+import { serializeNoteText, parseNoteText, docToNotePayload } from "@/lib/note-text-schema";
 import { escapeLinkTitle } from "@/lib/link-parser";
 import type { Editor } from "@tiptap/react";
 
@@ -88,6 +90,7 @@ export default function NoteEditor({
   const [mode, setMode] = useState<"text" | "checklist">("text");
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [checklistGroups, setChecklistGroups] = useState<ChecklistGroup[]>([]);
+  const [documentJson, setDocumentJson] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [saveStatus, setSaveStatus] = useState<
     "saved" | "saving" | "error" | "localError"
@@ -95,6 +98,13 @@ export default function NoteEditor({
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [insertLinkOpen, setInsertLinkOpen] = useState(false);
+  // M16 统一编辑器：默认开启；回滚（localStorage "0" / ?m16=legacy）用旧双模式。
+  // 用 state + effect 读取，避免 SSR（默认 true）与客户端（可能 false）首帧不一致。
+  const [unified, setUnified] = useState(true);
+  useEffect(() => {
+    setUnified(isUnifiedEditorEnabled());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // 工具栏按编辑区实际容器宽度分三档（≥560 舒展 / 380-779 紧凑 / <380 极简）
   // 迟滞：进入各档与退出各档阈值分开，退出 spacious 需 >780（桥接侧边栏自动收起时编辑区约跳到 720 的跳变，避免一次收窄中反复“收起→展开→再收起”）
@@ -127,6 +137,7 @@ export default function NoteEditor({
         isArchived,
         checklistItems,
         checklistGroups,
+        documentJson,
         updatedAt: new Date().toISOString(),
       };
     },
@@ -286,6 +297,7 @@ export default function NoteEditor({
       setIsPinned(note.isPinned);
       setIsArchived(note.isArchived);
       setMode(note.mode || "text");
+      setDocumentJson(note.documentJson ?? null);
       const rawItems =
         note.checklistItems && note.checklistItems.length > 0
           ? note.checklistItems
@@ -325,6 +337,7 @@ export default function NoteEditor({
     const same =
       d.title === note.title &&
       d.content === note.content &&
+      (d.documentJson ?? null) === (note.documentJson ?? null) &&
       JSON.stringify(d.checklistItems) ===
         JSON.stringify(note.checklistItems || []) &&
       JSON.stringify(d.checklistGroups) ===
@@ -340,6 +353,7 @@ export default function NoteEditor({
     setIsPinned(d.isPinned);
     setIsArchived(d.isArchived);
     setMode(d.mode);
+    setDocumentJson(d.documentJson ?? null);
     setChecklistItems(d.checklistItems);
     setChecklistGroups(d.checklistGroups);
     setRestored(d);
@@ -353,6 +367,7 @@ export default function NoteEditor({
       isArchived: d.isArchived,
       checklistItems: d.checklistItems,
       checklistGroups: d.checklistGroups,
+      documentJson: d.documentJson ?? null,
     });
   }, [note?.id]);
 
@@ -439,6 +454,25 @@ export default function NoteEditor({
     debouncedSave({ content: value });
   };
 
+  // M16 统一编辑器输出：一次同步所有正文字段（documentJson 权威 + 派生投影）
+  const handleDocChange = useCallback(
+    (payload: DocumentPayload) => {
+      setDocumentJson(payload.documentJson);
+      setContent(payload.content);
+      setChecklistItems(payload.checklistItems);
+      setChecklistGroups(payload.checklistGroups);
+      setMode(payload.mode);
+      debouncedSave({
+        documentJson: payload.documentJson,
+        content: payload.content,
+        checklistItems: payload.checklistItems,
+        checklistGroups: payload.checklistGroups,
+        mode: payload.mode,
+      });
+    },
+    [debouncedSave]
+  );
+
   // M11.1 插入内部便签链接：经 LinkEditor 在当前选区（含失焦后保留的光标位）插入芯片节点；
   // 编辑器未就绪的罕见情况回退为追加纯文本语法。
   const insertNoteLink = useCallback(
@@ -446,12 +480,24 @@ export default function NoteEditor({
       setInsertLinkOpen(false);
       const ed = contentEditorRef.current;
       if (!ed) {
+        // 编辑器未就绪的罕见情况：追加纯文本语法
         const snippet = `[[note:${target.id}|${escapeLinkTitle(target.title || "未命名便签")}]]`;
         const next = content
           ? `${content}${content.endsWith("\n") ? "" : "\n"}${snippet}`
           : snippet;
-        setContent(next);
-        immediateSave({ content: next });
+        if (unified) {
+          handleDocChange(
+            docToNotePayload({
+              type: "doc",
+              content: [
+                { type: "noteText", content: parseNoteText(next).content[0].content },
+              ],
+            })
+          );
+        } else {
+          setContent(next);
+          immediateSave({ content: next });
+        }
         return;
       }
       ed.chain()
@@ -461,9 +507,13 @@ export default function NoteEditor({
           attrs: { id: target.id, title: target.title || "未命名便签" },
         })
         .run();
-      immediateSave({ content: serializeNoteText(ed.state.doc) });
+      if (unified) {
+        handleDocChange(docToNotePayload(ed.getJSON()));
+      } else {
+        immediateSave({ content: serializeNoteText(ed.state.doc) });
+      }
     },
-    [content, immediateSave]
+    [content, immediateSave, unified, handleDocChange]
   );
 
   // 稳定引用：ChecklistEditor 的 useCallback 依赖它，不稳定会让行级 memo 失效
@@ -628,26 +678,29 @@ export default function NoteEditor({
           </button>
         )}
 
-        {/* Mode switch：只保留图标，模式用 tooltip 表达，避免收窄时文字消失/出现造成跳变 */}
-        <button
-          onClick={handleModeSwitch}
-          className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
-            mode === "checklist"
-              ? "bg-surface-strong text-ink"
-              : "text-ink-muted hover:text-ink hover:bg-surface-hover"
-          }`}
-          title={mode === "checklist" ? "切换到普通便签" : "切换到待办清单"}
-        >
-          {mode === "checklist" ? (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          )}
-        </button>
+        {/* Mode switch：只保留图标，模式用 tooltip 表达，避免收窄时文字消失/出现造成跳变。
+            M16 统一编辑器下隐藏：便签/待办不再互斥，模式由文档是否含待办块派生。 */}
+        {!unified && (
+          <button
+            onClick={handleModeSwitch}
+            className={`flex items-center justify-center w-icon-btn h-icon-btn rounded-btn transition-colors ${
+              mode === "checklist"
+                ? "bg-surface-strong text-ink"
+                : "text-ink-muted hover:text-ink hover:bg-surface-hover"
+            }`}
+            title={mode === "checklist" ? "切换到普通便签" : "切换到待办清单"}
+          >
+            {mode === "checklist" ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+            )}
+          </button>
+        )}
 
         {toolbarMode !== "minimal" && (
           <div className="w-px h-5 bg-border-light mx-1" />
@@ -912,7 +965,25 @@ export default function NoteEditor({
               }}
             />
 
-            {mode === "text" ? (
+            {unified ? (
+              <NoteDocumentEditor
+                documentJson={documentJson}
+                mode={mode}
+                content={content}
+                checklistItems={checklistItems}
+                checklistGroups={checklistGroups}
+                onChange={handleDocChange}
+                linkableNotes={linkableNotes || []}
+                onOpenNote={onOpenNote}
+                placeholder="开始记录..."
+                resetKey={note.id}
+                className="w-full text-edit-body text-ink"
+                contentClassName="min-h-[200px]"
+                editorRef={(ed) => {
+                  contentEditorRef.current = ed;
+                }}
+              />
+            ) : mode === "text" ? (
               <LinkEditor
                 value={content}
                 onChange={handleContentChange}

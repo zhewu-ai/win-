@@ -11,6 +11,7 @@ const PATCH_FIELDS = [
   "mode",
   "checklistItems",
   "checklistGroups",
+  "documentJson",
   "sortOrder",
 ] as const;
 
@@ -62,6 +63,7 @@ async function syncCreate(local: LocalNote): Promise<boolean> {
       mode: local.mode,
       isPinned: local.isPinned,
       checklistItems: local.checklistItems,
+      documentJson: local.documentJson ?? null,
     }),
   });
   if (res.status === 401) throw new ApiError(401, "Unauthorized");

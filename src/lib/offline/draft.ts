@@ -12,6 +12,8 @@ export interface NoteDraft {
   isArchived: boolean;
   checklistItems: ChecklistItem[];
   checklistGroups: ChecklistGroup[];
+  /** M16 统一文档：权威 documentJson（旧数据可能为空）。 */
+  documentJson?: string | null;
   updatedAt: string;
 }
 

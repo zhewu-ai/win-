@@ -5,6 +5,8 @@ import type { Note, NoteColor, ChecklistItem, ChecklistGroup, Attachment } from 
 import ColorPicker from "@/components/ColorPicker";
 import SaveStatus from "@/components/SaveStatus";
 import ChecklistEditor from "@/components/ChecklistEditor";
+import NoteDocumentEditor, { type DocumentPayload } from "@/components/NoteDocumentEditor";
+import { isUnifiedEditorEnabled } from "@/lib/features";
 import ImageAttachments from "@/components/ImageAttachments";
 import ImageUploadButton from "@/components/ImageUploadButton";
 import AutoGrowTextarea from "@/components/AutoGrowTextarea";
@@ -79,6 +81,15 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | undefined>(
     initialNote.syncStatus
   );
+  const [documentJson, setDocumentJson] = useState<string | null>(
+    initialNote.documentJson ?? null
+  );
+  // M16 统一编辑器：默认开启；回滚（localStorage "0" / ?m16=legacy）用旧双模式。
+  const [unified, setUnified] = useState(true);
+  useEffect(() => {
+    setUnified(isUnifiedEditorEnabled());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const pendingUpdatesRef = useRef<Record<string, unknown>>({});
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
@@ -96,6 +107,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
       isArchived: initialNote.isArchived,
       checklistItems,
       checklistGroups,
+      documentJson,
       updatedAt: new Date().toISOString(),
     }),
   });
@@ -215,6 +227,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
         const same =
           draft.title === src.title &&
           draft.content === src.content &&
+          (draft.documentJson ?? null) === (src.documentJson ?? null) &&
           JSON.stringify(draft.checklistItems) ===
             JSON.stringify(src.checklistItems || []) &&
           JSON.stringify(draft.checklistGroups) ===
@@ -226,6 +239,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
           setColor(draft.color as NoteColor);
           setIsPinned(draft.isPinned);
           setMode(draft.mode);
+          setDocumentJson(draft.documentJson ?? null);
           const norm = normalizeChecklist(
             draft.checklistItems,
             draft.checklistGroups
@@ -242,6 +256,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
             isPinned: draft.isPinned,
             checklistItems: draft.checklistItems,
             checklistGroups: draft.checklistGroups,
+            documentJson: draft.documentJson ?? null,
           });
           return;
         }
@@ -255,6 +270,7 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
         setColor(cached.color as NoteColor);
         setIsPinned(cached.isPinned);
         setMode(cached.mode || "text");
+        setDocumentJson(cached.documentJson ?? null);
         const norm = normalizeChecklist(
           cached.checklistItems || [],
           cached.checklistGroups || []
@@ -283,6 +299,25 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
     setChecklistGroups(groups);
     debouncedSave({ checklistItems: items, checklistGroups: groups, mode: "checklist" });
   };
+
+  // M16 统一编辑器输出：一次同步所有正文字段（documentJson 权威 + 派生投影）
+  const handleDocChange = useCallback(
+    (payload: DocumentPayload) => {
+      setDocumentJson(payload.documentJson);
+      setContent(payload.content);
+      setChecklistItems(payload.checklistItems);
+      setChecklistGroups(payload.checklistGroups);
+      setMode(payload.mode);
+      debouncedSave({
+        documentJson: payload.documentJson,
+        content: payload.content,
+        checklistItems: payload.checklistItems,
+        checklistGroups: payload.checklistGroups,
+        mode: payload.mode,
+      });
+    },
+    [debouncedSave]
+  );
 
   const handleColorChange = async (newColor: NoteColor) => {
     setColor(newColor);
@@ -382,17 +417,19 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
             setAttachments((prev) => [...prev, ...uploaded])
           }
         />
-        <button
-          onClick={handleModeSwitch}
-          className={`text-xs px-2 py-1 rounded-btn transition-colors ${
-            mode === "checklist"
-              ? "bg-primary/10 text-primary"
-              : "text-ink-secondary hover:bg-surface-hover"
-          }`}
-          title="切换模式"
-        >
-          {mode === "checklist" ? "便签" : "待办"}
-        </button>
+        {!unified && (
+          <button
+            onClick={handleModeSwitch}
+            className={`text-xs px-2 py-1 rounded-btn transition-colors ${
+              mode === "checklist"
+                ? "bg-primary/10 text-primary"
+                : "text-ink-secondary hover:bg-surface-hover"
+            }`}
+            title="切换模式"
+          >
+            {mode === "checklist" ? "便签" : "待办"}
+          </button>
+        )}
         <button
           onClick={handlePinToggle}
           className={`p-1 rounded-btn transition-colors ${
@@ -490,7 +527,20 @@ export default function FloatingNoteClient({ initialNote, noteId }: Props) {
 
         <ColorPicker selected={color} onChange={handleColorChange} />
 
-        {mode === "text" ? (
+        {unified ? (
+          <NoteDocumentEditor
+            documentJson={documentJson}
+            mode={mode}
+            content={content}
+            checklistItems={checklistItems}
+            checklistGroups={checklistGroups}
+            onChange={handleDocChange}
+            linkableNotes={[]}
+            placeholder="开始记录..."
+            resetKey={noteId}
+            className="w-full text-sm leading-relaxed"
+          />
+        ) : mode === "text" ? (
           <AutoGrowTextarea
             value={content}
             onChange={handleContentChange}

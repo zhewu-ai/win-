@@ -78,7 +78,7 @@ export async function PATCH(
 
     const allowedFields = [
       "title", "content", "color", "isPinned", "isArchived",
-      "mode", "checklistItems", "checklistGroups",
+      "mode", "checklistItems", "checklistGroups", "documentJson",
       "sortOrder", "windowX", "windowY", "windowWidth", "windowHeight",
       "alwaysOnTop",
     ];
@@ -177,6 +177,27 @@ export async function PATCH(
       }
     }
 
+    // M16 统一文档：documentJson 校验（合法 JSON 字符串或 null，null=清除回旧投影）
+    if (
+      updateData["documentJson"] !== undefined &&
+      updateData["documentJson"] !== null
+    ) {
+      if (typeof updateData["documentJson"] !== "string") {
+        return NextResponse.json(
+          { ok: false, error: "INVALID_DOCUMENT" },
+          { status: 400 }
+        );
+      }
+      try {
+        JSON.parse(updateData["documentJson"]);
+      } catch {
+        return NextResponse.json(
+          { ok: false, error: "INVALID_DOCUMENT" },
+          { status: 400 }
+        );
+      }
+    }
+
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { ok: false, error: "NO_FIELDS_TO_UPDATE" },
@@ -220,6 +241,10 @@ export async function PATCH(
         updateData["checklistGroups"] !== undefined
           ? String(updateData["checklistGroups"])
           : note.checklistGroups,
+      documentJson:
+        updateData["documentJson"] !== undefined
+          ? (updateData["documentJson"] as string | null)
+          : note.documentJson,
     });
     const delta = newSize - oldSize;
     const storage = await getStorageState(session.userId);

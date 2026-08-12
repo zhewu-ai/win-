@@ -12,7 +12,8 @@
     "db:studio": "prisma studio",
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
     "tauri": "tauri",
-    "test:roundtrip": "tsx scripts/roundtrip-check.ts"
+    "test:roundtrip": "tsx scripts/roundtrip-check.ts",
+    "test:legacy-migration": "tsx scripts/legacy-migration-check.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

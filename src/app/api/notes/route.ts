@@ -113,12 +113,31 @@ export async function POST(request: Request) {
       }
     }
 
+    // M16 统一文档：documentJson 校验（必须是合法 JSON 字符串或 null）
+    if (body.documentJson !== undefined && body.documentJson !== null) {
+      if (typeof body.documentJson !== "string") {
+        return NextResponse.json(
+          { ok: false, error: "INVALID_DOCUMENT" },
+          { status: 400 }
+        );
+      }
+      try {
+        JSON.parse(body.documentJson);
+      } catch {
+        return NextResponse.json(
+          { ok: false, error: "INVALID_DOCUMENT" },
+          { status: 400 }
+        );
+      }
+    }
+
     // 额度检查：新建后 used + newSize 不得超额度
     const newSize = notePayloadSizeBytes({
       title: body.title,
       content: body.content,
       checklistItems: body.checklistItems,
       checklistGroups: body.checklistGroups,
+      documentJson: body.documentJson,
     });
     const storage = await getStorageState(session.userId);
     if (storage.used + newSize > storage.quota) {
@@ -140,6 +159,7 @@ export async function POST(request: Request) {
         color,
         mode,
         checklistItems: JSON.stringify(body.checklistItems ?? []),
+        documentJson: body.documentJson ?? null,
         isPinned: body.isPinned ?? false,
         sortOrder: Math.floor(Date.now() / 1000),
       },

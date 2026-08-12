@@ -1,8 +1,11 @@
 import type { Editor } from "@tiptap/react";
+import type { Note } from "@/types";
 
 export interface NodeViewContext {
   /** 点击内部便签芯片时打开目标便签（由页面层实现返回栈）；返回 false 表示目标失效/无权限，芯片置灰。 */
   onOpenNote?: (noteId: string) => Promise<boolean> | boolean | void;
+  /** M16 统一文档：checklist 块的 `[[` 便签搜索来源列表（传给块内行编辑器）。 */
+  linkableNotes?: Note[];
 }
 
 const registry = new WeakMap<Editor, NodeViewContext>();

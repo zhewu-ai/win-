@@ -51,6 +51,8 @@ export interface Note {
   mode: "text" | "checklist";
   checklistItems: ChecklistItem[];
   checklistGroups: ChecklistGroup[];
+  /** M16 统一文档：Tiptap JSON 字符串；null 表示旧数据（前端按 mode 懒迁移生成）。 */
+  documentJson?: string | null;
   sortOrder: number;
   windowX: number | null;
   windowY: number | null;

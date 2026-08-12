@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import type { Note } from "@/types";
@@ -14,12 +14,8 @@ import {
   removeNodeViewContext,
 } from "@/lib/node-view-context";
 import { isTauri, openExternal } from "@/lib/tauri";
-import InlineNoteLinkSuggest, {
-  type CaretCoords,
-} from "./InlineNoteLinkSuggest";
-
-const MAX_LINK_SUGGEST = 8;
-const LINK_SUGGEST_RE = /\[\[([^\]\n]*)$/;
+import InlineNoteLinkSuggest from "./InlineNoteLinkSuggest";
+import { useNoteLinkSuggest } from "@/hooks/useNoteLinkSuggest";
 
 interface Props {
   /** 存储用纯文本（内含 [[note:id|title]]） */
@@ -93,90 +89,19 @@ export default function LinkEditor({
   const lastSentRef = useRef<string>(value);
   const lastValueRef = useRef<string>(value);
 
-  const [suggest, setSuggest] = useState<{
-    start: number;
-    query: string;
-    anchor: CaretCoords;
-  } | null>(null);
-  const [suggestIndex, setSuggestIndex] = useState(0);
-  const suggestRef = useRef(suggest);
-  suggestRef.current = suggest;
-  const suggestIndexRef = useRef(suggestIndex);
-  suggestIndexRef.current = suggestIndex;
-  const lastQueryRef = useRef<string | null>(null);
-
-  const suggestResults = useMemo(() => {
-    if (!suggest) return [];
-    const kw = suggest.query.trim().toLowerCase();
-    const pool = linkableNotes.filter((n) => !n.isArchived);
-    if (!kw) return pool.slice(0, MAX_LINK_SUGGEST);
-    return pool
-      .filter(
-        (n) =>
-          n.title.toLowerCase().includes(kw) ||
-          (n.mode !== "checklist" && n.content.toLowerCase().includes(kw))
-      )
-      .slice(0, MAX_LINK_SUGGEST);
-  }, [suggest, linkableNotes]);
-  const suggestResultsRef = useRef<Note[]>([]);
-  suggestResultsRef.current = suggestResults;
-
-  const closeSuggest = useCallback(() => {
-    lastQueryRef.current = null;
-    setSuggest(null);
-  }, []);
-  const closeSuggestRef = useRef(closeSuggest);
-  closeSuggestRef.current = closeSuggest;
-
-  // `[[` 探测：光标前文本以 "[[query" 结尾时弹便签搜索浮层（跳过手写 note: 前缀）
-  const detectSuggest = useCallback(() => {
-    const ed = instanceRef.current;
-    if (!ed) return;
-    const { state } = ed;
-    const $pos = state.selection.$from;
-    if ($pos.parent.type.name !== "noteText") {
-      closeSuggestRef.current();
-      return;
-    }
-    const before = $pos.parent.textBetween(0, $pos.parentOffset, "\n", "\n");
-    const m = before.match(LINK_SUGGEST_RE);
-    if (m && !m[1].startsWith("note:")) {
-      const rect = ed.view.coordsAtPos($pos.pos);
-      if (lastQueryRef.current !== m[1]) {
-        lastQueryRef.current = m[1];
-        setSuggestIndex(0);
-      }
-      setSuggest({
-        start: $pos.pos - m[0].length,
-        query: m[1],
-        anchor: { top: rect.top, left: rect.left, height: rect.bottom - rect.top },
-      });
-    } else if (suggestRef.current) {
-      closeSuggestRef.current();
-    }
-  }, []);
-  const detectSuggestRef = useRef(detectSuggest);
-  detectSuggestRef.current = detectSuggest;
-
-  const acceptSelect = useCallback((note: Note) => {
-    const ed = instanceRef.current;
-    if (!ed) return;
-    const start = suggestRef.current?.start ?? ed.state.selection.$from.pos;
-    const end = ed.state.selection.$from.pos;
-    closeSuggestRef.current();
-    ed.chain()
-      .focus()
-      .insertContentAt(
-        { from: start, to: end },
-        {
-          type: "noteLink",
-          attrs: { id: note.id, title: note.title || "未命名便签" },
-        }
-      )
-      .run();
-  }, []);
-  const acceptSelectRef = useRef(acceptSelect);
-  acceptSelectRef.current = acceptSelect;
+  // 浮层状态/过滤/键盘接管抽到 useNoteLinkSuggest（与 NoteDocumentEditor 共用）。
+  // 必须先用 hook 再建编辑器：useEditor 的 options 在创建时一次性读取回调，
+  // hook 通过 editorRef（useEffect 填充）访问编辑器实例，避免先有鸡还是先有蛋。
+  const instanceRef = useRef<Editor | null>(null);
+  const {
+    suggest,
+    suggestResults,
+    suggestIndex,
+    acceptSelect,
+    closeSuggest,
+    detectSuggest,
+    handleSuggestKeyDown,
+  } = useNoteLinkSuggest({ editorRef: instanceRef, linkableNotes });
 
   const editor = useEditor(
     {
@@ -188,36 +113,13 @@ export default function LinkEditor({
         if (next === lastSentRef.current) return;
         lastSentRef.current = next;
         onChangeRef.current?.(next);
-        detectSuggestRef.current();
+        detectSuggest();
       },
-      onSelectionUpdate: () => detectSuggestRef.current?.(),
+      onSelectionUpdate: () => detectSuggest(),
       editorProps: {
         handleKeyDown: (view, event) => {
           // 1. `[[` 浮层打开时优先接管键盘
-          if (suggestRef.current) {
-            const count = suggestResultsRef.current.length;
-            if (event.key === "Escape") {
-              event.preventDefault();
-              closeSuggestRef.current();
-              return true;
-            }
-            if (event.key === "ArrowDown" && count > 0) {
-              event.preventDefault();
-              setSuggestIndex((i) => Math.min(i + 1, count - 1));
-              return true;
-            }
-            if (event.key === "ArrowUp" && count > 0) {
-              event.preventDefault();
-              setSuggestIndex((i) => Math.max(i - 1, 0));
-              return true;
-            }
-            if (event.key === "Enter" && count > 0) {
-              event.preventDefault();
-              const target = suggestResultsRef.current[suggestIndexRef.current];
-              if (target) acceptSelectRef.current(target);
-              return true;
-            }
-          }
+          if (handleSuggestKeyDown(event)) return true;
 
           // 2. 行级自定义键处理（待办行的 Enter/Backspace/Arrow 导航）
           const custom = onKeyDownRef.current;
@@ -288,14 +190,13 @@ export default function LinkEditor({
     [resetKey]
   );
 
-  const instanceRef = useRef<Editor | null>(null);
   useEffect(() => {
     instanceRef.current = editor;
     editorRefRef.current?.(editor);
   }, [editor]);
   // resetKey 变化重建编辑器（切便签）时，清掉可能残留的搜索浮层，避免旧便签浮层悬挂
   useEffect(() => {
-    closeSuggestRef.current();
+    closeSuggest();
   }, [editor]);
   useEffect(() => {
     return () => editorRefRef.current?.(null);
@@ -326,7 +227,7 @@ export default function LinkEditor({
     // 自身输入经 onChange→父级 setContent 回环的 value 与 doc 相同，直接跳过；
     // 只有外部内容（切便签/远端更新/reset）真正替换 doc 时才关浮层。
     if (current === value) return;
-    closeSuggestRef.current();
+    closeSuggest();
     const doc = editor.schema.nodeFromJSON(parseNoteText(value));
     editor.view.dispatch(
       editor.state.tr
@@ -350,7 +251,7 @@ export default function LinkEditor({
       data-ph-opacity={dataPhOpacity}
       onFocus={() => onFocusRef.current?.()}
       onBlur={(e) => {
-        closeSuggestRef.current();
+        closeSuggest();
         onBlurRef.current?.(e);
       }}
       onClick={handleWrapClick}
