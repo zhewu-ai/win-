@@ -10,6 +10,7 @@ import ImageUploadButton, { type ImageUploadHandle } from "./ImageUploadButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import LinkEditor from "./LinkEditor";
 import NoteDocumentEditor, { type DocumentPayload } from "./NoteDocumentEditor";
+import UnifiedEditorToolbar from "./UnifiedEditorToolbar";
 import { isUnifiedEditorEnabled } from "@/lib/features";
 import InsertNoteLinkDialog from "./InsertNoteLinkDialog";
 import ConfirmDialog from "./ConfirmDialog";
@@ -117,6 +118,8 @@ export default function NoteEditor({
   const lastFailedPayloadRef = useRef<Record<string, unknown> | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const contentEditorRef = useRef<Editor | null>(null);
+  // M16 P1 格式工具栏：统一编辑器实例经 state 镜像（ref 变化不触发渲染，工具栏需重渲染取 active 态）
+  const [unifiedEditor, setUnifiedEditor] = useState<Editor | null>(null);
   const prevNoteIdRef = useRef<string | null>(null);
   const prevUpdatedAtRef = useRef<string | undefined>(undefined);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -731,20 +734,6 @@ export default function NoteEditor({
         {/* Color picker - spacious 显示色球 / compact 显示颜色按钮 / minimal 收进更多菜单 */}
         <ColorPicker selected={color} onChange={handleColorChange} mode={toolbarMode} />
 
-        {/* M16 P0：统一编辑器下插入待办块（便签/待办不再互斥，正文可混排） */}
-        {unified && (
-          <button
-            onClick={insertChecklistBlock}
-            className="flex items-center justify-center w-icon-btn h-icon-btn text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
-            title="插入待办清单"
-            aria-label="插入待办清单"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          </button>
-        )}
-
         <div className="flex-1" />
 
         {/* 保存状态：常态（已保存+无待同步）返回 null 不占位；仅过程/异常态显示。
@@ -920,6 +909,15 @@ export default function NoteEditor({
         </div>
         </div>
 
+      {/* M16 P1：统一编辑器格式工具栏（加粗/斜体/标题/引用/分割线/待办/内链） */}
+      {unified && (
+        <UnifiedEditorToolbar
+          editor={unifiedEditor}
+          onInsertTodo={insertChecklistBlock}
+          onInsertLink={() => setInsertLinkOpen(true)}
+        />
+      )}
+
       {/* M12 返修：从日历便签进入的返回入口，点击回到工作日历并恢复视图上下文 */}
       {onCalendarReturn && calendarReturnLabel && (
         <div className="flex items-center min-w-0 px-3 py-1.5 border-b border-border-light bg-surface-hover/40">
@@ -1017,6 +1015,7 @@ export default function NoteEditor({
                 contentClassName="min-h-[200px]"
                 editorRef={(ed) => {
                   contentEditorRef.current = ed;
+                  setUnifiedEditor(ed);
                 }}
               />
             ) : mode === "text" ? (

@@ -1,4 +1,4 @@
-import { Extension, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import Text from "@tiptap/extension-text";
@@ -6,7 +6,7 @@ import HardBreak from "@tiptap/extension-hard-break";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import NoteLinkView from "@/components/NoteLinkView";
@@ -247,6 +247,120 @@ const ChecklistBlock = Node.create({
   },
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// P1 轻量格式：加粗/斜体 mark + 标题/引用/分割线 块。
+// 标题与引用是独立 block（内联内容与 noteText 同级）；分割线为 atom 叶子块。
+// 存储以 documentJson 为准；投影格式：# 标题 / > 引用 / --- 分割线。
+// ──────────────────────────────────────────────────────────────────────────
+
+const Bold = Mark.create({
+  name: "bold",
+  parseHTML() {
+    return [{ tag: "strong" }, { tag: "b" }];
+  },
+  renderHTML() {
+    return ["strong"];
+  },
+});
+
+const Italic = Mark.create({
+  name: "italic",
+  parseHTML() {
+    return [{ tag: "em" }, { tag: "i" }];
+  },
+  renderHTML() {
+    return ["em"];
+  },
+});
+
+const Heading = Node.create({
+  name: "heading",
+  group: "block",
+  content: "inline*",
+  addAttributes() {
+    return { level: { default: 2 } };
+  },
+  parseHTML() {
+    return [
+      { tag: "h1", attrs: { level: 1 } },
+      { tag: "h2", attrs: { level: 2 } },
+      { tag: "h3", attrs: { level: 3 } },
+    ];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const level = node.attrs.level ?? 2;
+    return [`h${level}`, mergeAttributes(HTMLAttributes, { "data-heading": "true" }), 0];
+  },
+});
+
+const Quote = Node.create({
+  name: "quote",
+  group: "block",
+  content: "inline*",
+  parseHTML() {
+    return [{ tag: "blockquote" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["blockquote", mergeAttributes(HTMLAttributes, { "data-quote": "true" }), 0];
+  },
+});
+
+const Divider = Node.create({
+  name: "divider",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: false,
+  parseHTML() {
+    return [{ tag: "hr" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["hr", mergeAttributes(HTMLAttributes, { "data-divider": "true" })];
+  },
+  // 复制/导出文本时还原为分割线语法
+  renderText() {
+    return "---";
+  },
+  addCommands() {
+    return {
+      setDivider:
+        () =>
+        ({ state, tr, dispatch }) => {
+          // 折叠光标在非空文本块内时，insertContent 对块节点静默失败；
+          // 改为显式在当前顶层块之后插入分割线，再保证块后有段落承接光标。
+          let insertPos: number;
+          if (state.selection instanceof NodeSelection) {
+            insertPos = state.selection.to;
+          } else {
+            const { $from } = state.selection;
+            insertPos = $from.depth > 0 ? $from.after($from.depth) : $from.pos;
+          }
+          tr.insert(insertPos, state.schema.nodes.divider.create());
+          // map(insertPos) 已是分割线之后的位置（插入点映射到新节点后），无需 +1
+          const dividerEnd = tr.mapping.map(insertPos);
+          if (tr.doc.nodeAt(dividerEnd)) {
+            tr.setSelection(TextSelection.create(tr.doc, dividerEnd));
+          } else {
+            // 分割线已在文档末尾：补一个空 noteText 段落承接光标
+            const para = state.schema.nodes.noteText.createAndFill();
+            if (para) tr.insert(dividerEnd, para);
+            tr.setSelection(TextSelection.create(tr.doc, dividerEnd));
+          }
+          if (dispatch) dispatch(tr);
+          return true;
+        },
+    };
+  },
+});
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    divider: {
+      setDivider: () => ReturnType;
+    };
+  }
+}
+
 /** 构造统一文档编辑器扩展集合（段落 + checklist 块混排）。 */
 export function createDocumentExtensions(options: { placeholder: string }) {
   return [
@@ -267,6 +381,11 @@ export function createDocumentExtensions(options: { placeholder: string }) {
     NoteLink,
     NoteUrlLink,
     ChecklistBlock,
+    Bold,
+    Italic,
+    Heading,
+    Quote,
+    Divider,
   ];
 }
 
@@ -305,6 +424,21 @@ function sanitizeDocumentJson(raw: string): JSONContent | null {
     const block = b as Record<string, unknown>;
     if (block.type === "noteText") {
       content.push({ type: "noteText", content: sanitizeInline(block.content) });
+    } else if (block.type === "heading") {
+      const attrs =
+        block.attrs && typeof block.attrs === "object"
+          ? (block.attrs as Record<string, unknown>)
+          : {};
+      const lv = Number(attrs.level);
+      content.push({
+        type: "heading",
+        attrs: { level: [1, 2, 3].includes(lv) ? lv : 2 },
+        content: sanitizeInline(block.content),
+      });
+    } else if (block.type === "quote") {
+      content.push({ type: "quote", content: sanitizeInline(block.content) });
+    } else if (block.type === "divider") {
+      content.push({ type: "divider" });
     } else if (block.type === "checklistBlock") {
       const attrs =
         block.attrs && typeof block.attrs === "object"
@@ -327,7 +461,17 @@ function sanitizeInline(raw: unknown): JSONContent[] {
     if (!n || typeof n !== "object") continue;
     const node = n as Record<string, unknown>;
     if (node.type === "text" && typeof node.text === "string") {
-      out.push({ type: "text", text: node.text });
+      const marks = (Array.isArray(node.marks) ? node.marks : [])
+        .filter(
+          (m): m is { type: string } =>
+            !!m && typeof m === "object" && (m.type === "bold" || m.type === "italic")
+        )
+        .map((m) => ({ type: m.type as "bold" | "italic" }));
+      out.push(
+        marks.length > 0
+          ? { type: "text", text: node.text, marks }
+          : { type: "text", text: node.text }
+      );
     } else if (node.type === "hardBreak") {
       out.push({ type: "hardBreak" });
     } else if (node.type === "noteLink") {
@@ -426,6 +570,20 @@ export function serializeNoteDocument(doc: JSONContent): {
       if (prevType && prevType !== "noteText") lines.push("");
       lines.push(line);
       prevType = "noteText";
+    } else if (block.type === "heading") {
+      const t = inlineToText(block.content).trim();
+      if (prevType && prevType !== "heading") lines.push("");
+      if (t) lines.push(`# ${t}`);
+      prevType = "heading";
+    } else if (block.type === "quote") {
+      const t = inlineToText(block.content).trim();
+      if (prevType && prevType !== "quote") lines.push("");
+      if (t) lines.push(`> ${t}`);
+      prevType = "quote";
+    } else if (block.type === "divider") {
+      if (prevType) lines.push("");
+      lines.push("---");
+      prevType = "divider";
     } else if (block.type === "checklistBlock") {
       const rows = (Array.isArray(block.attrs?.rows)
         ? block.attrs.rows

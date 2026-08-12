@@ -260,7 +260,7 @@ async function main() {
   // 侧栏与编辑器各有一个「更多操作」按钮，点编辑器面板（DOM 中最后一个）的
   await page.evaluate(() => {
     const btns = Array.from(document.querySelectorAll('button[title="更多操作"]'));
-    btns[btns.length - 1]?.click();
+    (btns[btns.length - 1] as HTMLElement | undefined)?.click();
   });
   await sleep(400);
   const kHasLink = await page.evaluate(() =>
@@ -268,6 +268,113 @@ async function main() {
   );
   assert("K 统一待办: 更多菜单有插入便签链接", kHasLink);
   await page.keyboard.press("Escape");
+
+  // ══ L. 格式工具栏：加粗 + 标题 + 分割线 → 刷新持久化 ══
+  // 直接 API 建空白便签测格式（单段落文档，避免跨待办块定位光标 + 长会话 UI 下拉抖动）
+  const lNewId = (await page.evaluate(() =>
+    fetch("/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "验收-格式测试L", content: "", mode: "text" }),
+    })
+      .then((r) => r.json())
+      .then((d) => d.id)
+  )) as string;
+  await page.reload({ waitUntil: "networkidle2" });
+  await page.waitForSelector('button[data-note-id]', { timeout: 15000 });
+  await dismissAnnouncement();
+  await openNote(lNewId);
+  await page.waitForSelector(".ProseMirror", { timeout: 8000 });
+  await page.evaluate(() => {
+    (document.querySelector(".ProseMirror") as HTMLElement | null)?.focus();
+  });
+  await sleep(300);
+  await page.keyboard.type("格式测试文本");
+  await page.keyboard.down("Meta");
+  await page.keyboard.press("KeyA"); // 选中整段
+  await page.keyboard.up("Meta");
+  await sleep(200);
+  await page.click('button[title="加粗"]');
+  await sleep(400);
+  const lStrong = await page.$eval(".ProseMirror strong", (el) => el.textContent).catch(() => null);
+  assert("L 加粗: strong 出现", lStrong === "格式测试文本", `[${lStrong}]`);
+  await page.click('button[title="标题"]');
+  await sleep(400);
+  const lH2 = await page.$eval(".ProseMirror h2[data-heading]", (el) => el.textContent).catch(() => null);
+  assert("L 标题: h2 出现", lH2 === "格式测试文本", `[${lH2}]`);
+  // 折叠选区到 h2 文本末尾再插分割线，避免选中文本被替换
+  await page.evaluate(() => {
+    (document.querySelector(".ProseMirror") as HTMLElement | null)?.focus();
+  });
+  await sleep(200);
+  await page.keyboard.press("ArrowRight");
+  await page.click('button[title="分割线"]');
+  await sleep(500);
+  const lHr = await page.$("hr[data-divider]").then((e) => !!e);
+  assert("L 分割线: hr 出现", lHr);
+  await shot(page, "L-format-toolbar");
+  await sleep(1500); // 等防抖保存
+  await page.reload({ waitUntil: "networkidle2" });
+  await page.waitForSelector('button[data-note-id]', { timeout: 15000 });
+  await dismissAnnouncement();
+  await openNote(lNewId);
+  await page.waitForSelector(".ProseMirror", { timeout: 8000 });
+  const lStrong2 = await page.$eval(".ProseMirror h2 strong", (el) => el.textContent).catch(() => null);
+  assert("L 刷新后: h2+strong 持久化", lStrong2 === "格式测试文本", `[${lStrong2}]`);
+  const lHr2 = await page.$("hr[data-divider]").then((e) => !!e);
+  assert("L 刷新后: 分割线持久化", lHr2);
+  await shot(page, "L-after-reload");
+
+  // ══ M. 格式工具栏：斜体 + 引用 → 刷新持久化 ══
+  const mNewId = (await page.evaluate(() =>
+    fetch("/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "验收-格式测试M", content: "", mode: "text" }),
+    })
+      .then((r) => r.json())
+      .then((d) => d.id)
+  )) as string;
+  await page.reload({ waitUntil: "networkidle2" });
+  await page.waitForSelector('button[data-note-id]', { timeout: 15000 });
+  await dismissAnnouncement();
+  await openNote(mNewId);
+  await page.waitForSelector(".ProseMirror", { timeout: 8000 });
+  await page.evaluate(() => {
+    (document.querySelector(".ProseMirror") as HTMLElement | null)?.focus();
+  });
+  await sleep(300);
+  await page.keyboard.type("引用格式测试");
+  await page.keyboard.down("Meta");
+  await page.keyboard.press("KeyA");
+  await page.keyboard.up("Meta");
+  await sleep(200);
+  await page.click('button[title="斜体"]');
+  await sleep(400);
+  const mEm = await page.$eval(".ProseMirror em", (el) => el.textContent).catch(() => null);
+  assert("M 斜体: em 出现", mEm === "引用格式测试", `[${mEm}]`);
+  await page.click('button[title="引用"]');
+  await sleep(400);
+  const mQuote = await page.$eval("blockquote[data-quote]", (el) => el.textContent).catch(() => null);
+  assert("M 引用: blockquote 出现", mQuote === "引用格式测试", `[${mQuote}]`);
+  await shot(page, "M-quote-italic");
+  await sleep(1500);
+  await page.reload({ waitUntil: "networkidle2" });
+  await page.waitForSelector('button[data-note-id]', { timeout: 15000 });
+  await dismissAnnouncement();
+  await openNote(mNewId);
+  await page.waitForSelector(".ProseMirror", { timeout: 8000 });
+  const mQuote2 = await page.$eval("blockquote[data-quote] em", (el) => el.textContent).catch(() => null);
+  assert("M 刷新后: 引用+斜体持久化", mQuote2 === "引用格式测试", `[${mQuote2}]`);
+  await shot(page, "M-after-reload");
+
+  // 清理 L/M 新建的测试便签
+  for (const id of [lNewId, mNewId]) {
+    if (id) {
+      await page.evaluate((nid) => fetch(`/api/notes/${nid}`, { method: "DELETE" }), id).catch(() => {});
+      await sleep(300);
+    }
+  }
 
   await browser.close();
   console.log(fails === 0 ? "\nALL PASS" : `\n${fails} FAILURES`);
