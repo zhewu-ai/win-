@@ -1,6 +1,6 @@
 [package]
 name = "sticky-notes-shell"
-version = "0.1.0"
+version = "0.1.2"
 description = "全平台便签 Windows 桌面壳（加载线上 Web 版）"
 authors = ["hellomylife"]
 edition = "2021"

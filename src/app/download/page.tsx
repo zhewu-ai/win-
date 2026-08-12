@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
-  DESKTOP_APP_DOWNLOAD_URL,
+  DESKTOP_MAC_DOWNLOAD_URL,
+  DESKTOP_RELEASES_URL,
   DESKTOP_WINDOWS_INSTALLER_URL,
 } from "@/lib/downloads";
 
@@ -51,6 +52,50 @@ function FeatureIcon({ d }: { d: string }) {
   );
 }
 
+function PlatformCard({
+  title,
+  subtitle,
+  icon,
+  href,
+  buttonLabel,
+  note,
+}: {
+  title: string;
+  subtitle: string;
+  icon: string;
+  href: string;
+  buttonLabel: string;
+  note?: string;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-3 bg-toolbar-bg border border-border-light rounded-card p-4">
+      <div className="flex items-center gap-3">
+        <span className="flex items-center justify-center w-10 h-10 shrink-0 bg-surface-hover rounded-btn text-primary">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
+          </svg>
+        </span>
+        <div>
+          <p className="font-semibold leading-tight">{title}</p>
+          <p className="mt-0.5 text-list-summary text-ink-muted">{subtitle}</p>
+        </div>
+      </div>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 w-full px-5 py-2.5 bg-selection-yellow text-white rounded-btn font-semibold hover:brightness-110 active:brightness-95 transition-all"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        {buttonLabel}
+      </a>
+      {note && <p className="text-list-meta text-ink-muted">{note}</p>}
+    </div>
+  );
+}
+
 export default function DownloadPage() {
   return (
     <div className="h-screen overflow-y-auto bg-page-bg text-ink scrollbar-thin">
@@ -59,7 +104,7 @@ export default function DownloadPage() {
           <img src="/icon.png" alt="PinNote" className="w-12 h-12 rounded-xl object-cover shadow-md shadow-black/10" />
           <div>
             <h1 className="text-login-title font-bold">PinNote 桌面版</h1>
-            <p className="text-list-summary text-ink-muted">Windows 桌面应用</p>
+            <p className="text-list-summary text-ink-muted">Windows / Mac</p>
           </div>
         </header>
 
@@ -82,30 +127,33 @@ export default function DownloadPage() {
           ))}
         </div>
 
-        <div className="mt-8 flex flex-col sm:flex-row gap-3">
-          <a
+        <div className="mt-8 grid sm:grid-cols-2 gap-3">
+          <PlatformCard
+            title="Windows 版"
+            subtitle="适用于 Windows 10/11"
+            icon="M3 5h18v14H3z"
             href={DESKTOP_WINDOWS_INSTALLER_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-selection-yellow text-white rounded-btn font-semibold hover:brightness-110 active:brightness-95 transition-all"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            下载 Windows 安装包
-          </a>
-          <a
-            href={DESKTOP_APP_DOWNLOAD_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 px-5 py-3 border border-border-light rounded-btn text-ink hover:bg-surface-hover transition-colors"
-          >
-            查看所有版本
-          </a>
+            buttonLabel="下载 Windows 版"
+            note="安装后使用你的 PinNote 账号登录。"
+          />
+          <PlatformCard
+            title="Mac 版"
+            subtitle="适用于 macOS（Intel + Apple Silicon）"
+            icon="M4 5h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z"
+            href={DESKTOP_MAC_DOWNLOAD_URL}
+            buttonLabel="下载 Mac 版"
+            note="内测包，未签名公证。首次打开如提示安全限制，请在系统设置 → 隐私与安全性中允许打开。"
+          />
         </div>
-        <p className="mt-3 text-list-summary text-ink-muted">
-          适用于 Windows 10/11。安装后使用你的 PinNote 账号登录。
-        </p>
+
+        <a
+          href={DESKTOP_RELEASES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-border-light rounded-btn text-ink hover:bg-surface-hover transition-colors"
+        >
+          查看所有版本
+        </a>
 
         <details className="mt-8 border border-border-light rounded-card bg-toolbar-bg">
           <summary className="cursor-pointer select-none px-4 py-3 text-list-title font-semibold text-ink-muted">

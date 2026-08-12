@@ -1,0 +1,105 @@
+name: Build Desktop Installers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src-tauri/**"
+      - "shell-static/**"
+      - ".github/workflows/build-desktop.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            artifact: windows-installer
+            target: ""
+          - platform: macos-latest
+            artifact: mac-installer
+            target: --target universal-apple-darwin
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Apple targets (universal build)
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build installer
+        run: npm run tauri build ${{ matrix.target }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: windows-installer
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-installer
+          path: mac-installer
+
+      - name: Compute release tag from tauri.conf.json
+        id: ver
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "tag=app-v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "name=全平台便签 v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.ver.outputs.tag }}")
+          echo "exists=$([ "$CODE" = "404" ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.name }}
+          body: |
+            Windows / Mac 桌面壳自动构建（加载 https://notes.hello-mylife.online）
+
+            - Windows：StickyNotes_*_x64-setup.exe，适用于 Windows 10/11
+            - macOS：StickyNotes_*_universal.dmg，Intel + Apple Silicon（内测包，未签名公证）
+          files: |
+            windows-installer/**
+            mac-installer/**
+          token: ${{ secrets.GITHUB_TOKEN }}
