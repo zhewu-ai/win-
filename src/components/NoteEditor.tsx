@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
-import type { Note, NoteColor, ChecklistItem, ChecklistGroup, Attachment } from "@/types";
+import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from "react";
+import type { Note, NoteColor, ChecklistItem, ChecklistGroup, Attachment, NoteFolder } from "@/types";
 import ColorPicker from "./ColorPicker";
 import SaveStatus from "./SaveStatus";
 import ChecklistEditor from "./ChecklistEditor";
@@ -14,6 +14,7 @@ import UnifiedEditorToolbar from "./UnifiedEditorToolbar";
 import { isUnifiedEditorEnabled } from "@/lib/features";
 import InsertNoteLinkDialog from "./InsertNoteLinkDialog";
 import ConfirmDialog from "./ConfirmDialog";
+import BacklinksPanel from "./BacklinksPanel";
 import { normalizeChecklist, textToChecklist, checklistToText } from "@/lib/note-serializer";
 import { isTauri, getAlwaysOnTop, toggleAlwaysOnTop } from "@/lib/tauri";
 import { saveNoteUpdate } from "@/lib/offline/persist";
@@ -21,6 +22,7 @@ import { clearDraft, getDraft } from "@/lib/offline/draft";
 import { useDraftRecovery } from "@/hooks/useDraftRecovery";
 import { serializeNoteText, parseNoteText, docToNotePayload, emptyChecklistRow } from "@/lib/note-text-schema";
 import { escapeLinkTitle } from "@/lib/link-parser";
+import { extractTags, TAG_NAME_MAX } from "@/lib/tag-parser";
 import type { Editor } from "@tiptap/react";
 
 const DEBOUNCE_MS = 800;
@@ -47,6 +49,10 @@ interface Props {
   /** M12 返修：从日历便签进入时，编辑器顶部显示「返回工作日历」入口 */
   onCalendarReturn?: () => void;
   calendarReturnLabel?: string;
+  /** M16R3：保存后通知页面节流刷新文件夹/标签列表（移动文件夹/手加标签后调用） */
+  onTaxonomyChanged?: () => void;
+  /** M16R3：可移动到的文件夹列表（更多菜单「移动到文件夹」） */
+  folders?: NoteFolder[];
 }
 
 function formatEditorDate(dateStr?: string): string {
@@ -82,8 +88,9 @@ export default function NoteEditor({
   backLabel,
   onCalendarReturn,
   calendarReturnLabel,
-}: Props) {
-  const [title, setTitle] = useState("");
+  onTaxonomyChanged,
+  folders,
+}: Props) {  const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [color, setColor] = useState<NoteColor>("yellow");
   const [isPinned, setIsPinned] = useState(false);
@@ -97,6 +104,12 @@ export default function NoteEditor({
     "saved" | "saving" | "error" | "localError"
   >("saved");
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
+  // M16R3：便签文件夹归属 + 更多菜单「移动到文件夹」展开态
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [moveFolderOpen, setMoveFolderOpen] = useState(false);
+  // M16R3：手动标签（source=manual）。展示标签 = 正文 #标签 抽取 ∪ manualTags（auto 由编辑器按正文补算）。
+  const [manualTags, setManualTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const [insertLinkOpen, setInsertLinkOpen] = useState(false);
   // M16 统一编辑器：默认开启；回滚（localStorage "0" / ?m16=legacy）用旧双模式。
@@ -229,9 +242,40 @@ export default function NoteEditor({
     []
   );
 
+  // 更多菜单关闭时收起「移动到文件夹」子面板
+  useEffect(() => {
+    if (!moreOpen) setMoveFolderOpen(false);
+  }, [moreOpen]);
+
+  // M16R3：展示标签 = 正文 #标签 抽取（auto）∪ 手动标签。auto 无需落 state，
+  // 正文变化即时反映；手动增删后 immediateSave({tags}) 交给服务端 reconcile 回确认。
+  const displayedTags = useMemo(
+    () => [...new Set([...extractTags(content), ...manualTags])],
+    [content, manualTags]
+  );
+
+  const handleAddTag = useCallback(async () => {
+    const name = tagInput.trim().slice(0, TAG_NAME_MAX);
+    setTagInput("");
+    if (!name) return;
+    const next = manualTags.includes(name) ? manualTags : [...manualTags, name];
+    setManualTags(next);
+    await immediateSave({ tags: next });
+    onTaxonomyChanged?.();
+  }, [tagInput, manualTags, immediateSave, onTaxonomyChanged]);
+
+  const handleRemoveManualTag = useCallback(
+    async (name: string) => {
+      const next = manualTags.filter((t) => t !== name);
+      setManualTags(next);
+      await immediateSave({ tags: next });
+      onTaxonomyChanged?.();
+    },
+    [manualTags, immediateSave, onTaxonomyChanged]
+  );
+
   // Flush any pending save (fire-and-forget)
-  const flushPendingSave = useCallback(() => {
-    if (debounceRef.current) {
+  const flushPendingSave = useCallback(() => {    if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = undefined;
     }
@@ -317,6 +361,9 @@ export default function NoteEditor({
         });
       }
       setAttachments(note.attachments || []);
+      setFolderId(note.folderId ?? null);
+      setManualTags(note.manualTags ?? []);
+      setTagInput("");
       setSaveStatus("saved");
       lastFailedPayloadRef.current = null;
       // 远端新版已应用：清掉可能残留的草稿镜像，避免下次打开时用旧内容覆盖
@@ -819,6 +866,51 @@ export default function NoteEditor({
           </button>
           {moreOpen && (
             <div className="absolute right-0 top-full mt-1.5 w-44 py-1 bg-toolbar-bg border border-border-light rounded-card shadow-xl z-20 menu-pop">
+              {moveFolderOpen ? (
+                <>
+                  <button
+                    onClick={() => setMoveFolderOpen(false)}
+                    className="flex items-center gap-2 w-full px-3.5 py-2 text-xs text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    移动文件夹
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void immediateSave({ folderId: null }).then(() => onTaxonomyChanged?.());
+                    }}
+                    className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+                  >
+                    <span className="flex-1 text-left">未分组</span>
+                    {folderId === null && (
+                      <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {folders?.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        void immediateSave({ folderId: f.id }).then(() => onTaxonomyChanged?.());
+                      }}
+                      className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+                    >
+                      <span className="flex-1 text-left truncate">{f.name}</span>
+                      {folderId === f.id && (
+                        <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
               {toolbarMode === "minimal" && (                <>
                   <div className="flex items-center gap-2 px-3.5 pt-2 pb-2.5">
                     {(
@@ -880,6 +972,15 @@ export default function NoteEditor({
                 添加图片
               </button>
               <button
+                onClick={() => setMoveFolderOpen(true)}
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-ink hover:bg-surface-hover transition-colors"
+              >
+                <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                </svg>
+                移动到文件夹
+              </button>
+              <button
                 onClick={() => {
                   setMoreOpen(false);
                   handleArchive();
@@ -904,6 +1005,8 @@ export default function NoteEditor({
                 </svg>
                 删除
               </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1047,6 +1150,55 @@ export default function NoteEditor({
               noteId={currentNoteIdRef.current || ""}
               attachments={attachments}
               onAttachmentsChange={setAttachments}
+            />
+
+            {/* M16R3：标签 chip 行（正文下方、底部元信息之上）。manual 可删（immediateSave 去手动绑定），
+                auto 只读（由正文 #标签 派生）；尾部输入回车添加手动标签。 */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {displayedTags.map((t) => {
+                const isManual = manualTags.includes(t);
+                return (
+                  <span
+                    key={t}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-colors ${
+                      isManual
+                        ? "bg-surface-hover text-ink-secondary"
+                        : "bg-toolbar-bg text-ink-muted"
+                    }`}
+                    title={isManual ? "手动标签（点击 × 移除）" : "自动标签（正文 #标签）"}
+                  >
+                    <span className="max-w-32 truncate">#{t}</span>
+                    {isManual && (
+                      <button
+                        onClick={() => void handleRemoveManualTag(t)}
+                        className="text-ink-muted hover:text-danger transition-colors"
+                        title={`移除标签 ${t}`}
+                        aria-label={`移除标签 ${t}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddTag();
+                  if (e.key === "Escape") setTagInput("");
+                }}
+                placeholder={displayedTags.length === 0 ? "添加标签（如 #工作）" : "＋ 标签"}
+                className="w-28 bg-transparent text-xs text-ink placeholder:text-ink-muted/50 outline-none border-b border-transparent focus:border-border-strong transition-colors py-0.5"
+              />
+            </div>
+
+            {/* M16R3：反向链接（正文下方、底部元信息之上）。被引用数为 0 时组件自身返回 null */}
+            <BacklinksPanel
+              noteId={currentNoteIdRef.current || ""}
+              onOpenNote={onOpenNote}
             />
           </div>
 

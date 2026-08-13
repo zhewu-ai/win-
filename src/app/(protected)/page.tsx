@@ -9,13 +9,113 @@ import { useNotes } from "@/hooks/useNotes";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { deleteNoteOfflineAware } from "@/lib/offline/persist";
 import { getDraft } from "@/lib/offline/draft";
-import type { Note } from "@/types";
+import type { Note, NoteFolder, NoteFoldersResponse, NoteTagItem } from "@/types";
 
 const SIDEBAR_COLLAPSED_KEY = "sticky-notes.sidebarCollapsed";
 
 export default function HomePage() {
-  const { notes, loading, refreshing, searchQuery, setSearchQuery, fetchNotes, createNote, applyNote } =
+  const { notes, loading, refreshing, searchQuery, setSearchQuery, setFilters, fetchNotes, createNote, applyNote } =
     useNotes(false);
+
+  // M16R3：文件夹/标签筛选状态（null=全部，"none"=未分组，string=folder id）
+  const [folders, setFolders] = useState<NoteFolder[]>([]);
+  const [tags, setTags] = useState<NoteTagItem[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<string | null | "none">(null);
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const taxonomyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 并行拉取文件夹 + 标签（标签端点 Phase 3 实现前返回 404，静默跳过）
+  const refreshTaxonomy = useCallback(async () => {
+    try {
+      const [fRes, tRes] = await Promise.all([
+        fetch("/api/note-folders"),
+        fetch("/api/note-tags"),
+      ]);
+      if (fRes.ok) {
+        const fd = (await fRes.json()) as NoteFoldersResponse;
+        if (fd.ok) setFolders(fd.folders);
+      }
+      if (tRes.ok) {
+        const td = (await tRes.json()) as { ok: boolean; tags: NoteTagItem[] };
+        if (td.ok) setTags(td.tags);
+      }
+    } catch {
+      // 拉取失败静默，下次保存/筛选再刷新
+    }
+  }, []);
+
+  const scheduleTaxonomyRefresh = useCallback(() => {
+    if (taxonomyTimerRef.current) clearTimeout(taxonomyTimerRef.current);
+    taxonomyTimerRef.current = setTimeout(() => void refreshTaxonomy(), 800);
+  }, [refreshTaxonomy]);
+
+  useEffect(() => {
+    void refreshTaxonomy();
+    return () => {
+      if (taxonomyTimerRef.current) clearTimeout(taxonomyTimerRef.current);
+    };
+  }, [refreshTaxonomy]);
+
+  // M16R3：文件夹/标签筛选入口（点击后触发服务端筛选拉取）
+  const applyFolder = useCallback(
+    (folder: string | null | "none") => {
+      setSelectedFolder(folder);
+      setSelectedTagId(null);
+      setFilters({ folderId: folder === null ? undefined : folder });
+      fetchNotes(searchQuery || undefined, { silent: true });
+    },
+    [setFilters, fetchNotes, searchQuery]
+  );
+
+  const applyTag = useCallback(
+    (tagId: string | null) => {
+      setSelectedTagId(tagId);
+      setFilters({ folderId: selectedFolder === null ? undefined : selectedFolder, tagId: tagId ?? undefined });
+      fetchNotes(searchQuery || undefined, { silent: true });
+    },
+    [setFilters, fetchNotes, searchQuery, selectedFolder]
+  );
+
+  // 文件夹 CRUD：失败抛错由 NoteList 的 ConfirmDialog 提示
+  const handleCreateFolder = useCallback(
+    async (name: string) => {
+      const res = await fetch("/api/note-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "新建文件夹失败");
+      await refreshTaxonomy();
+    },
+    [refreshTaxonomy]
+  );
+
+  const handleRenameFolder = useCallback(
+    async (id: string, name: string) => {
+      const res = await fetch(`/api/note-folders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "重命名文件夹失败");
+      await refreshTaxonomy();
+    },
+    [refreshTaxonomy]
+  );
+
+  const handleDeleteFolder = useCallback(
+    async (id: string) => {
+      const res = await fetch(`/api/note-folders/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "删除文件夹失败");
+      if (selectedFolder === id) setSelectedFolder(null);
+      await refreshTaxonomy();
+      fetchNotes(searchQuery || undefined, { silent: true });
+    },
+    [refreshTaxonomy, selectedFolder, fetchNotes, searchQuery]
+  );
 
   // 布局模式：≥720 双栏（侧栏固定 350px，仅手动折叠）/ <720 单栏（工具栏再按编辑区实际宽度细分）
   const mode = useLayoutMode();
@@ -103,7 +203,9 @@ export default function HomePage() {
     setCalendarOpen(false);
     setCameFromCalendar(false);
     try {
-      const note = await createNote();
+      // M16R3：在指定文件夹筛选下新建 → 自动归属该文件夹；全部/未分组 → 未分组
+      const folderId = selectedFolder && selectedFolder !== "none" ? selectedFolder : null;
+      const note = await createNote({ folderId });
       setSelectedNoteId(note.id);
       setShowEditor(true);
     } catch {
@@ -116,7 +218,8 @@ export default function HomePage() {
     setCalendarOpen(false);
     setCameFromCalendar(false);
     try {
-      const note = await createNote({ mode: "checklist" });
+      const folderId = selectedFolder && selectedFolder !== "none" ? selectedFolder : null;
+      const note = await createNote({ mode: "checklist", folderId });
       setSelectedNoteId(note.id);
       setShowEditor(true);
     } catch {
@@ -373,6 +476,15 @@ export default function HomePage() {
               calendarActive={calendarOpen}
               calendarHiddenProjectIds={calendarHidden}
               calendarShowNoteLayer={calendarNoteLayer}
+              folders={folders}
+              tags={tags}
+              selectedFolder={selectedFolder}
+              selectedTagId={selectedTagId}
+              onSelectFolder={applyFolder}
+              onSelectTag={applyTag}
+              onCreateFolder={handleCreateFolder}
+              onRenameFolder={handleRenameFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           </div>
         </div>
@@ -430,6 +542,8 @@ export default function HomePage() {
               backLabel={backLabel}
               onCalendarReturn={cameFromCalendar ? returnToCalendar : undefined}
               calendarReturnLabel={cameFromCalendar ? "返回工作日历" : undefined}
+              onTaxonomyChanged={scheduleTaxonomyRefresh}
+              folders={folders}
             />
           )}
         </div>

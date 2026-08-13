@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Note } from "@/types";
+import type { Note, NoteFolder, NoteTagItem } from "@/types";
 import { formatNoteTime } from "@/lib/format-time";
 import { displayPlainText } from "@/lib/link-parser";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
@@ -24,6 +24,16 @@ interface Props {
   /** M12 体验细修：多选状态上提（Sidebar 据此隐藏搜索框），本组件用受控 props */
   selectionMode?: boolean;
   onSelectionModeChange?: (active: boolean) => void;
+  // M16R3：文件夹/标签筛选
+  folders?: NoteFolder[];
+  tags?: NoteTagItem[];
+  selectedFolder?: string | null | "none";
+  selectedTagId?: string | null;
+  onSelectFolder?: (folder: string | null | "none") => void;
+  onSelectTag?: (tagId: string | null) => void;
+  onCreateFolder?: (name: string) => Promise<void>;
+  onRenameFolder?: (id: string, name: string) => Promise<void>;
+  onDeleteFolder?: (id: string) => Promise<void>;
 }
 
 const ACCENT: Record<string, string> = {
@@ -164,6 +174,281 @@ function SectionHeader({ icon, label }: { icon: string; label: string }) {
   );
 }
 
+/** M16R3：左侧文件夹筛选面板（全部/未分组/文件夹行 + 内联新建/重命名/删除）。 */
+function FolderPanel({
+  folders,
+  selectedFolder,
+  onSelectFolder,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+}: {
+  folders: NoteFolder[];
+  selectedFolder?: string | null | "none";
+  onSelectFolder: (f: string | null | "none") => void;
+  onCreateFolder: (name: string) => Promise<void>;
+  onRenameFolder: (id: string, name: string) => Promise<void>;
+  onDeleteFolder: (id: string) => Promise<void>;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [value, setValue] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submitCreate = async () => {
+    const name = value.trim();
+    if (!name) {
+      setCreating(false);
+      setValue("");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onCreateFolder(name);
+      setCreating(false);
+      setValue("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "新建文件夹失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitRename = async () => {
+    if (!renamingId) return;
+    const name = value.trim();
+    if (!name) {
+      setRenamingId(null);
+      setValue("");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onRenameFolder(renamingId, name);
+      setRenamingId(null);
+      setValue("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "重命名文件夹失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setBusy(true);
+    try {
+      await onDeleteFolder(deleteId);
+      setDeleteId(null);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除文件夹失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rowCls = (active: boolean) =>
+    `group flex items-center gap-1.5 w-full px-3 py-1.5 rounded-btn text-sm transition-colors ${
+      active
+        ? "bg-surface-hover text-ink font-medium"
+        : "text-ink-secondary hover:text-ink hover:bg-surface-hover"
+    }`;
+
+  const inputCls =
+    "w-full px-2 py-1 text-sm text-ink bg-panel-bg border border-border-strong rounded-input outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15";
+
+  return (
+    <div>
+      <SectionHeader
+        label="文件夹"
+        icon="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+      />
+      {error && (
+        <div className="mx-3 mb-1.5 flex items-center gap-1.5 text-xs text-danger">
+          <span className="flex-1 break-all">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="flex-shrink-0 p-0.5 hover:opacity-70"
+            aria-label="关闭"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+      <div className="space-y-0.5">
+        <button className={rowCls(selectedFolder === null)} onClick={() => onSelectFolder(null)}>
+          <span className="flex-1 truncate text-left">全部</span>
+        </button>
+        <button
+          className={rowCls(selectedFolder === "none")}
+          onClick={() => onSelectFolder("none")}
+        >
+          <span className="flex-1 truncate text-left">未分组</span>
+        </button>
+        {folders.map((f) =>
+          renamingId === f.id ? (
+            <div key={f.id} className="px-3 py-0.5">
+              <input
+                autoFocus
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void submitRename();
+                  if (e.key === "Escape") {
+                    setRenamingId(null);
+                    setValue("");
+                  }
+                }}
+                onBlur={() => void submitRename()}
+                placeholder="文件夹名称"
+                className={inputCls}
+              />
+            </div>
+          ) : (
+            <div key={f.id} className={rowCls(selectedFolder === f.id)}>
+              <button
+                className="flex flex-1 min-w-0 items-center gap-2 text-left"
+                onClick={() => onSelectFolder(f.id)}
+              >
+                <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                <span className="text-xs text-ink-muted">{f.noteCount}</span>
+              </button>
+              <span className="flex flex-shrink-0 items-center gap-0.5 text-ink-muted">
+                <button
+                  onClick={() => {
+                    setRenamingId(f.id);
+                    setValue(f.name);
+                  }}
+                  title="重命名"
+                  className="p-1 rounded hover:text-ink hover:bg-surface-hover transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setDeleteId(f.id)}
+                  title="删除"
+                  className="p-1 rounded hover:text-danger hover:bg-danger/10 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+          )
+        )}
+        {creating ? (
+          <div className="px-3 py-0.5">
+            <input
+              autoFocus
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitCreate();
+                if (e.key === "Escape") {
+                  setCreating(false);
+                  setValue("");
+                }
+              }}
+              onBlur={() => void submitCreate()}
+              placeholder="文件夹名称"
+              className={inputCls}
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              setCreating(true);
+              setValue("");
+            }}
+            className="flex items-center gap-1.5 w-full px-3 py-1.5 text-sm text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+            </svg>
+            新建文件夹
+          </button>
+        )}
+      </div>
+      <ConfirmDialog
+        open={deleteId !== null}
+        title="删除文件夹"
+        message={`确定删除该文件夹？其中的便签不会被删除，将移入「未分组」。`}
+        confirmLabel={busy ? "删除中..." : "删除"}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleteId(null)}
+      />
+    </div>
+  );
+}
+
+/** M16R3：左侧标签筛选面板（默认折叠，chip 显示名称 + 数量）。 */
+function TagPanel({
+  tags,
+  selectedTagId,
+  onSelectTag,
+}: {
+  tags: NoteTagItem[];
+  selectedTagId?: string | null;
+  onSelectTag: (tagId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (tags.length === 0) return null;
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 w-full px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink hover:bg-surface-hover rounded-btn transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5a2 2 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V5a2 2 0 012-2z" />
+        </svg>
+        标签
+        <svg
+          className={`w-3 h-3 ml-auto transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-0.5">
+          {tags.map((t) => {
+            const active = selectedTagId === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => onSelectTag(active ? null : t.id)}
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-colors ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-surface-hover text-ink-secondary hover:bg-border-light hover:text-ink"
+                }`}
+              >
+                <span className="max-w-28 truncate">#{t.name}</span>
+                <span className={`text-[11px] ${active ? "text-white/80" : "text-ink-muted"}`}>{t.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function NoteList({
   notes,
   selectedId,
@@ -177,6 +462,15 @@ export default function NoteList({
   calendarShowNoteLayer,
   selectionMode = false,
   onSelectionModeChange,
+  folders,
+  tags,
+  selectedFolder,
+  selectedTagId,
+  onSelectFolder,
+  onSelectTag,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
 }: Props) {
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -257,7 +551,8 @@ export default function NoteList({
     );
   }
 
-  if (notes.length === 0 && !showCalendarGroup) {
+  // M16R3：文件夹/标签存在时（即使无便签）不早退，落到行内空态，保证筛选入口可用
+  if (notes.length === 0 && !showCalendarGroup && !folders?.length && !tags?.length) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-center">
         <div>
@@ -458,6 +753,19 @@ export default function NoteList({
       )}
 
       <div ref={listScrollRef} className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-2.5 scrollbar-thin [scrollbar-gutter:stable]">
+        {/* M16R3 文件夹/标签筛选（日历入口之上；空便签列表时仍可切换筛选） */}
+        {folders && onCreateFolder && onSelectFolder && onRenameFolder && onDeleteFolder && (
+          <FolderPanel
+            folders={folders}
+            selectedFolder={selectedFolder}
+            onSelectFolder={onSelectFolder}
+            onCreateFolder={onCreateFolder}
+            onRenameFolder={onRenameFolder}
+            onDeleteFolder={onDeleteFolder}
+          />
+        )}
+        {tags && onSelectTag && <TagPanel tags={tags} selectedTagId={selectedTagId} onSelectTag={onSelectTag} />}
+
         {/* M12 R2 日历分组：管理员展示，位于置顶/日期分组之上 */}
         {showCalendarGroup && (
           <div>

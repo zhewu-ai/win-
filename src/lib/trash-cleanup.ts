@@ -57,6 +57,13 @@ export async function runTrashCleanup(force = false): Promise<number> {
         }
       }
       await prisma.attachment.deleteMany({ where: { noteId: note.id } });
+      // 标签绑定/出链/反链同批清掉（SQLite 外键级联兜底，显式删除更稳）
+      await prisma.noteTagBinding.deleteMany({ where: { noteId: note.id } });
+      await prisma.noteLinkEdge.deleteMany({
+        where: {
+          OR: [{ fromNoteId: note.id }, { toNoteId: note.id }],
+        },
+      });
       await prisma.note.delete({ where: { id: note.id } });
       // 回收站自动清理 = 永久删除，释放空间（便签文本 + 附件）
       const released =

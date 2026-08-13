@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Note } from "@/types";
+import type { Note, NoteFolder, NoteTagItem } from "@/types";
 import NoteList from "./NoteList";
 import AccountMenu from "./AccountMenu";
 
@@ -25,6 +25,16 @@ interface Props {
   /** M12 返修：工作日历筛选状态，同步左侧预览卡 */
   calendarHiddenProjectIds?: Set<string>;
   calendarShowNoteLayer?: boolean;
+  // M16R3：文件夹/标签筛选
+  folders?: NoteFolder[];
+  tags?: NoteTagItem[];
+  selectedFolder?: string | null | "none";
+  selectedTagId?: string | null;
+  onSelectFolder?: (folder: string | null | "none") => void;
+  onSelectTag?: (tagId: string | null) => void;
+  onCreateFolder?: (name: string) => Promise<void>;
+  onRenameFolder?: (id: string, name: string) => Promise<void>;
+  onDeleteFolder?: (id: string) => Promise<void>;
 }
 
 export default function Sidebar({
@@ -43,6 +53,15 @@ export default function Sidebar({
   calendarActive,
   calendarHiddenProjectIds,
   calendarShowNoteLayer,
+  folders,
+  tags,
+  selectedFolder,
+  selectedTagId,
+  onSelectFolder,
+  onSelectTag,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
 }: Props) {
   // M12 体验细修：多选状态由 NoteList 上报，据此隐藏搜索框（2.11）
   const [listSelectionMode, setListSelectionMode] = useState(false);
@@ -186,6 +205,15 @@ export default function Sidebar({
           calendarShowNoteLayer={calendarShowNoteLayer}
           selectionMode={listSelectionMode}
           onSelectionModeChange={setListSelectionMode}
+          folders={folders}
+          tags={tags}
+          selectedFolder={selectedFolder}
+          selectedTagId={selectedTagId}
+          onSelectFolder={onSelectFolder}
+          onSelectTag={onSelectTag}
+          onCreateFolder={onCreateFolder}
+          onRenameFolder={onRenameFolder}
+          onDeleteFolder={onDeleteFolder}
         />
       </div>
 

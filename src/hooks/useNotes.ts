@@ -22,6 +22,14 @@ export function useNotes(archived = false) {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fetchingRef = useRef(false);
+  // M16R3：文件夹/标签筛选。tagId 离线不支持（无 id→名映射），文档化为已知限制。
+  const filtersRef = useRef<{ folderId?: string | null; tagId?: string | null }>(
+    {}
+  );
+  const [filters, setFiltersState] = useState<{
+    folderId?: string | null;
+    tagId?: string | null;
+  }>({});
 
   /**
    * 拉取列表。silent = 手动/后台刷新：不触发列表 loading 骨架屏；失败时不改写当前列表，
@@ -42,6 +50,9 @@ export function useNotes(archived = false) {
         const params = new URLSearchParams();
         params.set("archived", String(archived));
         if (q) params.set("q", q);
+        const { folderId, tagId } = filtersRef.current;
+        if (folderId !== undefined) params.set("folderId", folderId ?? "none");
+        if (tagId) params.set("tag", tagId);
 
         const res = await fetch(`/api/notes?${params}`);
         if (!res.ok) throw new ApiError(res.status, "Failed to fetch");
@@ -51,7 +62,7 @@ export function useNotes(archived = false) {
         // 服务器旧快照不得吞掉本地较新内容/离线新建（mirrorNote 只保护 IndexedDB，这里补内存层）。
         let merged = fetched;
         try {
-          merged = await mergeLocalPending(fetched, archived);
+          merged = await mergeLocalPending(fetched, archived, filtersRef.current);
         } catch {
           // IndexedDB 不可用时退化为纯服务器快照，不阻断本次刷新
         }
@@ -80,8 +91,16 @@ export function useNotes(archived = false) {
         if (isNetworkError(e)) {
           // 离线/断网 → 从本地缓存回填
           const cached = await loadCachedNotes();
-          setNotes(cached);
-          setError(cached.length > 0 ? null : "离线，暂无本地便签缓存");
+          // 文件夹筛选离线本地可补；标签筛选离线不支持（无 id→名映射）
+          const { folderId } = filtersRef.current;
+          const filtered =
+            folderId === undefined
+              ? cached
+              : cached.filter((n) =>
+                  folderId === "none" ? !n.folderId : n.folderId === folderId
+                );
+          setNotes(filtered);
+          setError(filtered.length > 0 ? null : "离线，暂无本地便签缓存");
         } else {
           setError("加载便签失败");
         }
@@ -93,6 +112,15 @@ export function useNotes(archived = false) {
       }
     },
     [archived]
+  );
+
+  // M16R3：更新文件夹/标签筛选（页面点击筛选时调用；随后自行触发 fetchNotes 拉取）。
+  const setFilters = useCallback(
+    (f: { folderId?: string | null; tagId?: string | null }) => {
+      filtersRef.current = f;
+      setFiltersState(f);
+    },
+    []
   );
 
   const createNote = useCallback(async (data?: Partial<Note>): Promise<Note> => {
@@ -158,6 +186,8 @@ export function useNotes(archived = false) {
     error,
     searchQuery,
     setSearchQuery,
+    filters,
+    setFilters,
     fetchNotes,
     createNote,
     updateNote,

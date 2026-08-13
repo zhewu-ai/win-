@@ -235,7 +235,8 @@ export function validateChecklistGroups(
   return null;
 }
 
-export function serializeNote(note: Record<string, unknown>) {  const rawAttachments = note.attachments;
+export function serializeNote(note: Record<string, unknown>) {
+  const rawAttachments = note.attachments;
   let attachments: Record<string, unknown>[] = [];
   if (Array.isArray(rawAttachments)) {
     attachments = rawAttachments.map((att: unknown) => {
@@ -246,12 +247,34 @@ export function serializeNote(note: Record<string, unknown>) {  const rawAttachm
     });
   }
 
+  // M16R3：从展开中剔除 tagBindings（防内联 tag 对象），输出 tags/manualTags 名合集。
+  const { tagBindings, ...rest } = note;
+  const rawBindings = tagBindings;
+  let tags: string[] = [];
+  let manualTags: string[] = [];
+  if (Array.isArray(rawBindings)) {
+    const autoSet = new Set<string>();
+    const manualSet = new Set<string>();
+    for (const b of rawBindings) {
+      const rec = b as Record<string, unknown>;
+      const tag = rec.tag as Record<string, unknown> | undefined;
+      const name = typeof tag?.name === "string" ? tag.name : "";
+      if (!name) continue;
+      if (rec.source === "manual") manualSet.add(name);
+      else autoSet.add(name);
+    }
+    tags = [...new Set([...autoSet, ...manualSet])];
+    manualTags = [...manualSet];
+  }
+
   return {
-    ...note,
+    ...rest,
     mode: note.mode || "text",
     checklistItems: parseChecklistItems(note.checklistItems),
     checklistGroups: parseChecklistGroups(note.checklistGroups),
     attachments,
+    tags,
+    manualTags,
   };
 }
 

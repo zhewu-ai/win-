@@ -15,7 +15,13 @@ export type UserActivityAction =
   | "submit_feedback"
   | "read_announcement"
   | "change_avatar"
-  | "change_password";
+  | "change_password"
+  | "create_folder"
+  | "rename_folder"
+  | "delete_folder"
+  | "move_note"
+  | "create_tag"
+  | "delete_tag";
 
 /** Asia/Shanghai 固定 UTC+8，无夏令时。 */
 const CST_OFFSET_MIN = 8 * 60;

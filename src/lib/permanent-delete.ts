@@ -49,6 +49,16 @@ export async function hardDeleteNotes(
   }
 
   await prisma.attachment.deleteMany({ where: { noteId: { in: ownedIds } } });
+  // 标签绑定/出链/反链同批清掉（SQLite 外键级联兜底，显式删除更稳）
+  await prisma.noteTagBinding.deleteMany({ where: { noteId: { in: ownedIds } } });
+  await prisma.noteLinkEdge.deleteMany({
+    where: {
+      OR: [
+        { fromNoteId: { in: ownedIds } },
+        { toNoteId: { in: ownedIds } },
+      ],
+    },
+  });
   await prisma.note.deleteMany({ where: { id: { in: ownedIds } } });
 
   // 释放空间：便签文本 + 附件
