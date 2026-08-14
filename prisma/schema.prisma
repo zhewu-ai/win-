@@ -39,10 +39,6 @@ model User {
   calendarEvents    CalendarEvent[]
   workProjects      WorkProject[]
   workScheduleItems WorkScheduleItem[]
-  noteFolders       NoteFolder[]
-  noteTags          NoteTag[]
-  noteTagBindings   NoteTagBinding[]
-  noteLinkEdges     NoteLinkEdge[]
 }
 
 model PasswordResetToken {
@@ -128,82 +124,8 @@ model Note {
   calendarEvents CalendarEvent[]
   workScheduleItems WorkScheduleItem[]
 
-  // M16R3：单层文件夹归属 + 标签绑定 + 反向链接出/入边
-  folderId     String?
-  folder       NoteFolder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  tagBindings  NoteTagBinding[]
-  outLinks     NoteLinkEdge[]    @relation("NoteLinkFrom")
-  inLinks      NoteLinkEdge[]    @relation("NoteLinkTo")
-
   @@index([userId, deletedAt, isArchived])
   @@index([userId, isArchived, deletedAt])
-}
-
-// M16R3：单层文件夹。软删；重名冲突在接口层处理（软删后可重建同名），不建 @@unique。
-model NoteFolder {
-  id        String    @id @default(cuid())
-  userId    String
-  name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  user  User  @relation(fields: [userId], references: [id])
-  notes Note[]
-
-  @@index([userId, deletedAt])
-}
-
-// M16R3：标签本体。不做软删（无内容、重建廉价）；绑定删除走 onDelete Cascade。
-model NoteTag {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user     User              @relation(fields: [userId], references: [id])
-  bindings NoteTagBinding[]
-
-  @@index([userId])
-}
-
-// M16R3：标签-便签绑定。source = auto（正文 #tag 抽取）| manual（用户手加）。
-// (noteId, tagId, source) 唯一：同一对（便签,标签）最多各一条 auto/manual，天然满足「自动/手动不互删」。
-model NoteTagBinding {
-  id        String   @id @default(cuid())
-  userId    String
-  noteId    String
-  tagId     String
-  source    String   @default("auto") // auto | manual
-  createdAt DateTime @default(now())
-
-  user User    @relation(fields: [userId], references: [id])
-  note Note    @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  tag  NoteTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@unique([noteId, tagId, source])
-  @@index([noteId, source])
-  @@index([tagId, source])
-  @@index([userId])
-}
-
-// M16R3：反向链接边。fromNoteId 正文里引用 toNoteId；全量重算（删旧插新）。
-// @@unique 去重；userId 为冗余隔离列（from/to 必属同一用户，防御未来交叉引用）。
-model NoteLinkEdge {
-  id         String   @id @default(cuid())
-  userId     String
-  fromNoteId String
-  toNoteId   String
-  createdAt  DateTime @default(now())
-
-  user     User @relation(fields: [userId], references: [id])
-  fromNote Note @relation("NoteLinkFrom", fields: [fromNoteId], references: [id], onDelete: Cascade)
-  toNote   Note @relation("NoteLinkTo",   fields: [toNoteId],   references: [id], onDelete: Cascade)
-
-  @@unique([fromNoteId, toNoteId])
-  @@index([fromNoteId])
-  @@index([userId, toNoteId])
 }
 
 model Attachment {

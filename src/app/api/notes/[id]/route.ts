@@ -4,11 +4,6 @@ import { authOrResponse } from "@/lib/auth";
 import { recordUserActivity } from "@/lib/activity";
 import { serializeNote, validateChecklistItems, validateChecklistGroups, validateNoteTextFields } from "@/lib/note-serializer";
 import {
-  recomputeNoteLinks,
-  reconcileNoteTags,
-  validateTags,
-} from "@/lib/note-taxonomy";
-import {
   QUOTA_EXCEEDED_ERROR,
   QUOTA_EXCEEDED_MESSAGE,
   addStorageUsed,
@@ -17,17 +12,6 @@ import {
 } from "@/lib/storage";
 
 const VALID_COLORS = ["yellow", "blue", "green", "pink", "gray"];
-
-/** 从带 tagBindings 的 note 行取当前手动标签名（source=manual）。 */
-function currentManualNames(
-  note: { tagBindings?: { source: string; tag?: { name?: string } | null }[] }
-): string[] {
-  const bindings = note.tagBindings ?? [];
-  return bindings
-    .filter((b) => b.source === "manual")
-    .map((b) => b.tag?.name ?? "")
-    .filter((n) => n.length > 0);
-}
 
 // 单条便签读取：内部链接打开「当前列表没有的目标便签」用。
 // 只允许当前用户自己的未删除便签；未登录 401，他人/已删除 404。
@@ -45,7 +29,7 @@ export async function GET(
       userId: session.userId,
       deletedAt: null,
     },
-    include: { attachments: true, tagBindings: { include: { tag: true } } },
+    include: { attachments: true },
   });
 
   if (!note) {
@@ -72,7 +56,7 @@ export async function PATCH(
       userId: session.userId,
       deletedAt: null,
     },
-    include: { attachments: true, tagBindings: { include: { tag: true } } },
+    include: { attachments: true },
   });
 
   if (!note) {
@@ -96,7 +80,7 @@ export async function PATCH(
       "title", "content", "color", "isPinned", "isArchived",
       "mode", "checklistItems", "checklistGroups", "documentJson",
       "sortOrder", "windowX", "windowY", "windowWidth", "windowHeight",
-      "alwaysOnTop", "folderId",
+      "alwaysOnTop",
     ];
 
     const updateData: Record<string, unknown> = {};
@@ -104,19 +88,6 @@ export async function PATCH(
       if (body[field] !== undefined) {
         updateData[field] = body[field];
       }
-    }
-
-    // M16R3：手动标签名校验（tags 不进 updateData，由 reconcileNoteTags 落绑定表）
-    let manualTags: string[] | null = null;
-    if (body.tags !== undefined) {
-      const cleaned = validateTags(body.tags);
-      if (cleaned === null) {
-        return NextResponse.json(
-          { ok: false, error: "INVALID_TAGS" },
-          { status: 400 }
-        );
-      }
-      manualTags = cleaned;
     }
 
     // 输入上限与类型校验（P1-5）
@@ -206,28 +177,6 @@ export async function PATCH(
       }
     }
 
-    // M16R3：folderId 归属校验（null = 未分组；其他必须是当前用户未删除文件夹）
-    if (updateData["folderId"] !== undefined) {
-      const fv = updateData["folderId"];
-      if (fv !== null && typeof fv !== "string") {
-        return NextResponse.json(
-          { ok: false, error: "INVALID_FOLDER_ID" },
-          { status: 400 }
-        );
-      }
-      if (typeof fv === "string") {
-        const folder = await prisma.noteFolder.findFirst({
-          where: { id: fv, userId: session.userId, deletedAt: null },
-        });
-        if (!folder) {
-          return NextResponse.json(
-            { ok: false, error: "INVALID_FOLDER_ID" },
-            { status: 400 }
-          );
-        }
-      }
-    }
-
     // M16 统一文档：documentJson 校验（合法 JSON 字符串或 null，null=清除回旧投影）
     if (
       updateData["documentJson"] !== undefined &&
@@ -249,7 +198,7 @@ export async function PATCH(
       }
     }
 
-    if (Object.keys(updateData).length === 0 && manualTags === null) {
+    if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { ok: false, error: "NO_FIELDS_TO_UPDATE" },
         { status: 400 }
@@ -268,25 +217,6 @@ export async function PATCH(
       }
     }
     if (noop) {
-      // noop 但手动改标签（body.tags !== undefined）：仍执行 reconcile 并 re-fetch，
-      // 否则手加/删标签在「正文无其它变化」时会被 noop 短路吞掉。
-      if (manualTags !== null) {
-        await reconcileNoteTags(
-          id,
-          session.userId,
-          String(note.content ?? ""),
-          manualTags
-        );
-        const refreshed = await prisma.note.findUnique({
-          where: { id },
-          include: { attachments: true, tagBindings: { include: { tag: true } } },
-        });
-        return NextResponse.json(
-          serializeNote(
-            (refreshed ?? note) as unknown as Record<string, unknown>
-          )
-        );
-      }
       return NextResponse.json(
         serializeNote(note as unknown as Record<string, unknown>)
       );
@@ -337,32 +267,10 @@ export async function PATCH(
 
     await addStorageUsed(session.userId, delta);
 
-    // M16R3：正文/文档变化 → 重算标签 + 出链；tags 显式传入 → 重算手动标签
-    const contentChanged =
-      "content" in updateData || "documentJson" in updateData;
-    if (contentChanged || manualTags !== null) {
-      const newContent =
-        updateData["content"] !== undefined
-          ? String(updateData["content"])
-          : String(note.content ?? "");
-      const manualNames =
-        manualTags ?? currentManualNames(note);
-      await reconcileNoteTags(id, session.userId, newContent, manualNames);
-    }
-    if (contentChanged) {
-      await recomputeNoteLinks(id, session.userId, String(updateData["content"] ?? note.content ?? ""));
-    }
-
     // M10.11 埋点：isArchived 与旧值比较，区分归档/取消归档，避免顺带传 isArchived 误报；
     // 否则带 checklistItems 记 check_todo（mode 切换误归类 SPEC 允许），其余记 edit_note。
-    // M16R3：folderId 变化记 move_note（优先级最高）。
-    let action: "edit_note" | "check_todo" | "archive_note" | "unarchive_note" | "move_note" = "edit_note";
+    let action: "edit_note" | "check_todo" | "archive_note" | "unarchive_note" = "edit_note";
     if (
-      updateData["folderId"] !== undefined &&
-      updateData["folderId"] !== note.folderId
-    ) {
-      action = "move_note";
-    } else if (
       updateData["isArchived"] !== undefined &&
       updateData["isArchived"] !== note.isArchived
     ) {
@@ -372,18 +280,8 @@ export async function PATCH(
     }
     await recordUserActivity(session.userId, action);
 
-    // 重新取回（带 tagBindings）再序列化，保证响应含最新 tags/manualTags
-    const updatedNote = await prisma.note.findUnique({
-      where: { id },
-      include: { attachments: true, tagBindings: { include: { tag: true } } },
-    });
-
     // Deserialize checklistItems for the response
-    return NextResponse.json(
-      serializeNote(
-        (updatedNote ?? updated) as unknown as Record<string, unknown>
-      )
-    );
+    return NextResponse.json(serializeNote(updated as unknown as Record<string, unknown>));
   } catch {
     return NextResponse.json(
       { ok: false, error: "INVALID_REQUEST" },

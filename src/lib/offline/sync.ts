@@ -13,8 +13,6 @@ const PATCH_FIELDS = [
   "checklistGroups",
   "documentJson",
   "sortOrder",
-  "folderId",
-  "tags",
 ] as const;
 
 // 同步运行状态：单例，多组件挂载共用
@@ -66,8 +64,6 @@ async function syncCreate(local: LocalNote): Promise<boolean> {
       isPinned: local.isPinned,
       checklistItems: local.checklistItems,
       documentJson: local.documentJson ?? null,
-      folderId: local.folderId ?? null,
-      tags: local.tags ?? [],
     }),
   });
   if (res.status === 401) throw new ApiError(401, "Unauthorized");

@@ -59,12 +59,6 @@ export interface Note {
   windowWidth: number | null;
   windowHeight: number | null;
   alwaysOnTop: boolean;
-  /** M16R3：单层文件夹归属；null = 未分组。 */
-  folderId?: string | null;
-  /** M16R3：标签名合集（auto ∪ manual，服务端去重返回）。 */
-  tags?: string[];
-  /** M16R3：手动标签名子集（source=manual）。 */
-  manualTags?: string[];
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -72,37 +66,6 @@ export interface Note {
 }
 
 export type NoteColor = "yellow" | "blue" | "green" | "pink" | "gray";
-
-// M16R3：单层文件夹（P0）
-export interface NoteFolder {
-  id: string;
-  name: string;
-  noteCount: number;
-  createdAt: string;
-}
-
-export interface NoteFoldersResponse {
-  ok: boolean;
-  folders: NoteFolder[];
-  ungroupedCount: number;
-  totalCount: number;
-}
-
-// M16R3：标签（P1）
-export interface NoteTagItem {
-  id: string;
-  name: string;
-  count: number;
-}
-
-// M16R3：反向链接（P1）
-export interface NoteBacklink {
-  id: string;
-  title: string;
-  summary: string;
-  updatedAt: string;
-  isArchived: boolean;
-}
 
 export interface User {
   id: string;

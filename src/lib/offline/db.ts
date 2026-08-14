@@ -28,10 +28,6 @@ export interface LocalNote {
   windowWidth: number | null;
   windowHeight: number | null;
   alwaysOnTop: boolean;
-  /** M16R3：文件夹归属（null = 未分组）。 */
-  folderId: string | null;
-  /** M16R3：手动标签名合集（auto 由服务端返回/本地按正文补算，不落离线）。 */
-  tags: string[];
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -47,10 +43,6 @@ class OfflineDB extends Dexie {
     super("sticky-notes-offline");
     this.version(1).stores({
       notes: "localId, serverId, updatedAt, isPinned, syncStatus, deletedAt",
-    });
-    // M16R3：+folderId（离线按文件夹筛选本地回填用）。tags 存对象字段、不做索引。
-    this.version(2).stores({
-      notes: "localId, serverId, updatedAt, isPinned, syncStatus, deletedAt, folderId",
     });
   }
 }

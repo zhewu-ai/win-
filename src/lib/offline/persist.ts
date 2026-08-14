@@ -66,8 +66,6 @@ export function mapToLocal(note: Note, status: SyncStatus = "synced"): LocalNote
     windowWidth: note.windowWidth,
     windowHeight: note.windowHeight,
     alwaysOnTop: note.alwaysOnTop,
-    folderId: note.folderId ?? null,
-    tags: note.manualTags ?? [],
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
     deletedAt: note.deletedAt,
@@ -97,10 +95,6 @@ export function mapFromLocal(local: LocalNote): Note {
     windowWidth: local.windowWidth,
     windowHeight: local.windowHeight,
     alwaysOnTop: local.alwaysOnTop,
-    folderId: local.folderId ?? null,
-    // 离线层只存手动标签；auto 标签由编辑器按正文补算（服务端返回时以服务端为准）
-    tags: local.tags ?? [],
-    manualTags: local.tags ?? [],
     createdAt: local.createdAt,
     updatedAt: local.updatedAt,
     deletedAt: local.deletedAt,
@@ -127,13 +121,10 @@ const LOCAL_PENDING_STATUSES: SyncStatus[] = [
  * - pendingDelete：服务器可能仍返回该便签（DELETE 尚未送达），从结果中剔除；
  * - pendingUpdate / syncError：同 id 用本地较新版本替换服务器旧版（本地 updatedAt 更新）；
  * - pendingCreate：服务器还没有，保留并前置。
- * M16R3：filters.folderId 存在时，本地新建（pendingCreate）也按文件夹过滤，
- * 避免离线在 A 文件夹建的便签出现在 B 文件夹筛选结果里。
  * 注意：mirrorNote 只保护 IndexedDB；本函数保护内存列表。两者都要，缺一不可。 */
 export async function mergeLocalPending(
   serverNotes: Note[],
-  archived: boolean,
-  filters?: { folderId?: string | null }
+  archived: boolean
 ): Promise<Note[]> {
   const pendings = await getDB()
     .notes.where("syncStatus")
@@ -141,12 +132,6 @@ export async function mergeLocalPending(
     .toArray();
   if (pendings.length === 0) return serverNotes;
 
-  const folderMatch = (n: Note): boolean => {
-    if (!filters || filters.folderId === undefined) return true;
-    return filters.folderId === "none"
-      ? !n.folderId
-      : n.folderId === filters.folderId;
-  };
   const pendingDelete = new Set(
     pendings
       .filter((p) => p.syncStatus === "pendingDelete")
@@ -164,7 +149,7 @@ export async function mergeLocalPending(
   const merged = serverNotes
     .filter((n) => !pendingDelete.has(n.id))
     .map((n) => byServerId.get(n.id) ?? n);
-  return [...localCreates.filter(folderMatch), ...merged];
+  return [...localCreates, ...merged];
 }
 
 /** 把一次 PATCH 增量合并进本地缓存，标记待同步。返回合并后的本地记录。 */
@@ -195,8 +180,6 @@ async function applyLocalUpdate(
       windowWidth: null,
       windowHeight: null,
       alwaysOnTop: false,
-      folderId: null,
-      tags: [],
       createdAt: t,
       updatedAt: t,
       deletedAt: null,
@@ -287,8 +270,6 @@ export async function createNoteLocal(data?: Partial<Note>): Promise<Note> {
     windowWidth: null,
     windowHeight: null,
     alwaysOnTop: false,
-    folderId: data?.folderId ?? null,
-    tags: data?.manualTags ?? [],
     createdAt: t,
     updatedAt: t,
     deletedAt: null,
